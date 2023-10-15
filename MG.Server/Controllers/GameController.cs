@@ -24,12 +24,12 @@ namespace MG.Server.Controllers
 
         }
 
-        [HttpGet("test1")]
-        public async Task<IActionResult> Test1()
+        [HttpGet("GetGameByID")]
+        public async Task<IActionResult> GetGameByID(string? gameId)
         {
-            _logger.LogTrace("Test1");
+            _logger.LogTrace("GetGameByID");
 
-            _hubContext.Clients.All.SendAsync("test", "aa bb cc");
+            //_hubContext.Clients.All.SendAsync("test", "aa bb cc");
             //_hubContext.Clients.Client("").SendAsync("ff");
             //_hubContext.Clients.Group("").SendAsync("ss");
             //var context = GlobalHost.ConnectionManager.GetHubContext<NotificationHub>();
@@ -39,7 +39,7 @@ namespace MG.Server.Controllers
             //c.SendNotificationAsync(0, "aaa", "bbb");
             ;
 
-            return Ok(await _authorRepository.test1());
+            return Ok(await _authorRepository.GetGameByID(gameId));
         }
 
 

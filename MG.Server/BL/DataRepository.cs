@@ -4,12 +4,12 @@ namespace MG.Server.BL
 {
     public class DataRepository
     {
-        List<User> Users;// = new List<User>();
+        List<UserData> Users;// = new List<UserData>();
         List<GameData> Games;// = new List<GameData>();
 
         public DataRepository()
         {
-            Users = new List<User>();
+            Users = new List<UserData>();
             Games = new List<GameData>();
 
             //using (var context = new AppDbContext())
@@ -43,6 +43,8 @@ namespace MG.Server.BL
             //    context.SaveChanges();
             //}
         }
+
+
         //public List<Author> GetAuthors()
         //{
         //    using (var context = new AppDbContext())
@@ -64,7 +66,7 @@ namespace MG.Server.BL
                 //    {
                 //        Name = "gam x",
                 //        GameType = GameTypeEnum.TIK_TAK_TOE,
-                //        Items = new List<Item>()
+                //        Items = new List<ItemData>()
                 //        //LastName = "Kanjilal",
                 //        //Books = new List<Book>()
                 //        //{
@@ -76,10 +78,10 @@ namespace MG.Server.BL
 
                 //    };
 
-                //    var i1 = new Item { Name = "i 1", };
-                //    var i2 = new Item { Name = "i 2", ParentItem = i1 };
-                //    var i3 = new Item { Name = "i 3", ParentItem = i1 };
-                //    var i4 = new Item { Name = "i 3", ParentItem = i2 };
+                //    var i1 = new ItemData { Name = "i 1", };
+                //    var i2 = new ItemData { Name = "i 2", ParentItem = i1 };
+                //    var i3 = new ItemData { Name = "i 3", ParentItem = i1 };
+                //    var i4 = new ItemData { Name = "i 3", ParentItem = i2 };
 
                 //    game.Items.Add(i1);
                 //    game.Items.Add(i2);
@@ -101,6 +103,11 @@ namespace MG.Server.BL
 
         }
 
+
+        internal async Task<GameData> GetGameByID(string gameId)
+        {
+            return Games.First();        
+        }
         internal async Task<object?> test2()
         {
             //using (var context = new AppDbContext())
@@ -112,19 +119,19 @@ namespace MG.Server.BL
                     GameType = GameTypeEnum.DND,
                 };
 
-                new Player(game) { Type = PlayerTypeEnum.HUMAN };
-                new Player(game) { Type = PlayerTypeEnum.AI };
-                new Player(game) { Type = PlayerTypeEnum.AI };
+                new PlayerData(game) { Type = PlayerTypeEnum.HUMAN };
+                new PlayerData(game) { Type = PlayerTypeEnum.AI };
+                new PlayerData(game) { Type = PlayerTypeEnum.AI };
 
 
-                var asset = new Asset();
+                var asset = new AssetData();
 
-                var i1 = new Item(game, asset) { };
-                var i2 = new Item(game, asset, i1) { };
-                var i3 = new Item(game, asset, i1) { };
-                var i4 = new Item(game, asset, i2) { };
+                var i1 = new ItemData(game, asset) { };
+                var i2 = new ItemData(game, asset, i1) { };
+                var i3 = new ItemData(game, asset, i1) { };
+                var i4 = new ItemData(game, asset, i2) { };
 
-                i1.Position = new Vector3(1, 2, 3);
+                i1.Position = new V3(1, 2, 3);
                 i2.Scale.Y = 999;
 
                 Games.Add(game);

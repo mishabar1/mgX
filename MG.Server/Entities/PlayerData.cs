@@ -3,27 +3,19 @@ using System.Text.Json.Serialization;
 
 namespace MG.Server.Entities
 {
-    public class Player
+    public class PlayerData : BaseEntity<GameData>
     {
-        public string Id { get; set; }
-        public string? Name { get; set; }
 
         public string GameId { get { return Game.Id; } }
         [JsonIgnore] public GameData Game { get; set; }
 
         public PlayerTypeEnum Type { get; set; }
 
-        public User? User { get; set; }
+        public UserData? User { get; set; }
+             
 
-
-        public string? UserData { get; set; }
-
-
-
-
-        public Player(GameData game)
-        {
-            Id = Guid.NewGuid().ToString();
+        public PlayerData(GameData game):base()
+        {            
             Name = Utils.RandomName();
             Game = game;
         }

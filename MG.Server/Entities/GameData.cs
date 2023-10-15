@@ -1,22 +1,22 @@
 ﻿namespace MG.Server.Entities
 {
-    public class GameData
+    public class GameData: BaseEntity<GameData>
     {
-        public string Id { get; set; }
         public GameTypeEnum GameType { get; set; }
-        public string? Name { get; set; }
 
-        public string? UserData { get; set; }
+        public List<ItemData> Items { get; set; }
+        public List<PlayerData> Players { get; set; }
 
-        public List<Item> Items { get; set; }
-        public List<Player> Players { get; set; }
+        public GameStatusEnum GameStatus { get; set; }
+        public string CreatorId { get; set; }
+        public string CurrentTurnId { get; set; }
+        public List<PlayerData> Winners { get; set; }
 
-        public GameData()
+        public GameData():base()
         {
-            Id = Guid.NewGuid().ToString();
-
-            Items = new List<Item>();
-            Players = new List<Player>();
+            
+            Items = new List<ItemData>();
+            Players = new List<PlayerData>();
         }
 
 
@@ -37,5 +37,13 @@
         CHESS = 2,
         REVERCY = 3,
         DND = 4
+    }
+    public enum GameStatusEnum
+    {
+        CREATED = 1,
+        SETUP = 2,
+        PLAY = 3,
+        ENDED = 4,
+
     }
 }
