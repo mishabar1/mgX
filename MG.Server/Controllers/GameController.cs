@@ -27,6 +27,7 @@ namespace MG.Server.Controllers
         [HttpGet("test1")]
         public async Task<IActionResult> Test1()
         {
+            _logger.LogTrace("Test1");
 
             _hubContext.Clients.All.SendAsync("test", "aa bb cc");
             //_hubContext.Clients.Client("").SendAsync("ff");
