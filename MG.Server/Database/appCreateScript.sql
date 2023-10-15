@@ -1,0 +1,56 @@
+﻿
+DROP TABLE IF EXISTS Users;
+CREATE TABLE Users (
+  [Id] INTEGER NOT NULL
+, [Name] TEXT NULL
+, CONSTRAINT [PK_User] PRIMARY KEY ([Id])
+);
+
+DROP TABLE IF EXISTS Games;
+CREATE TABLE Games (
+  [Id] INTEGER NOT NULL
+, [GameType] TEXT NULL
+, [Name] TEXT NULL
+, [UserData] TEXT NULL
+, CONSTRAINT [PK_Game] PRIMARY KEY ([Id])
+);
+
+DROP TABLE IF EXISTS Items;
+CREATE TABLE Items (
+  [Id] INTEGER NOT NULL
+, [Name] TEXT NULL
+, [GameId] INTEGER NULL
+, [ParentItemId] INTEGER NULL
+
+, [AssetId] INTEGER NULL
+, [Position] TEXT NULL
+, [Rotation] TEXT NULL
+, [Scale] TEXT NULL
+, [UserData] TEXT NULL
+
+, CONSTRAINT [PK_Item] PRIMARY KEY ([Id])
+);
+
+DROP TABLE IF EXISTS Players;
+CREATE TABLE Players (
+  [Id] INTEGER NOT NULL
+, [Name] TEXT NULL
+, [Type] INTEGER NULL
+, [GameId] INTEGER NULL
+, [UserId] INTEGER NULL
+, [UserData] TEXT NULL
+, CONSTRAINT [PK_Player] PRIMARY KEY ([Id])
+);
+
+DROP TABLE IF EXISTS Assets;
+CREATE TABLE Assets (
+  [Id] INTEGER NOT NULL
+, [Name] TEXT NULL
+, [GameId] INTEGER NULL
+
+, [ForegroundUrl] TEXT NULL
+, [BackgroundUrl] TEXT NULL
+
+, CONSTRAINT [PK_Asset] PRIMARY KEY ([Id])
+);
+
