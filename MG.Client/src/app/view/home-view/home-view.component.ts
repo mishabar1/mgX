@@ -1,4 +1,5 @@
 import { Component } from '@angular/core';
+import {Router} from '@angular/router';
 
 @Component({
   selector: 'app-home-view',
@@ -6,5 +7,9 @@ import { Component } from '@angular/core';
   styleUrls: ['./home-view.component.scss']
 })
 export class HomeViewComponent {
-
+constructor(private router: Router) {
+}
+  click1() {
+    this.router.navigateByUrl('/game-play/123');
+  }
 }

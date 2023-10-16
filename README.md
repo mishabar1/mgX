@@ -1,2 +1,0 @@
-# mgX
-MultiGame X

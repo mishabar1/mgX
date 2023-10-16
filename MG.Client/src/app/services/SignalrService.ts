@@ -1,17 +1,17 @@
 import { Injectable } from '@angular/core';
 import * as signalR from "@microsoft/signalr"
-import {EnvironmentParamsService} from './env-params.service';
+import {environment} from '../../environments/environment';
 @Injectable({
   providedIn: 'root'
 })
 export class SignalrService {
   hubConnection!: signalR.HubConnection
 
-  constructor(private environmentParamsService:EnvironmentParamsService) {
+  constructor() {
   }
   startConnection () {
     this.hubConnection = new signalR.HubConnectionBuilder()
-      .withUrl(this.environmentParamsService.getAPIServerURL()+ '/notifications')
+      .withUrl(environment.serverURL+ '/notifications')
       .withAutomaticReconnect()
       .build();
     this.hubConnection

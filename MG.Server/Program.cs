@@ -1,4 +1,6 @@
 using MG.Server.BL;
+using Microsoft.AspNetCore.SpaServices.AngularCli;
+using Microsoft.Extensions.FileProviders;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -46,6 +48,28 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("MGX");
+
+app.UseDefaultFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(
+           Path.Combine(builder.Environment.ContentRootPath, "wwwroot")),
+    RequestPath = "",
+    ServeUnknownFileTypes = true
+});
+app.UseSpa(spa =>
+{
+    spa.Options.SourcePath = "wwwroot";
+
+    //if (app.Environment.IsDevelopment())
+    //{
+    //    spa.UseAngularCliServer(npmScript: "start");
+    //}
+
+});
+
+
+
 app.UseAuthorization();
 
 app.MapControllers();
