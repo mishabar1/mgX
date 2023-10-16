@@ -17,7 +17,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
-            "outputPath": "../MG.Server/wwwroot",
+            "outputPath": "../wwwroot",
             "index": "src/index.html",
             "main": "src/main.ts",
             "polyfills": [
@@ -86,7 +86,7 @@
           "options": {
             "browserTarget": "mgx:build"
           }
-        }        
+        }
       }
     }
   },
