@@ -8,6 +8,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<DataRepository, DataRepository>();
 builder.Services.AddSingleton<SignalIRClient, SignalIRClient>();
 
+builder.Services.AddScoped<GameBL, GameBL>();
+builder.Services.AddScoped<UserBL, UserBL>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(name: "MGX",

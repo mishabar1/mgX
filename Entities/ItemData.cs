@@ -1,6 +1,4 @@
 ﻿using MG.Server.BL;
-using Microsoft.EntityFrameworkCore;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
 namespace MG.Server.Entities
