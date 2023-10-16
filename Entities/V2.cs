@@ -2,12 +2,12 @@
 {
     public class V2
     {
-        public float X { get; set; }
-        public float Y { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
 
         public V2() : this(0, 0) { }
 
-        public V2(float x, float y)
+        public V2(double x, double y)
         {
             X = x;
             Y = y;

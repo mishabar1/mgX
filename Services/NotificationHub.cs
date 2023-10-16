@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using static System.Net.Mime.MediaTypeNames;
 
-namespace MG.Server.BL
+namespace MG.Server.Services
 {
     public class NotificationModel
     {
@@ -27,7 +27,7 @@ namespace MG.Server.BL
             await Groups.AddToGroupAsync(Context.ConnectionId, user_id.ToString());
         }
 
-        public async void XXX1(int i,string s)
+        public async void XXX1(int i, string s)
         {
             Console.WriteLine("sss" + i.ToString() + s);
             //await Groups.AddToGroupAsync(Context.ConnectionId, user_id.ToString());

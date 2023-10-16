@@ -1,4 +1,4 @@
-﻿using MG.Server.BL;
+﻿using MG.Server.Services;
 using System.Text.Json.Serialization;
 
 namespace MG.Server.Entities

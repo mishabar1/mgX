@@ -6,6 +6,11 @@ import {InteractionManager} from 'three.interactive';
 import {SignalrService} from '../../services/SignalrService';
 import {HttpClient} from '@angular/common/http';
 import {DALService} from '../../dal/dal.service';
+import { GameData } from '../../entities/game.data';
+import { ItemData } from '../../entities/item.data';
+import * as _ from 'lodash';
+import { debounce, forEach } from "lodash";
+import * as dayjs from 'dayjs';
 
 @Component({
   selector: 'app-game-play',
@@ -34,7 +39,7 @@ export class GamePlayComponent implements AfterViewInit {
     this.signalRService.hubConnection.on('test', data => {
 
       console.log(data);
-      this.click1();
+      //this.click1();
     })
   }
 
@@ -124,22 +129,27 @@ export class GamePlayComponent implements AfterViewInit {
     //)
   }
 
-  click1() {
+
+  createItem(itemData: ItemData, parentMesh: THREE.Mesh | null) {
     const color = THREE.MathUtils.randInt(0, 0xffffff)
-    const geometry = new THREE.BoxGeometry(this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1));
+    //const geometry = new THREE.BoxGeometry(this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1));
+    const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
     const material = new THREE.MeshBasicMaterial({color});
     const cube = new THREE.Mesh(geometry, material);
-    cube.position.set(this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1));
-    this.scene.add(cube);
+    //cube.position.set(this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1));
+    cube.position.set(itemData.Position.X, itemData.Position.Y, itemData.Position.Z);
 
-
-    cube.userData['who'] = () => {
-      console.log('WHOOOOO', cube.id);
+    if (parentMesh) {
+      parentMesh.add(cube);
+    } else {
+      this.scene.add(cube);
     }
+
+    cube.userData['ItemData'] = itemData;
 
     cube.addEventListener('click', (event: any) => {
       event.stopPropagation();
-      this.signalRService.testSendXXX1();
+      //this.signalRService.testSendXXX1();
       console.log(cube);
     });
     cube.addEventListener('mouseover', (event) => {
@@ -154,6 +164,12 @@ export class GamePlayComponent implements AfterViewInit {
     });
 
     this.interactionManager.add(cube);
+
+
+    forEach(itemData.Items, (itemData: ItemData) => {
+      this.createItem(itemData, cube);
+    })
+
   }
 
   // onMouseDown(event: MouseEvent) {
@@ -179,10 +195,19 @@ export class GamePlayComponent implements AfterViewInit {
   //
   //   }
   // }
-  loadGame() {
-    this.dalService.getGameById('xx').subscribe(gameData => {
-      console.log(gameData);
-      debugger;
+
+  createGame() {
+    this.dalService.createGame().subscribe(gameData => {
+      this.loadGame(gameData);
     })
   }
+
+  loadGame(gameData: GameData) {
+    console.log(gameData, dayjs().startOf('month').add(1, 'day').set('year', 2018).format('YYYY-MM-DD HH:mm:ss'));
+    
+    forEach(gameData.Items, (itemData: ItemData) => {
+      this.createItem(itemData, null);
+    })
+  }
+
 }

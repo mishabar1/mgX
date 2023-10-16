@@ -1,4 +1,4 @@
-﻿using MG.Server.BL;
+﻿using MG.Server.Services;
 
 namespace MG.Server.Entities
 {

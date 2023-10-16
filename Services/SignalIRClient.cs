@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR.Client;
 
-namespace MG.Server.BL
+namespace MG.Server.Services
 {
     public class SignalIRClient
     {

@@ -1,6 +1,6 @@
-﻿namespace MG.Server.BL
+﻿namespace MG.Server.Services
 {
-    public  class Utils
+    public class Utils
     {
 
         public static string RandomName()

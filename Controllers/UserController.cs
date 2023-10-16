@@ -7,18 +7,18 @@ namespace MG.Server.Controllers
     [ApiController]
     public class UserController : ControllerBase    
     {
-        readonly DataRepository _dataRepository;
+        UserBL _userBL;
         private readonly ILogger<UserController> _logger;
-        public UserController(DataRepository dataRepository, ILogger<UserController> logger)
+        public UserController(UserBL userBL, ILogger<UserController> logger)
         {
-            _dataRepository = dataRepository;
+            _userBL = userBL;
             _logger = logger;
         }
 
         [HttpPost("Login")]
         public async Task<IActionResult> Login(LoginData data)
         {
-            _logger.LogTrace("GetGameByID");
+            _logger.LogTrace("Login");
             //await _dataRepository.GetGameByID(gameId)
             return Ok();
         }

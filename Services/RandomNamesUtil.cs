@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace MG.Server.BL
+namespace MG.Server.Services
 {
     public class RandomNamesUtil
     {
@@ -189,6 +189,6 @@ namespace MG.Server.BL
             string animal = animalsList[random.Next(animalsList.Count)];
             string color = colorNames[random.Next(colorNames.Count)];
             return $"{color} {animal}";
-        } 
+        }
     }
 }
