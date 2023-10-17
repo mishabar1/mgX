@@ -1,4 +1,4 @@
 export class AssetData {
-  Id!: string;
-  Name?: string;
+  id!: string;
+  name?: string;
 }

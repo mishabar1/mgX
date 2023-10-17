@@ -3,15 +3,15 @@ import { PlayerData } from "./player.data";
 
 export class GameData {
 
-  Id!: string;
-  Name?: string;
-  Items!: ItemData[];
-  Attributes: any;
-  CreatorId?: string;
-  CurrentTurnId?: string;
-  GameStatus!: number;
-  GameType!: number;
-  Players!: PlayerData[];  
-  Winners?: PlayerData[];
+  id!: string;
+  name?: string;
+  items!: ItemData[];
+  attributes: any;
+  creatorId?: string;
+  currentTurnId?: string;
+  gameStatus!: number;
+  gameType!: number;
+  players!: PlayerData[];
+  winners?: PlayerData[];
 }
 

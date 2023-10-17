@@ -1,5 +1,6 @@
 ﻿using MG.Server.BL;
 using MG.Server.Controllers;
+using MG.Server.Entities;
 using Microsoft.AspNetCore.SignalR;
 using static System.Net.Mime.MediaTypeNames;
 
@@ -36,20 +37,24 @@ namespace MG.Server.Services
             await Groups.AddToGroupAsync(Context.ConnectionId, user_id.ToString());
         }
 
-        public async void XXX1(int i, string s)
+        public async void GameUpdated(int i, string s)
         {
             Console.WriteLine("sss" + i.ToString() + s);
             //await Groups.AddToGroupAsync(Context.ConnectionId, user_id.ToString());
-            Clients.All.SendAsync("test");
+            
         }
 
         public async void ExecuteAction(ExecuteActionData s)
         {
             Console.WriteLine("ExecuteAction "   + s);
-            await _gameBL.ExecuteAction(s);
+            await _gameBL.ExecuteAction(s,this);
             // await Groups.AddToGroupAsync(Context.ConnectionId, user_id.ToString());
             // Clients.All.SendAsync("test");
         }
 
+        internal void GameUpdated(GameData game)
+        {
+            Clients.All.SendAsync("GameUpdated", game);
+        }
     }
 }

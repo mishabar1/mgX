@@ -1,5 +1,10 @@
 export class V3 {
-  X!: number;
-  Y!: number;
-  Z!: number;
+  x!: number;
+  y!: number;
+  z!: number;
+  constructor(x:number,y:number,z:number) {
+    this.x=x;
+    this.y=y;
+    this.z=z;
+  }
 }

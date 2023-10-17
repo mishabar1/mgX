@@ -2,6 +2,7 @@
 using MG.Server.Database;
 using MG.Server.Entities;
 using MG.Server.GameFlows;
+using MG.Server.Services;
 
 namespace MG.Server.BL
 {
@@ -9,7 +10,9 @@ namespace MG.Server.BL
     {
         ILogger<GameBL> _logger;
         DataRepository _dataRepository;
-        public GameBL(ILogger<GameBL> logger,DataRepository dataRepository)
+        NotificationHub _notificationHub;
+        public GameBL(ILogger<GameBL> logger, 
+            DataRepository dataRepository)
         {
             _logger = logger;
             _dataRepository = dataRepository;
@@ -39,7 +42,7 @@ namespace MG.Server.BL
             return game;
         }
 
-        internal async Task<object?> ExecuteAction(ExecuteActionData data)
+        internal async Task<object?> ExecuteAction(ExecuteActionData data, NotificationHub hub)
         {
             // find game in db
             var game = _dataRepository.Games.Where(x=>x.Id == data.GameId).FirstOrDefault();
@@ -48,6 +51,8 @@ namespace MG.Server.BL
             {
 
                 await game.GameFlow.ExecuteAction(data);
+
+                hub.GameUpdated(game);
             }
 
             // 

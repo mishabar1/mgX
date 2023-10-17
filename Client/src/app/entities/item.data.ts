@@ -1,15 +1,16 @@
 import { V3 } from "./V3";
 
 export class ItemData {
-  Id!: string;
-  Name?: string;
+  id!: string;
+  name?: string;
 
-  Items!: ItemData[];
-  Position!: V3;
-  Rotation!: V3;
-  Scale!: V3;
+  items!: ItemData[];
+  position!: V3;
+  rotation!: V3;
+  scale!: V3;
 
-  Visible! : Map<string, string>;
-  ClickActions! : any;
-  HoverActions! : Map<string, string>;
+  visible! : any;
+  clickActions! : any;
+  hoverActions! : any;
+  mesh?: THREE.Mesh;
 }

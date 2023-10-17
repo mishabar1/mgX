@@ -25,7 +25,6 @@ namespace MG.Server.GameFlows
             // set players
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.HUMAN };
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.AI };
-            new PlayerData(this.GameData) { Type = PlayerTypeEnum.AI };
                         
             // set "setup" items
             var i1 = new ItemData(this.GameData, assetA)
@@ -45,8 +44,12 @@ namespace MG.Server.GameFlows
                 Position = new V3(0, 0.3, 0.1)
             };
 
-
+            //for (int i = 0; i < 1000; i++)
+            //{
+            //    new ItemData(this.GameData, assetA, i2);
+            //}
             
+
 
             i1.AddAction(MyItemClick111);
             i4.AddAction(MyItemClick444);

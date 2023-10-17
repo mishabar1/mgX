@@ -28,7 +28,7 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddControllers().AddJsonOptions(options => {
-    options.JsonSerializerOptions.PropertyNamingPolicy = null;
+    //options.JsonSerializerOptions.PropertyNamingPolicy = null;
     options.JsonSerializerOptions.MaxDepth = 10;
     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
 });

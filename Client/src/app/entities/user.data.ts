@@ -1,4 +1,4 @@
 export class UserData {
-  Id!: string;
-  Name?: string;
+  id!: string;
+  name?: string;
 }

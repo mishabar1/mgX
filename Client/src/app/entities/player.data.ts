@@ -1,4 +1,4 @@
 export class PlayerData {
-  Id!: string;
-  Name?: string;
+  id!: string;
+  name?: string;
 }

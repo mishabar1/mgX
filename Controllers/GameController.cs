@@ -57,12 +57,12 @@ namespace MG.Server.Controllers
             return Ok(await _gameBL.StartGame(data));
         }
 
-        [HttpPost("ExecuteAction")]
-        public async Task<IActionResult> ExecuteAction(ExecuteActionData data)
-        {
-            _logger.LogTrace("ExecuteAction");
-            return Ok(await _gameBL.ExecuteAction(data));
-        }
+        //[HttpPost("ExecuteAction")]
+        //public async Task<IActionResult> ExecuteAction(ExecuteActionData data)
+        //{
+        //    _logger.LogTrace("ExecuteAction");
+        //    return Ok(await _gameBL.ExecuteAction(data),null);
+        //}
 
         
     }
