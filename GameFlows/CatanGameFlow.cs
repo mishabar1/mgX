@@ -1,17 +1,19 @@
 ﻿using MG.Server.Controllers;
 using MG.Server.Entities;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace MG.Server.GameFlows
 {
-    public class DnDGameFlow : BaseGameFlow
+    public class CatanGameFlow : BaseGameFlow
     {
-        public DnDGameFlow(GameData gameData) : base(gameData)
+        public CatanGameFlow(GameData gameData) : base(gameData)
         {
         }
 
+
         public override async Task Setup()
         {
-            Console.WriteLine("DnDGameFlow Setup " + this.GameData);
+            Console.WriteLine("CatanGameFlow Setup " + this.GameData);
         }
         public override Task StartGame()
         {
@@ -22,6 +24,5 @@ namespace MG.Server.GameFlows
         {
             throw new NotImplementedException();
         }
-
     }
 }

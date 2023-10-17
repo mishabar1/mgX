@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.SignalR;
+﻿using MG.Server.BL;
+using MG.Server.Controllers;
+using Microsoft.AspNetCore.SignalR;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace MG.Server.Services
@@ -16,6 +18,13 @@ namespace MG.Server.Services
 
     public class NotificationHub : Hub
     {
+        readonly GameBL _gameBL;
+        private readonly ILogger<NotificationHub> _logger;
+        public NotificationHub(GameBL gameBL, ILogger<NotificationHub> logger) :base()
+        {
+            _gameBL = gameBL;
+            _logger = logger;
+        }
 
         public async Task SendNotificationData(string user_id, string notification_type, string notification_data)
         {
@@ -32,6 +41,14 @@ namespace MG.Server.Services
             Console.WriteLine("sss" + i.ToString() + s);
             //await Groups.AddToGroupAsync(Context.ConnectionId, user_id.ToString());
             Clients.All.SendAsync("test");
+        }
+
+        public async void ExecuteAction(ExecuteActionData s)
+        {
+            Console.WriteLine("ExecuteAction "   + s);
+            await _gameBL.ExecuteAction(s);
+            // await Groups.AddToGroupAsync(Context.ConnectionId, user_id.ToString());
+            // Clients.All.SendAsync("test");
         }
 
     }

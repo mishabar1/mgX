@@ -15,11 +15,17 @@ export class DALService{
   constructor(private http: HttpClient) {}
 
   getGameById(gameId:string): Observable<GameData> {
-    return this.http.get<GameData>(this.baseUrl + `/GetGameByID?gameId=${gameId}`);
+    return this.http.get<GameData>(this.baseUrl + `/GetGameByID?GameId=${gameId}`);
   }
 
   createGame(): Observable<GameData> {
     return this.http.post<GameData>(this.baseUrl + `/CreateGame`, {});
   }
-  
+
+  executeAction(GameId: string, PlayerId: string, ActionId: string, ItemId: string, ClientX: number, ClientY: number): Observable<any> {
+    const data = {
+      GameId, PlayerId, ActionId, ItemId, ClientX, ClientY
+    }
+    return this.http.post<any>(this.baseUrl + `/ExecuteAction`, data);
+  }
 }

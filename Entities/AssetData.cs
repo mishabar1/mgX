@@ -1,6 +1,6 @@
 ﻿namespace MG.Server.Entities
 {
-    public class AssetData : BaseEntity<AssetData>
+    public class AssetData : BaseData<AssetData>
     {
 
         public string? FrontURL { get; set; }

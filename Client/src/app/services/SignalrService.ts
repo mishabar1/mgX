@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as signalR from "@microsoft/signalr"
 import {environment} from '../../environments/environment';
+import { Observable } from 'rxjs';
 @Injectable({
   providedIn: 'root'
 })
@@ -31,6 +32,20 @@ export class SignalrService {
   testSendXXX1(){
     this.hubConnection.send("XXX1",123,"abc");
     // this.hubConnection.invoke()
+  }
+
+  executeAction(GameId: string, PlayerId: string, ItemId: string, ActionId: string, DragTargetItemId: string, ClientX: number, ClientY: number){
+    const data = {
+      GameId,
+      PlayerId,
+      ItemId,
+      ActionId,
+      DragTargetItemId,
+      ClientX,
+      ClientY
+    }
+    this.hubConnection.send("ExecuteAction", data);
+    // this.hubConnection.invoke("ExecuteAction", data);
   }
 
 }

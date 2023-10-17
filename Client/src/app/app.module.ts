@@ -9,7 +9,6 @@ import {CheckboxModule} from 'primeng/checkbox';
 import {HttpClientModule} from '@angular/common/http';
 import {GamePlayComponent} from './view/game-play/game-play.component';
 import {HomeViewComponent} from './view/home-view/home-view.component';
-import { LoginComponent } from './view/login/login.component';
 import { GamesListComponent } from './view/games-list/games-list.component';
 import { GameSettingsComponent } from './view/game-settings/game-settings.component';
 
@@ -18,7 +17,6 @@ import { GameSettingsComponent } from './view/game-settings/game-settings.compon
     AppComponent,
     GamePlayComponent,
     HomeViewComponent,
-    LoginComponent,
     GamesListComponent,
     GameSettingsComponent
   ],

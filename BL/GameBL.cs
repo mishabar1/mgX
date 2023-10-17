@@ -1,6 +1,7 @@
 ﻿using MG.Server.Controllers;
 using MG.Server.Database;
 using MG.Server.Entities;
+using MG.Server.GameFlows;
 
 namespace MG.Server.BL
 {
@@ -30,37 +31,37 @@ namespace MG.Server.BL
 
         internal async Task<GameData> CreateGame(CreateGameData data)
         {
-            var game = new GameData
-            {
-                Name = "gam x",
-                GameType = GameTypeEnum.TIK_TAK_TOE,
-            };
-
-            new PlayerData(game) { Type = PlayerTypeEnum.HUMAN };
-            new PlayerData(game) { Type = PlayerTypeEnum.AI };
-            new PlayerData(game) { Type = PlayerTypeEnum.AI };
-
-
-            var asset = new AssetData();
-
-            var i1 = new ItemData(game, asset) {
-                Position = new V3(0.5, 0.5, 0.5)
-            };
-            var i2 = new ItemData(game, asset, i1) {
-                Position = new V3(0, 0.05, 0.05)
-            };
-            var i3 = new ItemData(game, asset, i1) {
-                Position = new V3(0, -0.05, -0.05)
-            };
-            var i4 = new ItemData(game, asset) {
-                Position = new V3(0, 0.3, 0.1)
-            };
-
+            var game = BaseGameFlow.CreateGame(GameTypeEnum.TIK_TAK_TOE);
             _dataRepository.Games.Add(game);
 
-
-
+            await game.GameFlow.Setup();                    
+                       
             return game;
+        }
+
+        internal async Task<object?> ExecuteAction(ExecuteActionData data)
+        {
+            // find game in db
+            var game = _dataRepository.Games.Where(x=>x.Id == data.GameId).FirstOrDefault();
+
+            if (game != null)
+            {
+
+                await game.GameFlow.ExecuteAction(data);
+            }
+
+            // 
+            return "OK ExecuteAction";
+        }
+
+        internal async Task<object?> SetupGame(SetupGameData data)
+        {
+            return "OK SetupGame";
+        }
+
+        internal async Task<object?> StartGame(StartGameData data)
+        {
+            return "OK StartGame";
         }
     }
 }

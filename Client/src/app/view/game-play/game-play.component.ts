@@ -11,6 +11,8 @@ import { ItemData } from '../../entities/item.data';
 import * as _ from 'lodash';
 import { debounce, forEach } from "lodash";
 import * as dayjs from 'dayjs';
+import { PlayerData } from '../../entities/player.data';
+import { UserData } from '../../entities/user.data';
 
 @Component({
   selector: 'app-game-play',
@@ -18,7 +20,9 @@ import * as dayjs from 'dayjs';
   styleUrls: ['./game-play.component.scss']
 })
 export class GamePlayComponent implements AfterViewInit {
-  checked: any;
+
+  gameData!: GameData;
+  playerData!: PlayerData;
 
   @ViewChild('rendererContainer', {static: true}) rendererContainer!: ElementRef;
   public scene!: THREE.Scene;
@@ -144,32 +148,46 @@ export class GamePlayComponent implements AfterViewInit {
     } else {
       this.scene.add(cube);
     }
-
+    const pId = this.gameData.Players[0].Id;
     cube.userData['ItemData'] = itemData;
 
+    let action = itemData.ClickActions[pId] || itemData.ClickActions[""];
+    if(action){
+      this.addClickAction(cube,itemData,action);
+    }
+
+    forEach(itemData.Items, (itemData: ItemData) => {
+      this.createItem(itemData, cube);
+    })
+
+  }
+
+  private addClickAction(cube: THREE.Mesh, itemData: ItemData,action:string) {
     cube.addEventListener('click', (event: any) => {
       event.stopPropagation();
       //this.signalRService.testSendXXX1();
       console.log(cube);
+
+      this.signalRService.executeAction(
+        this.gameData.Id,
+        this.playerData.Id,
+        itemData.Id,
+        action,
+        "",0, 0);
+
     });
-    cube.addEventListener('mouseover', (event) => {
+    cube.addEventListener('mouseover', (event:any) => {
       event.target.userData['c'] = event.target.material.clone().color;
       event.target.material.color.set(0xff0000);
       document.body.style.cursor = 'pointer';
     });
-    cube.addEventListener('mouseout', (event) => {
+    cube.addEventListener('mouseout', (event:any) => {
       let c: any = event.target.userData['c'];
       event.target.material.color.set(c.r, c.g, c.b);
       document.body.style.cursor = 'default';
     });
 
     this.interactionManager.add(cube);
-
-
-    forEach(itemData.Items, (itemData: ItemData) => {
-      this.createItem(itemData, cube);
-    })
-
   }
 
   // onMouseDown(event: MouseEvent) {
@@ -204,10 +222,15 @@ export class GamePlayComponent implements AfterViewInit {
 
   loadGame(gameData: GameData) {
     console.log(gameData, dayjs().startOf('month').add(1, 'day').set('year', 2018).format('YYYY-MM-DD HH:mm:ss'));
-    
+
+    this.gameData = gameData;
+    // TODO !!!! TEMP only !!!!
+    this.playerData = this.gameData.Players[0];
+
     forEach(gameData.Items, (itemData: ItemData) => {
       this.createItem(itemData, null);
     })
   }
+
 
 }

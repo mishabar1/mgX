@@ -1,9 +1,10 @@
-﻿using MG.Server.Services;
+﻿using MG.Server.Controllers;
+using MG.Server.Services;
 using System.Text.Json.Serialization;
 
 namespace MG.Server.Entities
 {
-    public class ItemData : BaseEntity<GameData>
+    public class ItemData : BaseData<GameData>
     {
         public AssetData Asset { get; set; }
 
@@ -29,14 +30,14 @@ namespace MG.Server.Entities
         [JsonIgnore] public ItemData? ParentItem { get; set; }
 
 
-        public ItemData(GameData game, AssetData asset, ItemData? parentItem = null):base()
-        {            
+        public ItemData(GameData game, AssetData asset, ItemData? parentItem = null) : base()
+        {
             Name = Utils.RandomName();
 
             Asset = asset;
 
             Game = game;
-            
+
             ParentItem = parentItem;
             if (ParentItem != null)
             {
@@ -53,7 +54,44 @@ namespace MG.Server.Entities
             Rotation = new V3();
             Scale = new V3(1);
 
+            Visible = new Dictionary<string, bool>();
+            ClickActions = new Dictionary<string, string>();
+            HoverActions = new Dictionary<string, string>();
+
         }
+
+        public ItemData? FindItem(string itemId)
+        {
+            ItemData found = null;
+
+            Items.ForEach(item => {
+                if (item.Id == itemId)
+                {
+                    found = item;
+                    return;
+                }
+                var f = item.FindItem(itemId);
+                if(f != null) {
+                    found = item;
+                    return;
+                }
+                
+            });
+
+            return found;
+        }
+
+        internal void AddAction(Func<ExecuteActionData, Task> actionFunc)
+        {
+            ClickActions.Add("", actionFunc.Method.Name);
+        }
+        internal void SetPosition(double x, double y, double z)
+        {
+            Position.X = x; 
+            Position.Y = y;  
+            Position.Z = z;
+        }
+        
     }
 
 }

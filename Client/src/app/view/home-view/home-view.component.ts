@@ -7,9 +7,11 @@ import {Router} from '@angular/router';
   styleUrls: ['./home-view.component.scss']
 })
 export class HomeViewComponent {
+
+  usernameModel = "";
 constructor(private router: Router) {
 }
-  click1() {
+  login() {
     this.router.navigateByUrl('/game-play/123');
   }
 }
