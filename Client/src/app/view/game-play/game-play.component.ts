@@ -14,9 +14,19 @@ import * as dayjs from 'dayjs';
 import {PlayerData} from '../../entities/player.data';
 import {UserData} from '../../entities/user.data';
 import {V3} from '../../entities/V3';
-import {AnimationClip, AnimationMixer, Clock, LoopOnce, VectorKeyframeTrack} from 'three';
+import {
+  AnimationClip,
+  AnimationMixer,
+  BufferGeometry,
+  Clock,
+  Line,
+  LoopOnce, Matrix4, Raycaster,
+  Vector3,
+  VectorKeyframeTrack
+} from 'three';
 import {VRButton} from 'three/examples/jsm/webxr/VRButton';
 import * as TWEEN from "@tweenjs/tween.js";
+import {XRControllerModelFactory} from 'three/examples/jsm/webxr/XRControllerModelFactory';
 
 @Component({
   selector: 'app-game-play',
@@ -32,12 +42,20 @@ export class GamePlayComponent implements AfterViewInit {
   public scene!: THREE.Scene;
   public camera!: THREE.PerspectiveCamera;
   public renderer!: any;
-  public controls!: OrbitControls;
+  public orbitControls!: OrbitControls;
   public loader!: GLTFLoader;
   interactionManager!: InteractionManager;
 
+  controllers:any;
+  selectedObject:any;
+  interactionObjects:any=[];
+  selectedObjectDistance:any;
+  objectUnselectedColor="red";
+  objectSelectedColor="blue";
+
+
   allItems: { [key: string]: ItemData } = {};
-  animationsObjects:any=[];
+  // animationsObjects:any=[];
 
   constructor(public signalRService: SignalrService,
               private dalService: DALService) {
@@ -179,12 +197,12 @@ export class GamePlayComponent implements AfterViewInit {
     this.rendererContainer.nativeElement.appendChild(this.renderer.domElement);
 
     // Initialize OrbitControls
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.addEventListener('change', () => {
+    this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.orbitControls.addEventListener('change', () => {
       this.renderer.render(this.scene, this.camera);
     });
-    this.controls.enableZoom = true
-    this.controls.update();
+    this.orbitControls.enableZoom = true
+    this.orbitControls.update();
 
 
     this.interactionManager = new InteractionManager(this.renderer, this.camera, this.renderer.domElement);
@@ -196,7 +214,13 @@ export class GamePlayComponent implements AfterViewInit {
     // Start the animation loop
     this.renderer.setAnimationLoop(  ()=> {
 
-      this.controls.update();
+      if (this.controllers) {
+        this.controllers.forEach((controller: any) => {
+          this.handleController(controller);
+        })
+      }
+
+      this.orbitControls.update();
       this.interactionManager.update();
       this.renderer.render(this.scene, this.camera);
 
@@ -247,8 +271,89 @@ export class GamePlayComponent implements AfterViewInit {
     // });
 
     document.body.appendChild( VRButton.createButton( this.renderer ) );
+    this.controllers = this.buildControllers();
+
+
+
+    this.controllers.forEach((controller:any) => {
+      controller.addEventListener('selectstart', this.onSelectStart);
+      controller.addEventListener('selectend', this.onSelectEnd);
+    });
+  }
+  onSelectStart(x:any){
+    console.log("onSelectStart",x);
+    // this refers to the controller
+    // this.children[0].scale.z = 10;
+    // this.userData.selectPressed = true;
+  }
+  onSelectEnd(x:any) {
+    console.log("onSelectEnd",x);
+    // this refers to the controller
+    // this.children[0].scale.z = 0;
+    // this.userData.selectPressed = false;
   }
 
+  buildControllers() {
+    const controllerModelFactory = new XRControllerModelFactory();
+
+    const geometry = new BufferGeometry().setFromPoints([
+      new Vector3(0, 0, 0),
+      new Vector3(0, 0, -1)
+    ]);
+
+    const line = new Line(geometry);
+    line.scale.z = 10;
+
+    const controllers = [];
+
+    for (let i = 0; i < 2; i++) {
+      const controller = this.renderer.xr.getController(i);
+      controller.add(line.clone());
+      controller.userData.selectPressed = false;
+      controller.userData.selectPressedPrev = false;
+      this.scene.add(controller);
+      controllers.push(controller);
+
+      const grip = this.renderer.xr.getControllerGrip(i);
+      grip.add(controllerModelFactory.createControllerModel(grip));
+      this.scene.add(grip);
+    }
+
+    return controllers;
+  }
+
+  handleController(controller:any) {
+    if (controller.userData.selectPressed) {
+      if (!controller.userData.selectPressedPrev) {
+        // Select pressed
+        controller.children[0].scale.z = 10;
+        const rotationMatrix = new Matrix4();
+        rotationMatrix.extractRotation(controller.matrixWorld);
+        const raycaster = new Raycaster();
+        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(rotationMatrix);
+        const intersects = raycaster.intersectObjects(this.interactionObjects);
+        if (intersects.length > 0) {
+          controller.children[0].scale.z = intersects[0].distance;
+          this.selectedObject = intersects[0].object;
+          this.selectedObject.material.color = this.objectSelectedColor;
+          this.selectedObjectDistance = this.selectedObject.position.distanceTo(controller.position);
+        }
+      } else if (this.selectedObject) {
+        // Move selected object so it's always the same distance from controller
+        const moveVector = controller.getWorldDirection(new Vector3()).multiplyScalar(this.selectedObjectDistance).negate();
+        this.selectedObject.position.copy(controller.position.clone().add(moveVector));
+      }
+    } else if (controller.userData.selectPressedPrev) {
+      // Select released
+      controller.children[0].scale.z = 10;
+      if (this.selectedObject != null) {
+        this.selectedObject.material.color = this.objectUnselectedColor;
+        this.selectedObject = null;
+      }
+    }
+    controller.userData.selectPressedPrev = controller.userData.selectPressed;
+  }
   randomIntFromInterval(min: number, max: number) { // min and max included
     return Math.random() * (max - min + 1) + min
     //Math.floor(
@@ -305,11 +410,13 @@ export class GamePlayComponent implements AfterViewInit {
       event.target.userData['c'] = event.target.material.clone().color;
       event.target.material.color.set(0xff0000);
       document.body.style.cursor = 'pointer';
+      this.orbitControls.enabled = false;
     });
     cube.addEventListener('mouseout', (event: any) => {
       let c: any = event.target.userData['c'];
       event.target.material.color.set(c.r, c.g, c.b);
       document.body.style.cursor = 'default';
+      this.orbitControls.enabled = true;
     });
 
     this.interactionManager.add(cube);
