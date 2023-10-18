@@ -25,46 +25,56 @@ namespace MG.Server.GameFlows
             // set players
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.HUMAN };
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.AI };
-                        
+
             // set "setup" items
-            var i1 = new ItemData(this.GameData, assetA)
-            {
-                Position = new V3(0.5, 0.5, 0.5)
-            };
-            var i2 = new ItemData(this.GameData, assetB, i1)
-            {
-                Position = new V3(0, 0.05, 0.05)
-            };
-            var i3 = new ItemData(this.GameData, assetB, i1)
-            {
-                Position = new V3(0, -0.05, -0.05)
-            };
-            var i4 = new ItemData(this.GameData, assetA)
-            {
-                Position = new V3(0, 0.3, 0.1)
-            };
+            new ItemData(this.GameData, assetA).SetPosition(-1, 0, 1).AddAttribute("click");
+            new ItemData(this.GameData, assetA).SetPosition(0, 0, 1).AddAttribute("click");
+            new ItemData(this.GameData, assetA).SetPosition(1, 0, 1).AddAttribute("click");
+            new ItemData(this.GameData, assetA).SetPosition(-1, 0, 0).AddAttribute("click");
+            new ItemData(this.GameData, assetA).SetPosition(0, 0, 0).AddAttribute("click");
+            new ItemData(this.GameData, assetA).SetPosition(1, 0, 0).AddAttribute("click");
+            new ItemData(this.GameData, assetA).SetPosition(-1, 0, -1).AddAttribute("click");
+            new ItemData(this.GameData, assetA).SetPosition(0, 0, -1).AddAttribute("click");
+            new ItemData(this.GameData, assetA).SetPosition(1, 0, -1).AddAttribute("click");
+
+            setActions();
+
+            //var i4 = new ItemData(this.GameData, assetA)
+            //{
+            //    Position = new V3(0, 0.3, 0.1)
+            //};
 
             //for (int i = 0; i < 1000; i++)
             //{
             //    new ItemData(this.GameData, assetA, i2);
             //}
-            
 
 
-            i1.AddAction(MyItemClick111);
-            i4.AddAction(MyItemClick444);
+
+            //i1.AddAction(MyItemClick111);
+            //i4.AddAction(MyItemClick444);
         }
+
+        private void setActions()
+        {
+            List<ItemData> items = ItemData.GetItemsByAttribute(GameData.Items, "click");
+
+            items.ForEach(x => x.AddAction(MyItemClick111));
+        }
+
+       
 
         public async Task MyItemClick111(ExecuteActionData data)
         {
             Console.WriteLine("TikTakToeGameFlow MyItemClick111 " + data);
 
-            data.Item.SetPosition(1, 1, 1);
+            data.Item.SetPosition(0, 1, 0);
         }
 
         public async Task MyItemClick444(ExecuteActionData data)
         {
             Console.WriteLine("TikTakToeGameFlow MyItemClick444 " + data);
+            data.Item.SetPosition(0, 2, 0);
         }
 
         public async override Task StartGame()

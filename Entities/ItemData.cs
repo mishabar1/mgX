@@ -64,34 +64,74 @@ namespace MG.Server.Entities
         {
             ItemData found = null;
 
-            Items.ForEach(item => {
+            Items.ForEach(item =>
+            {
                 if (item.Id == itemId)
                 {
                     found = item;
                     return;
                 }
                 var f = item.FindItem(itemId);
-                if(f != null) {
+                if (f != null)
+                {
                     found = item;
                     return;
                 }
-                
+
             });
 
             return found;
         }
 
-        internal void AddAction(Func<ExecuteActionData, Task> actionFunc)
+        internal ItemData AddAction(Func<ExecuteActionData, Task> actionFunc)
         {
             ClickActions.Add("", actionFunc.Method.Name);
+            return this;
         }
-        internal void SetPosition(double x, double y, double z)
+        internal ItemData SetPosition(double x, double y, double z)
         {
-            Position.X = x; 
-            Position.Y = y;  
+            Position.X = x;
+            Position.Y = y;
             Position.Z = z;
+            return this;
         }
-        
+        internal ItemData AddAttribute(string key)
+        {
+            return AddAttribute(key, "TRUE");
+        }
+        internal ItemData AddAttribute(string key, string val)
+        {
+            Attributes.Add(key, val);
+            return this;
+        }
+
+        internal bool HaveAttribute(string key)
+        {
+            return Attributes.ContainsKey(key);
+        }
+
+        public static List<ItemData> GetItemsByAttribute(ItemData item, string key)
+        {
+            var ret = new List<ItemData>();
+
+            if (item.HaveAttribute(key))
+            {
+                ret.Add(item);
+            }
+            ret.AddRange(GetItemsByAttribute(item.Items, key));
+            
+
+            return ret;
+        }
+        public static List<ItemData> GetItemsByAttribute(List<ItemData> items, string key)
+        {
+            var ret = new List<ItemData>();
+            foreach (var item in items)
+            {
+                ret.AddRange(GetItemsByAttribute(item, key));
+            }
+            return ret;
+        }
     }
 
 }
