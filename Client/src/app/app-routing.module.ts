@@ -3,39 +3,33 @@ import { RouterModule, Routes } from '@angular/router';
 import {GamePlayComponent} from './view/game-play/game-play.component';
 import {AuthGuard} from './bl/auth.guard';
 import {HomeViewComponent} from './view/home-view/home-view.component';
+import {GamesListComponent} from './view/games-list/games-list.component';
+
+export enum RouteNames {
+  Home = 'home',
+  GamePlay = 'game-play',
+  GamesList = 'games-list'
+}
 
 const routes: Routes = [
-  { path: '', redirectTo: `/home`, pathMatch: 'full' },
-  // {
-  //   path: AppRouteName.UploadImage,
-  //   canActivate: [AuthGuard, SMSVerificationGuard, AuthGuardMaintenance, AcceptTermsGuard, UploadImageGuard],
-  //   canDeactivate: [UploadImageGuard],
-  //   loadChildren: () => import('./_view/upload-image/upload-image.module').then((m) => m.UploadImageModule)
-  // },
+  { path: '', redirectTo: `/${RouteNames.Home}`, pathMatch: 'full' },
+
   {
-    path: `home`,
-    component: HomeViewComponent,
+    path: RouteNames.Home,
+    component: HomeViewComponent
+  },
+  {
+    path: RouteNames.GamesList,
+    component: GamesListComponent,
     canActivate: [AuthGuard]
   },
   {
-    path: `game-play/:id`,
+    path: `${RouteNames.GamePlay}/:id`,
     component: GamePlayComponent,
     canActivate: [AuthGuard]
   },
-  // {
-  //   path: AppRouteName.Spaces_Old,
-  //   redirectTo: AppRouteName.Properties,
-  //   pathMatch: 'full'
-  // },
 
-  // {
-  //   path: AppRouteName.Account,
-  //   canActivate: [AuthGuard, SMSVerificationGuard, AuthGuardMaintenance, AcceptTermsGuard],
-  //   loadChildren: () => import('./_view/account/account.module').then((m) => m.AccountModule)
-  // },
-
-
-  { path: '**', redirectTo: `/home` }
+  { path: '**', redirectTo: `/${RouteNames.Home}` }
 
 
 ];
@@ -45,3 +39,5 @@ const routes: Routes = [
   exports: [RouterModule]
 })
 export class AppRoutingModule { }
+
+

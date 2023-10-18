@@ -8,6 +8,7 @@ namespace MG.Server.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Produces("application/json")]
     public class GameController : ControllerBase
     {
         readonly GameBL _gameBL;
@@ -18,10 +19,10 @@ namespace MG.Server.Controllers
             _logger = logger;
         }
 
-        [HttpGet("GetAllGames")]
-        public async Task<IActionResult> GetAllGames()
+        [HttpGet("GetGamesList")]
+        public async Task<IActionResult> GetGamesList()
         {
-            _logger.LogTrace("GetAllGames");
+            _logger.LogTrace("GetGamesList");
 
             return Ok(await _gameBL.GetAllGames());
         }

@@ -1,1 +1,9 @@
-<p>games-list works!</p>
+<div>
+
+  <p-button (onClick)="createGame()">create game</p-button>
+
+  <div *ngFor="let game of games;">
+    {{game.name}} <p-button (onClick)="openGame(game)">OPEN</p-button>
+  </div>
+
+</div>

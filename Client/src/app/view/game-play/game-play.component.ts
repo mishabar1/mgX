@@ -1,4 +1,13 @@
-import {AfterViewInit, Component, ElementRef, ViewChild} from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  ElementRef,
+  OnChanges,
+  OnDestroy,
+  OnInit,
+  SimpleChanges,
+  ViewChild
+} from '@angular/core';
 import * as THREE from 'three';
 import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader';
@@ -27,13 +36,17 @@ import {
 import {VRButton} from 'three/examples/jsm/webxr/VRButton';
 import * as TWEEN from "@tweenjs/tween.js";
 import {XRControllerModelFactory} from 'three/examples/jsm/webxr/XRControllerModelFactory';
+import {ARButton} from 'three/examples/jsm/webxr/ARButton';
+import {XRTargetRaySpace} from 'three/src/renderers/webxr/WebXRController';
+import {ActivatedRoute, Router} from '@angular/router';
+import {color} from 'three/examples/jsm/nodes/shadernode/ShaderNodeBaseElements';
 
 @Component({
   selector: 'app-game-play',
   templateUrl: './game-play.component.html',
   styleUrls: ['./game-play.component.scss']
 })
-export class GamePlayComponent implements AfterViewInit {
+export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnChanges {
 
   gameData!: GameData;
   playerData!: PlayerData;
@@ -54,28 +67,42 @@ export class GamePlayComponent implements AfterViewInit {
   objectSelectedColor="blue";
 
 
+  controller:any;
+  reticle:any;
+  box:any;
+  hitTestSourceRequested:any;
+  hitTestSource:any;
+
   allItems: { [key: string]: ItemData } = {};
   // animationsObjects:any=[];
 
+  gameId:string|null = "";
   constructor(public signalRService: SignalrService,
+              private activatedRoute: ActivatedRoute,
               private dalService: DALService) {
   }
 
   ngOnInit() {
+
+    this.gameId = this.activatedRoute.snapshot.paramMap.get('id');
+    console.log(this.gameId);
+
+
     this.signalRService.startConnection();
     // this.signalRService.addTransferChartDataListener();
 
     this.signalRService.hubConnection.on('GameUpdated', data => {
       console.log('GameUpdated', data);
-      this.updateGame(data)
-
-      //this.click1();
+      this.updateGame(data);
     });
 
   }
 
   ngAfterViewInit(): void {
-    this.initThree();
+    this.dalService.getGameById(this.gameId!).subscribe(game=>{
+      this.gameData = game;
+      this.initThree();
+    });
   }
 
   updateGame(game: any) {
@@ -272,14 +299,48 @@ export class GamePlayComponent implements AfterViewInit {
 
     document.body.appendChild( VRButton.createButton( this.renderer ) );
     this.controllers = this.buildControllers();
-
-
-
     this.controllers.forEach((controller:any) => {
       controller.addEventListener('selectstart', this.onSelectStart);
       controller.addEventListener('selectend', this.onSelectEnd);
     });
+
+
+    // @ts-ignore
+    // document.body.appendChild(ARButton.createButton(this.renderer, {sessionInit: {requiredFeatures: ['hit-test']}}));
+    // this.controller = this.renderer.xr.getController(0);
+    // this.controller.addEventListener('select', this.onSelect.bind(this));
+
+    this.loadGame();
   }
+  onSelect() {
+    if (this.reticle.visible) {
+      this.box.position.setFromMatrixPosition(this.reticle.matrix);
+      this.box.position.y += this.box.geometry.parameters.height / 2;
+      this.box.visible = true;
+    }
+  }
+  async requestHitTestSource() {
+    const session = this.renderer.xr.getSession();
+    session.addEventListener('end', () => {
+      this.hitTestSourceRequested = false;
+      this.hitTestSource = null;
+    });
+    const referenceSpace = await session.requestReferenceSpace('viewer');
+    this.hitTestSource = await session.requestHitTestSource({ space: referenceSpace, entityTypes: ['plane'] });
+    this.hitTestSourceRequested = true;
+  }
+  getHitTestResults(frame:any) {
+    const hitTestResults = frame.getHitTestResults(this.hitTestSource);
+    if (hitTestResults.length) {
+      const hit = hitTestResults[0];
+      const pose = hit.getPose(this.renderer.xr.getReferenceSpace());
+      this.reticle.visible = true;
+      this.reticle.matrix.fromArray(pose.transform.matrix);
+    } else {
+      this.reticle.visible = false;
+    }
+  }
+
   onSelectStart(x:any){
     console.log("onSelectStart",x);
     // this refers to the controller
@@ -307,10 +368,10 @@ export class GamePlayComponent implements AfterViewInit {
     const controllers = [];
 
     for (let i = 0; i < 2; i++) {
-      const controller = this.renderer.xr.getController(i);
+      const controller:XRTargetRaySpace = this.renderer.xr.getController(i);
       controller.add(line.clone());
-      controller.userData.selectPressed = false;
-      controller.userData.selectPressedPrev = false;
+      controller.userData["selectPressed"] = false;
+      controller.userData["selectPressedPrev"] = false;
       this.scene.add(controller);
       controllers.push(controller);
 
@@ -322,9 +383,9 @@ export class GamePlayComponent implements AfterViewInit {
     return controllers;
   }
 
-  handleController(controller:any) {
-    if (controller.userData.selectPressed) {
-      if (!controller.userData.selectPressedPrev) {
+  handleController(controller:XRTargetRaySpace) {
+    if (controller.userData["selectPressed"]) {
+      if (!controller.userData["selectPressedPrev"]) {
         // Select pressed
         controller.children[0].scale.z = 10;
         const rotationMatrix = new Matrix4();
@@ -344,7 +405,7 @@ export class GamePlayComponent implements AfterViewInit {
         const moveVector = controller.getWorldDirection(new Vector3()).multiplyScalar(this.selectedObjectDistance).negate();
         this.selectedObject.position.copy(controller.position.clone().add(moveVector));
       }
-    } else if (controller.userData.selectPressedPrev) {
+    } else if (controller.userData["selectPressedPrev"]) {
       // Select released
       controller.children[0].scale.z = 10;
       if (this.selectedObject != null) {
@@ -352,7 +413,7 @@ export class GamePlayComponent implements AfterViewInit {
         this.selectedObject = null;
       }
     }
-    controller.userData.selectPressedPrev = controller.userData.selectPressed;
+    controller.userData["selectPressedPrev"] = controller.userData["selectPressed"];
   }
   randomIntFromInterval(min: number, max: number) { // min and max included
     return Math.random() * (max - min + 1) + min
@@ -422,10 +483,7 @@ export class GamePlayComponent implements AfterViewInit {
     this.interactionManager.add(cube);
   }
 
-  // onMouseDown(event: MouseEvent) {
-  //
-  // }
-  //
+
   // onMouseUp(event: MouseEvent) {
   //
   //   let raycaster = new THREE.Raycaster();
@@ -446,22 +504,24 @@ export class GamePlayComponent implements AfterViewInit {
   //   }
   // }
 
-  createGame() {
-    this.dalService.createGame().subscribe(gameData => {
-      this.loadGame(gameData);
-    })
-  }
 
-  loadGame(gameData: GameData) {
-    console.log(gameData, dayjs().startOf('month').add(1, 'day').set('year', 2018).format('YYYY-MM-DD HH:mm:ss'));
 
-    this.gameData = gameData;
+  loadGame() {
+    // console.log(gameData, dayjs().startOf('month').add(1, 'day').set('year', 2018).format('YYYY-MM-DD HH:mm:ss'));
+
+    // this.gameData = gameData;
     // TODO !!!! TEMP only !!!!
     this.playerData = this.gameData.players[0];
 
-    forEach(gameData.items, (itemData: ItemData) => {
+    forEach(this.gameData.items, (itemData: ItemData) => {
       this.createItem(itemData, null);
     })
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+  }
+
+  ngOnDestroy(): void {
   }
 
 

@@ -5,6 +5,8 @@ namespace MG.Server.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Produces("application/json")]
+    [Consumes("application/json")]
     public class UserController : ControllerBase    
     {
         UserBL _userBL;
@@ -20,12 +22,12 @@ namespace MG.Server.Controllers
         {
             _logger.LogTrace("Login");
             //await _dataRepository.GetGameByID(gameId)
-            return Ok();
+            return Ok(await _userBL.Login(data) );
         }
     }
 
     public class LoginData
     {
-        public string Name { get; set; }
+        public string name { get; set; }
     }
 }
