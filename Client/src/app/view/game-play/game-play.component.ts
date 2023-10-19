@@ -40,6 +40,9 @@ import {ARButton} from 'three/examples/jsm/webxr/ARButton';
 import {XRTargetRaySpace} from 'three/src/renderers/webxr/WebXRController';
 import {ActivatedRoute, Router} from '@angular/router';
 import {color} from 'three/examples/jsm/nodes/shadernode/ShaderNodeBaseElements';
+import {RouteNames} from '../../app-routing.module';
+import {environment} from '../../../environments/environment';
+import {Group} from 'three/src/objects/Group';
 
 @Component({
   selector: 'app-game-play',
@@ -78,6 +81,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
   gameId:string|null = "";
   constructor(public signalRService: SignalrService,
+              private router: Router,
               private activatedRoute: ActivatedRoute,
               private dalService: DALService) {
   }
@@ -88,7 +92,6 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     console.log(this.gameId);
 
 
-    this.signalRService.startConnection();
     // this.signalRService.addTransferChartDataListener();
 
     this.signalRService.hubConnection.on('GameUpdated', data => {
@@ -100,6 +103,10 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
   ngAfterViewInit(): void {
     this.dalService.getGameById(this.gameId!).subscribe(game=>{
+      if(!game){
+        this.router.navigate([RouteNames.GamesList]);
+        return;
+      }
       this.gameData = game;
       this.initThree();
     });
@@ -261,6 +268,8 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
     } );
 
+    // Instantiate a loader
+    this.loader = new GLTFLoader();
     // const animate = () => {
     //   requestAnimationFrame(animate);
     //   this.controls.update();
@@ -423,37 +432,48 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   }
 
 
-  createItem(itemData: ItemData, parentMesh: THREE.Mesh | null) {
-    const color = THREE.MathUtils.randInt(0, 0xffffff)
-    //const geometry = new THREE.BoxGeometry(this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1));
-    const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-    const material = new THREE.MeshBasicMaterial({color});
-    const cube = new THREE.Mesh(geometry, material);
-    //cube.position.set(this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1));
-    cube.position.set(itemData.position.x, itemData.position.y, itemData.position.z);
+  createItem(itemData: ItemData, parentMesh: THREE.Group | null) {
+    const loadUrl ='\\assets\\games\\' +  this.gameData.assets[itemData.asset].frontURL;
+    this.loader.load(  loadUrl, (gltf) => {
 
-    if (parentMesh) {
-      parentMesh.add(cube);
-    } else {
-      this.scene.add(cube);
-    }
-    const pId = this.gameData.players[0].id;
-    cube.userData['ItemData'] = itemData;
+      const mesh = gltf.scene;
+      // model.position.set(0, 1, 0);
+      // this.scene.add(model);
 
-    let action = itemData.clickActions[pId] || itemData.clickActions[''];
-    if (action) {
-      this.addClickAction(cube, itemData, action);
-    }
+      // const color = THREE.MathUtils.randInt(0, 0xffffff)
+      //const geometry = new THREE.BoxGeometry(this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1));
+      // const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+      // const material = new THREE.MeshBasicMaterial({color});
+      // const cube = new THREE.Mesh(geometry, material);
+      //cube.position.set(this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1));
+      mesh.position.set(itemData.position.x, itemData.position.y, itemData.position.z);
 
-    forEach(itemData.items, (itemData: ItemData) => {
-      this.createItem(itemData, cube);
+      if (parentMesh) {
+        parentMesh.add(mesh);
+      } else {
+        this.scene.add(mesh);
+      }
+      const pId = this.gameData.players[0].id;
+      mesh.userData['ItemData'] = itemData;
+
+      let action = itemData.clickActions[pId] || itemData.clickActions[''];
+      if (action) {
+        this.addClickAction(mesh, itemData, action);
+      }
+
+      forEach(itemData.items, (itemData: ItemData) => {
+        this.createItem(itemData, mesh);
+      });
+
+      itemData.mesh = mesh;
+      this.allItems[itemData.id] = itemData;
+
     });
 
-    itemData.mesh = cube;
-    this.allItems[itemData.id] = itemData;
+
   }
 
-  private addClickAction(cube: THREE.Mesh, itemData: ItemData, action: string) {
+  private addClickAction(cube: THREE.Group, itemData: ItemData, action: string) {
     cube.addEventListener('click', (event: any) => {
       event.stopPropagation();
       //this.signalRService.testSendXXX1();
@@ -468,14 +488,14 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
     });
     cube.addEventListener('mouseover', (event: any) => {
-      event.target.userData['c'] = event.target.material.clone().color;
-      event.target.material.color.set(0xff0000);
+      // event.target.userData['c'] = event.target.material.clone().color;
+      // event.target.material.color.set(0xff0000);
       document.body.style.cursor = 'pointer';
       this.orbitControls.enabled = false;
     });
     cube.addEventListener('mouseout', (event: any) => {
-      let c: any = event.target.userData['c'];
-      event.target.material.color.set(c.r, c.g, c.b);
+      // let c: any = event.target.userData['c'];
+      // event.target.material.color.set(c.r, c.g, c.b);
       document.body.style.cursor = 'default';
       this.orbitControls.enabled = true;
     });

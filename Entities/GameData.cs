@@ -5,12 +5,14 @@ namespace MG.Server.Entities
 {
     public class GameData: BaseData<GameData>
     {
-        public GameTypeEnum GameType { get; set; }
+        public string GameType { get; set; }
+
+        public Dictionary<string,AssetData> Assets { get; set; }
 
         public List<ItemData> Items { get; set; }
         public List<PlayerData> Players { get; set; }
 
-        public GameStatusEnum GameStatus { get; set; }
+        public string GameStatus { get; set; }
         public string CreatorId { get; set; }
         public string CurrentTurnId { get; set; }
         public List<PlayerData> Winners { get; set; }
@@ -18,7 +20,8 @@ namespace MG.Server.Entities
         [JsonIgnore] public BaseGameFlow GameFlow { get; set; }
 
         public GameData():base()
-        {            
+        {
+            Assets = new Dictionary<string,AssetData>();
             Items = new List<ItemData>();
             Players = new List<PlayerData>();
         }
@@ -57,18 +60,20 @@ namespace MG.Server.Entities
 
     }
 
-    public enum GameTypeEnum
+
+    public class GameTypeEnum
     {
-        TIK_TAK_TOE=1,
-        CATAN = 2,
-        DND = 3
+         public const string TIK_TAK_TOE = "TIK_TAK_TOE";
+        public const string CATAN = "CATAN";
+        public const string DND = "DND";
+
     }
-    public enum GameStatusEnum
+    public class GameStatusEnum
     {
-        CREATED = 1,
-        SETUP = 2,
-        PLAY = 3,
-        ENDED = 4,
+        public const string CREATED = "CREATED";
+        public const string SETUP = "SETUP";
+        public const string PLAY = "PLAY";
+        public const string ENDED = "ENDED";
 
     }
 }

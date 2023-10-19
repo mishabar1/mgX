@@ -10,3 +10,21 @@ html, body{
     margin:0px;
     overflow:hidden;
 }
+
+.mg-col{
+  display: flex;
+  flex-direction: column;
+}
+.mg-row{
+  display: flex;
+  flex-direction: row;
+}
+.mg-row-center{
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.mg-margin-10{
+  margin: 10px;
+}

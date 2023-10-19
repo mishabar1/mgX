@@ -2,6 +2,7 @@ import {Component, HostBinding} from '@angular/core';
 import {GeneralService} from './bl/general.service';
 import {environment} from '../environments/environment';
 import {Title} from '@angular/platform-browser';
+import {SignalrService} from './services/SignalrService';
 
 @Component({
   selector: 'app-root',
@@ -10,7 +11,9 @@ import {Title} from '@angular/platform-browser';
 })
 export class AppComponent {
   @HostBinding('attr.app-version') appVersionAttr = environment.appVersion;
-  constructor(private generalService: GeneralService,private titleService:Title) {
+  constructor(private generalService: GeneralService,
+              private titleService:Title,
+              private signalRService: SignalrService) {
 
     this.titleService.setTitle("MGx - v"+environment.appVersion);
 
@@ -18,6 +21,7 @@ export class AppComponent {
     try {
       savedUser = JSON.parse(savedUser);
       this.generalService.User = savedUser;
+      this.signalRService.startConnection();
     } catch (e) {
       this.generalService.User = undefined;
     }

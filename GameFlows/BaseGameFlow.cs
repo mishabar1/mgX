@@ -10,10 +10,10 @@ namespace MG.Server.GameFlows
         public GameData GameData { get; set; }
 
 
-        public static GameData CreateGame(GameTypeEnum GameType)
+        public static GameData CreateGame(string gameType)
         {
             var game = new GameData();
-            switch (GameType)
+            switch (gameType)
             {
                 case GameTypeEnum.TIK_TAK_TOE:
                     game.GameFlow = new TikTakToeGameFlow(game);
@@ -27,7 +27,8 @@ namespace MG.Server.GameFlows
                 default:
                     break;
             }
-           
+
+            game.GameStatus = GameStatusEnum.CREATED;
             return game;
         }
         public BaseGameFlow(GameData gameData)
@@ -43,13 +44,13 @@ namespace MG.Server.GameFlows
 
         public async Task ExecuteAction(ExecuteActionData data)
         {
-            data.Item = GameData.FindItem(data.ItemId);
-            data.Player = GameData.FindPlayer(data.PlayerId);
+            data.Item = GameData.FindItem(data.itemId);
+            data.Player = GameData.FindPlayer(data.playerId);
             if(data.Item != null && data.Player != null)
             {
                 Console.WriteLine("TikTakToeGameFlow ExecuteAction " + data);
                 Type thisType = GetType();
-                MethodInfo theMethod = thisType.GetMethod(data.ActionId);
+                MethodInfo theMethod = thisType.GetMethod(data.actionId);
                 theMethod.Invoke(this, new object[] { data });
             }
 

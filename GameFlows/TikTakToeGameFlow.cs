@@ -17,47 +17,48 @@ namespace MG.Server.GameFlows
         public override async Task Setup()
         {
             Console.WriteLine("TikTakToeGameFlow Setup " + this.GameData);
-            
-            // create aseets
-            var assetA = new AssetData();
-            var assetB = new AssetData();
+            // reset all
+            this.GameData.Assets = new Dictionary<string, AssetData>();
+            this.GameData.Items = new List<ItemData>();
+            this.GameData.Players = new List<PlayerData>();
+            this.GameData.Winners = null;
+            this.GameData.CurrentTurnId = null;
+            this.GameData.GameStatus = GameStatusEnum.SETUP;
 
+            // create assets
+            addAsset(Assets.BOARD, new AssetData("ticktacktoe/board.glb"));
+            addAsset(Assets.HOVER, new AssetData("ticktacktoe/hover.gltf"));
+            addAsset(Assets.X, new AssetData("ticktacktoe/x.glb"));
+            addAsset(Assets.O, new AssetData("ticktacktoe/o.glb"));
+            
             // set players
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.HUMAN };
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.AI };
 
             // set "setup" items
-            new ItemData(this.GameData, assetA).SetPosition(-1, 0, 1).AddAttribute("click");
-            new ItemData(this.GameData, assetA).SetPosition(0, 0, 1).AddAttribute("click");
-            new ItemData(this.GameData, assetA).SetPosition(1, 0, 1).AddAttribute("click");
-            new ItemData(this.GameData, assetA).SetPosition(-1, 0, 0).AddAttribute("click");
-            new ItemData(this.GameData, assetA).SetPosition(0, 0, 0).AddAttribute("click");
-            new ItemData(this.GameData, assetA).SetPosition(1, 0, 0).AddAttribute("click");
-            new ItemData(this.GameData, assetA).SetPosition(-1, 0, -1).AddAttribute("click");
-            new ItemData(this.GameData, assetA).SetPosition(0, 0, -1).AddAttribute("click");
-            new ItemData(this.GameData, assetA).SetPosition(1, 0, -1).AddAttribute("click");
+            new ItemData(this.GameData, Assets.BOARD).SetPosition(0, 0, 0);
+
+            new ItemData(this.GameData, Assets.HOVER).SetPosition(-1, 0, 1).AddAttribute("hover").AddAttribute("idx","1");
+            new ItemData(this.GameData, Assets.HOVER).SetPosition(0, 0, 1).AddAttribute("hover").AddAttribute("idx","2");
+            new ItemData(this.GameData, Assets.HOVER).SetPosition(1, 0, 1).AddAttribute("hover").AddAttribute("idx","3");
+            new ItemData(this.GameData, Assets.HOVER).SetPosition(-1, 0, 0).AddAttribute("hover").AddAttribute("idx","4");
+            new ItemData(this.GameData, Assets.HOVER).SetPosition(0, 0, 0).AddAttribute("hover").AddAttribute("idx","5");
+            new ItemData(this.GameData, Assets.HOVER).SetPosition(1, 0, 0).AddAttribute("hover").AddAttribute("idx","6");
+            new ItemData(this.GameData, Assets.HOVER).SetPosition(-1, 0, -1).AddAttribute("hover").AddAttribute("idx","7");
+            new ItemData(this.GameData, Assets.HOVER).SetPosition(0, 0, -1).AddAttribute("hover").AddAttribute("idx","8");
+            new ItemData(this.GameData, Assets.HOVER).SetPosition(1, 0, -1).AddAttribute("hover").AddAttribute("idx", "9");
 
             setActions();
 
-            //var i4 = new ItemData(this.GameData, assetA)
-            //{
-            //    Position = new V3(0, 0.3, 0.1)
-            //};
-
-            //for (int i = 0; i < 1000; i++)
-            //{
-            //    new ItemData(this.GameData, assetA, i2);
-            //}
-
-
-
-            //i1.AddAction(MyItemClick111);
-            //i4.AddAction(MyItemClick444);
+        }
+        private void addAsset(string assetKey, AssetData asset)
+        {
+            this.GameData.Assets.Add(assetKey, asset);
         }
 
         private void setActions()
         {
-            List<ItemData> items = ItemData.GetItemsByAttribute(GameData.Items, "click");
+            List<ItemData> items = ItemData.GetItemsByAttribute(GameData.Items, "hover");
 
             items.ForEach(x => x.AddAction(MyItemClick111));
         }
@@ -90,5 +91,15 @@ namespace MG.Server.GameFlows
             Console.WriteLine("TikTakToeGameFlow EndGame " + this.GameData);
             
         }
+
+        class Assets
+        {
+            public const string BOARD = "BOARD";
+            public const string HOVER = "HOVER";
+            public const string X = "X";
+            public const string O = "O";
+        }
     }
+
+
 }

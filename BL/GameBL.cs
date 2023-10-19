@@ -10,7 +10,7 @@ namespace MG.Server.BL
     {
         ILogger<GameBL> _logger;
         DataRepository _dataRepository;
-        NotificationHub _notificationHub;
+        //NotificationHub _notificationHub;
         public GameBL(ILogger<GameBL> logger, 
             DataRepository dataRepository)
         {
@@ -27,9 +27,9 @@ namespace MG.Server.BL
         }
 
 
-        internal async Task<GameData> GetGameByID(string gameId)
+        internal async Task<GameData?> GetGameByID(string gameId)
         {
-            return _dataRepository.Games.First();
+            return _dataRepository.Games.Find(x => x.Id == gameId);
         }
 
         internal async Task<GameData> CreateGame(CreateGameData data)
@@ -37,36 +37,52 @@ namespace MG.Server.BL
             var game = BaseGameFlow.CreateGame(GameTypeEnum.TIK_TAK_TOE);
             _dataRepository.Games.Add(game);
 
-            await game.GameFlow.Setup();                    
-                       
+            await game.GameFlow.Setup();
+
+            //update all clients
+            _dataRepository.HubGamesUpdated(game);
             return game;
         }
 
-        internal async Task<object?> ExecuteAction(ExecuteActionData data, NotificationHub hub)
+        internal async Task<object?> ExecuteAction(ExecuteActionData data)
         {
             // find game in db
-            var game = _dataRepository.Games.Where(x=>x.Id == data.GameId).FirstOrDefault();
+            var game = _dataRepository.Games.Where(x=>x.Id == data.gameId).FirstOrDefault();
 
             if (game != null)
             {
 
                 await game.GameFlow.ExecuteAction(data);
 
-                hub.GameUpdated(game);
+                _dataRepository.HubGameUpdated(game);
             }
 
-            // 
-            return "OK ExecuteAction";
+            return new { x = "TODO !!! ExecuteAction" };
         }
 
         internal async Task<object?> SetupGame(SetupGameData data)
         {
-            return "OK SetupGame";
+            // find game in db
+            var game = _dataRepository.Games.Where(x => x.Id == data.gameId).FirstOrDefault();
+
+            if (game != null)
+            {
+                await game.GameFlow.Setup();
+                _dataRepository.HubGamesUpdated(game);
+                
+            }
+
+            return new { x = "TODO !!! SetupGame" };
         }
 
         internal async Task<object?> StartGame(StartGameData data)
         {
-            return "OK StartGame";
+            return new { x = "TODO !!! StartGame" };
+        }
+
+        internal async Task<object> DeleteGame(StartGameData data)
+        {
+            return new { x = "TODO !!! DeleteGame" };
         }
     }
 }

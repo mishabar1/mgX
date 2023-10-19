@@ -29,9 +29,21 @@ export class DALService{
     return this.http.get<any>(this.baseGameUrl + `/GetGamesList`);
   }
 
-  createGame(): Observable<GameData> {
-    return this.http.post<GameData>(this.baseGameUrl + `/CreateGame`, {});
+  createGame(userId:string): Observable<GameData> {
+    return this.http.post<GameData>(this.baseGameUrl + `/CreateGame`, {userId});
   }
+  setupGame(gameId:string,userId:string): Observable<GameData> {
+    return this.http.post<GameData>(this.baseGameUrl + `/SetupGame`, {gameId,userId});
+  }
+  startGame(gameId:string): Observable<GameData> {
+    return this.http.post<GameData>(this.baseGameUrl + `/StartGame`, {gameId});
+  }
+  deleteGame(gameId:string): Observable<GameData> {
+    return this.http.post<GameData>(this.baseGameUrl + `/DeleteGame`, {gameId});
+  }
+
+
+
 
   executeAction(GameId: string, PlayerId: string, ActionId: string, ItemId: string, ClientX: number, ClientY: number): Observable<any> {
     const data = {

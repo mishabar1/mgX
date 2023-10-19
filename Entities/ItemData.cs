@@ -6,7 +6,7 @@ namespace MG.Server.Entities
 {
     public class ItemData : BaseData<GameData>
     {
-        public AssetData Asset { get; set; }
+        public string Asset { get; set; }
 
         public string GameId { get { return Game.Id; } }
         [JsonIgnore] public GameData Game { get; set; }
@@ -25,12 +25,11 @@ namespace MG.Server.Entities
         public List<ItemData> Items { get; set; }
 
 
-
         public string? ParentItemId { get { return ParentItem?.Id; } }
         [JsonIgnore] public ItemData? ParentItem { get; set; }
 
 
-        public ItemData(GameData game, AssetData asset, ItemData? parentItem = null) : base()
+        public ItemData(GameData game, string asset, ItemData? parentItem = null) : base()
         {
             Name = Utils.RandomName();
 
