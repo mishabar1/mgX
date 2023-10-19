@@ -34,10 +34,8 @@ namespace MG.Server.BL
 
         internal async Task<GameData> CreateGame(CreateGameData data)
         {
-            var game = BaseGameFlow.CreateGame(GameTypeEnum.TIK_TAK_TOE);
+            var game = BaseGameFlow.CreateGame(data.gameType, data.userId);
             _dataRepository.Games.Add(game);
-
-            await game.GameFlow.Setup();
 
             //update all clients
             _dataRepository.HubGamesUpdated(game);
@@ -99,6 +97,28 @@ namespace MG.Server.BL
             _dataRepository.HubGameDeleted(data.gameId);
 
             return new { x = "TODO !!! DeleteGame" };
+        }
+
+        internal async Task<object?> JoinGame(JoinGameData data)
+        {
+            // find game in db
+            var game = _dataRepository.Games.Where(x => x.Id == data.gameId).FirstOrDefault();
+
+            if (game != null)
+            {
+                var player = game.Players.Find(x => x.Id == data.playerId);
+                if (player != null)
+                {
+                    player.User = data.user;
+                    player.Type = data.type;
+                }
+
+                _dataRepository.HubGamesUpdated(game);
+                _dataRepository.HubGameUpdated(game);
+
+            }
+
+            return new { x = "TODO !!! JoinGame" };
         }
     }
 }

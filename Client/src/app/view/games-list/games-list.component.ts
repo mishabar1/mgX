@@ -52,35 +52,20 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
       this.games=list;
     })
   }
-  createGame() {
-    this.dalService.createGame(this.user.id).subscribe(gameData => {
-      //this.loadGame(gameData);
-      // this.updateGamesList();
-    })
-  }
-
-
-  openGame(game: GameData) {
-
+  createGame(gameType:string) {
+    this.dalService.createGame(this.user.id,gameType).subscribe();
   }
 
   setup(game: GameData) {
-    this.dalService.setupGame(game.id,this.user.id).subscribe(gameData => {
-      //this.loadGame(gameData);
-      //this.updateGamesList();
-    })
+
+    this.dalService.setupGame(game.id,this.user.id).subscribe(()=>{
+      this.router.navigate([RouteNames.GameSetup,game.id]);
+    });
   }
 
-  start(game: GameData) {
-    this.dalService.startGame(game.id).subscribe(gameData => {
-      this.router.navigate([RouteNames.GamePlay,game.id]);
-    })
-  }
+
 
   delete(game: GameData) {
-    this.dalService.deleteGame(game.id).subscribe(gameData => {
-      //this.loadGame(gameData);
-      //this.updateGamesList();
-    })
+    this.dalService.deleteGame(game.id).subscribe();
   }
 }

@@ -1,0 +1,18 @@
+<div *ngIf="gameData">
+  <div>
+    <ngx-json-viewer [json]="gameData"   [depth]="1"></ngx-json-viewer>
+  </div>
+
+  <div class="mg-col">
+    <div style="margin-top: 20px;font-size: 20px">Players</div>
+    <div *ngFor="let player of gameData.players;" class="mg-row-center">
+      <div>{{player.type}}</div>
+      <div><p-button (onClick)="join_game(player)" severity="success">JOIN</p-button></div>
+      <div><p-button (onClick)="set_ai(player)" severity="warning">AI</p-button></div>
+      <div><p-button (onClick)="leave(player)"  severity="danger">LEAVE</p-button></div>
+
+    </div>
+  </div>
+
+  <p-button (onClick)="start()" severity="success">START</p-button>
+</div>

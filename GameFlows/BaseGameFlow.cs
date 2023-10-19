@@ -10,7 +10,7 @@ namespace MG.Server.GameFlows
         public GameData GameData { get; set; }
 
 
-        public static GameData CreateGame(string gameType)
+        public static GameData CreateGame(string gameType,string userId)
         {
             var game = new GameData();
             switch (gameType)
@@ -29,6 +29,7 @@ namespace MG.Server.GameFlows
             }
 
             game.GameStatus = GameStatusEnum.CREATED;
+            game.CreatorId = userId;
             return game;
         }
         public BaseGameFlow(GameData gameData)

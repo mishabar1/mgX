@@ -65,7 +65,14 @@ namespace MG.Server.Controllers
             return Ok(await _gameBL.DeleteGame(data));
         }
 
+        [HttpPost("JoinGame")]
+        public async Task<IActionResult> JoinGame(JoinGameData data)
+        {
+            _logger.LogTrace("JoinGame");
+            return Ok(await _gameBL.JoinGame(data));
+        }
         
+
         //[HttpPost("ExecuteAction")]
         //public async Task<IActionResult> ExecuteAction(ExecuteActionData data)
         //{
@@ -76,6 +83,14 @@ namespace MG.Server.Controllers
 
     }
 
+    public class JoinGameData
+    {
+      
+        public string gameId { get; set; }
+        public string playerId { get; set; }
+        public UserData? user { get; set; }
+        public string type { get; set; }
+    }
     public class SetupGameData
     {
         public string gameId { get; set; }
@@ -86,8 +101,10 @@ namespace MG.Server.Controllers
         public string gameId { get; set; }
     }
     public class CreateGameData
-    {
-        
+    {       
+        public string gameType { get; set; }
+        public string userId { get; set; }
+
     }
 
     public class ExecuteActionData:MGPrintable

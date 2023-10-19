@@ -7,6 +7,7 @@ namespace MG.Server.GameFlows
     {
         public DnDGameFlow(GameData gameData) : base(gameData)
         {
+            gameData.GameType = GameTypeEnum.DND;
         }
 
         public override async Task Setup()
@@ -15,11 +16,13 @@ namespace MG.Server.GameFlows
         }
         public override Task StartGame()
         {
+            Console.WriteLine("DnDGameFlow StartGame " + this.GameData);
             throw new NotImplementedException();
         }
 
         public override Task EndGame()
         {
+            Console.WriteLine("DnDGameFlow EndGame " + this.GameData);
             throw new NotImplementedException();
         }
 

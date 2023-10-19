@@ -5,11 +5,13 @@
     <div>{{game.name}} </div>
     <div>{{game.gameStatus}} </div>
     <div>{{game.gameType}} </div>
-    <p-button (onClick)="setup(game)">SETUP</p-button>
-    <p-button (onClick)="start(game)">START</p-button>
-    <p-button (onClick)="delete(game)">DELETE</p-button>
+    <p-button (onClick)="setup(game)" severity="warning">SETUP</p-button>
+    <p-button (onClick)="delete(game)"  severity="danger">DELETE</p-button>
   </div>
 
-  <p-button (onClick)="createGame()">create game</p-button>
-
+  <div class="mg-row-center" style="column-gap: 10px;">
+  <p-button (onClick)="createGame('TIK_TAK_TOE')" severity="secondary">create game TIK_TAK_TOE</p-button>
+  <p-button (onClick)="createGame('CATAN')" severity="secondary">create game CATAN</p-button>
+  <p-button (onClick)="createGame('DND')" severity="secondary">create game DnD</p-button>
+  </div>
 </div>

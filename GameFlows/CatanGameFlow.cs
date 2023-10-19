@@ -8,20 +8,24 @@ namespace MG.Server.GameFlows
     {
         public CatanGameFlow(GameData gameData) : base(gameData)
         {
+            gameData.GameType = GameTypeEnum.CATAN;
         }
 
 
         public override async Task Setup()
         {
             Console.WriteLine("CatanGameFlow Setup " + this.GameData);
+            throw new NotImplementedException();
         }
         public override Task StartGame()
         {
+            Console.WriteLine("CatanGameFlow StartGame " + this.GameData);
             throw new NotImplementedException();
         }
 
         public override Task EndGame()
         {
+            Console.WriteLine("CatanGameFlow EndGame " + this.GameData);
             throw new NotImplementedException();
         }
     }

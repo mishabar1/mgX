@@ -10,15 +10,16 @@ import {HttpClientModule} from '@angular/common/http';
 import {GamePlayComponent} from './view/game-play/game-play.component';
 import {HomeViewComponent} from './view/home-view/home-view.component';
 import { GamesListComponent } from './view/games-list/games-list.component';
-import { GameSettingsComponent } from './view/game-settings/game-settings.component';
+import { GameSetupComponent } from './view/game-setup/game-setup.component';
+import {NgxJsonViewerModule} from 'ngx-json-viewer';
 
 @NgModule({
   declarations: [
     AppComponent,
-    GamePlayComponent,
     HomeViewComponent,
     GamesListComponent,
-    GameSettingsComponent
+    GameSetupComponent,
+    GamePlayComponent
   ],
   imports: [
     BrowserModule,
@@ -27,7 +28,8 @@ import { GameSettingsComponent } from './view/game-settings/game-settings.compon
     AppRoutingModule,
     ButtonModule,
     CheckboxModule,
-    HttpClientModule
+    HttpClientModule,
+    NgxJsonViewerModule
   ],
   providers: [],
   bootstrap: [AppComponent]

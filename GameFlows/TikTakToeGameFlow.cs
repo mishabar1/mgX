@@ -32,8 +32,8 @@ namespace MG.Server.GameFlows
             addAsset(Assets.O, new AssetData("ticktacktoe/o.glb"));
             
             // set players
-            new PlayerData(this.GameData) { Type = PlayerTypeEnum.HUMAN };
-            new PlayerData(this.GameData) { Type = PlayerTypeEnum.AI };
+            new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT };
+            new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT };
 
             // set "setup" items
             new ItemData(this.GameData, Assets.BOARD).SetPosition(0, 0, 0);
