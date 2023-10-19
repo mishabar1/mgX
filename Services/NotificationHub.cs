@@ -28,35 +28,18 @@ namespace MG.Server.Services
             _logger = logger;            
         }
 
-        //public async Task SendNotificationData(string user_id, string notification_type, string notification_data)
-        //{
-        //    await Clients.Group(user_id).SendAsync("test", new NotificationModel(notification_type, notification_data));
-        //}
-
-        public async void SetConnectionIDUser(int user_id)
+        public async void SetConnectionIDUser(string userId)
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, user_id.ToString());
+            await Groups.AddToGroupAsync(Context.ConnectionId, userId.ToString());
         }
 
-        //public async void GameUpdated(int i, string s)
-        //{
-        //    Console.WriteLine("sss" + i.ToString() + s);
-        //    //await Groups.AddToGroupAsync(Context.ConnectionId, user_id.ToString());
-            
-        //}
 
         public async void ExecuteAction(ExecuteActionData s)
         {
             Console.WriteLine("ExecuteAction "   + s);
             await _gameBL.ExecuteAction(s);
-            // await Groups.AddToGroupAsync(Context.ConnectionId, user_id.ToString());
-            // Clients.All.SendAsync("test");
         }
 
-        //internal void GameUpdated(GameData game)
-        //{
-            
-        //}
         
     }
 }

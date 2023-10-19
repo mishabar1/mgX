@@ -21,7 +21,7 @@ export class AppComponent {
     try {
       savedUser = JSON.parse(savedUser);
       this.generalService.User = savedUser;
-      this.signalRService.startConnection();
+      this.signalRService.startConnection(this.generalService.User!.id);
     } catch (e) {
       this.generalService.User = undefined;
     }

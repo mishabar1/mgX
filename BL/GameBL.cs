@@ -11,7 +11,7 @@ namespace MG.Server.BL
         ILogger<GameBL> _logger;
         DataRepository _dataRepository;
         //NotificationHub _notificationHub;
-        public GameBL(ILogger<GameBL> logger, 
+        public GameBL(ILogger<GameBL> logger,
             DataRepository dataRepository)
         {
             _logger = logger;
@@ -47,7 +47,7 @@ namespace MG.Server.BL
         internal async Task<object?> ExecuteAction(ExecuteActionData data)
         {
             // find game in db
-            var game = _dataRepository.Games.Where(x=>x.Id == data.gameId).FirstOrDefault();
+            var game = _dataRepository.Games.Where(x => x.Id == data.gameId).FirstOrDefault();
 
             if (game != null)
             {
@@ -69,7 +69,8 @@ namespace MG.Server.BL
             {
                 await game.GameFlow.Setup();
                 _dataRepository.HubGamesUpdated(game);
-                
+                _dataRepository.HubGameUpdated(game);
+
             }
 
             return new { x = "TODO !!! SetupGame" };
@@ -77,11 +78,26 @@ namespace MG.Server.BL
 
         internal async Task<object?> StartGame(StartGameData data)
         {
+            // find game in db
+            var game = _dataRepository.Games.Where(x => x.Id == data.gameId).FirstOrDefault();
+
+            if (game != null)
+            {
+                await game.GameFlow.StartGame();
+                _dataRepository.HubGamesUpdated(game);
+                _dataRepository.HubGameUpdated(game);
+
+            }
+
             return new { x = "TODO !!! StartGame" };
         }
 
         internal async Task<object> DeleteGame(StartGameData data)
         {
+
+            _dataRepository.Games.RemoveAll(x => x.Id == data.gameId);
+            _dataRepository.HubGameDeleted(data.gameId);
+
             return new { x = "TODO !!! DeleteGame" };
         }
     }

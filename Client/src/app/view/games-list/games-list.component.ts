@@ -30,6 +30,13 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
       console.log('GamesUpdated', data);
       this.updateGamesList();
     });
+
+    this.signalRService.hubConnection.on('GameDeleted', data => {
+      console.log('GameDeleted', data);
+      this.updateGamesList();
+    });
+
+
   }
   ngAfterViewInit(): void {
 

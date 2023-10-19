@@ -41,7 +41,7 @@ constructor(private router: Router,
 
       //set
       this.generalService.User = user;
-      this.signalRService.startConnection();
+      this.signalRService.startConnection(this.generalService.User.id);
 
       //save for next time
       localStorage.setItem("user", JSON.stringify(user));
