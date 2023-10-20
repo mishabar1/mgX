@@ -3,67 +3,47 @@ using System.Text.Json.Serialization;
 
 namespace MG.Server.Entities
 {
-    public class GameData: BaseData<GameData>
+    public class GameData : BaseData<GameData>
     {
         public string GameType { get; set; }
-
-        public Dictionary<string,AssetData> Assets { get; set; }
-
-        public List<ItemData> Items { get; set; }
-        public List<PlayerData> Players { get; set; }
-
         public string GameStatus { get; set; }
+        public Dictionary<string, AssetData> Assets { get; set; }
+        public ItemData Table { get; set; }
+        public List<PlayerData> Players { get; set; }
         public string CreatorId { get; set; }
         public string CurrentTurnId { get; set; }
         public List<PlayerData> Winners { get; set; }
 
         [JsonIgnore] public BaseGameFlow GameFlow { get; set; }
 
-        public GameData():base()
+        public GameData() : base()
         {
-            Assets = new Dictionary<string,AssetData>();
-            Items = new List<ItemData>();
+            Assets = new Dictionary<string, AssetData>();
+            Table = ItemData.Table();
             Players = new List<PlayerData>();
         }
 
 
-        public ItemData FindItem(string itemId)
+        public ItemData? FindItem(string itemId)
         {
-            ItemData found = null;
-
-            Items.ForEach(item => {
-                if (item.Id == itemId)
-                {
-                    found = item;
-                    return;
-                }
-                var f = item.FindItem(itemId);
-                if (f != null)
-                {
-                    found = item;
-                    return;
-                }
-
-            });
-
-            return found;
+            return Table.FindItem(itemId);
         }
-        public PlayerData FindPlayer(string playerId)
+        public void RemoveItem(string itemId)
         {
-            //PlayerData found = null;
-
+            Table.RemoveItem(itemId);
+        }
+        public PlayerData? FindPlayer(string playerId)
+        {
             return Players.Find(p => p.Id == playerId);
-
-            //return found;
         }
-        
+
 
     }
 
 
     public class GameTypeEnum
     {
-         public const string TIK_TAK_TOE = "TIK_TAK_TOE";
+        public const string TIK_TAK_TOE = "TIK_TAK_TOE";
         public const string CATAN = "CATAN";
         public const string DND = "DND";
 

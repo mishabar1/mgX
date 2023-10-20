@@ -1,4 +1,7 @@
-﻿namespace MG.Server.Entities
+﻿using MG.Server.Services;
+using System.Text;
+
+namespace MG.Server.Entities
 {
     public class V2
     {
@@ -11,6 +14,12 @@
         {
             X = x;
             Y = y;
+        }
+
+
+        public override string ToString()
+        {
+            return Utils.ListProperties(this);
         }
     }
 }

@@ -1,4 +1,5 @@
-<div *ngIf="gameData">
+<div *ngIf="gameData" style="overflow: auto;width: 100%;height: 100%;">
+  <div style="font-size: 20px;">Settings</div>
   <div>
     <ngx-json-viewer [json]="gameData"   [depth]="1"></ngx-json-viewer>
   </div>
@@ -6,7 +7,7 @@
   <div class="mg-col">
     <div style="margin-top: 20px;font-size: 20px">Players</div>
     <div *ngFor="let player of gameData.players;" class="mg-row-center">
-      <div>{{player.type}}</div>
+      <div style="width: 100px">{{player.type}}</div>
       <div><p-button (onClick)="join_game(player)" severity="success">JOIN</p-button></div>
       <div><p-button (onClick)="set_ai(player)" severity="warning">AI</p-button></div>
       <div><p-button (onClick)="leave(player)"  severity="danger">LEAVE</p-button></div>
@@ -14,5 +15,10 @@
     </div>
   </div>
 
-  <p-button (onClick)="start()" severity="success">START</p-button>
+  <div class="mg-row-center" style="margin-top: 20px;">
+    <p-button (onClick)="setup()" severity="secondary">SETUP</p-button>
+    <p-button (onClick)="start()" severity="warning">START</p-button>
+    <p-button (onClick)="open()" severity="success">OPEN</p-button>
+  </div>
+
 </div>

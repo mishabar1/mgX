@@ -8,11 +8,6 @@ namespace MG.Server.Entities
     {
         public string Asset { get; set; }
 
-        public string GameId { get { return Game.Id; } }
-        [JsonIgnore] public GameData Game { get; set; }
-
-
-
         public V3 Position { get; set; }
         public V3 Rotation { get; set; }
         public V3 Scale { get; set; }
@@ -29,22 +24,19 @@ namespace MG.Server.Entities
         [JsonIgnore] public ItemData? ParentItem { get; set; }
 
 
-        public ItemData(GameData game, string asset, ItemData? parentItem = null) : base()
+        public static ItemData Table()
         {
-            Name = Utils.RandomName();
-
+            return new ItemData("", null) { Name = "TABLE" };
+        }
+        public ItemData(string asset) : this(asset, null) { }
+        public ItemData(string asset, ItemData parentItem) : base()
+        {
             Asset = asset;
-
-            Game = game;
 
             ParentItem = parentItem;
             if (ParentItem != null)
             {
                 ParentItem.Items.Add(this);
-            }
-            else
-            {
-                Game.Items.Add(this);
             }
 
             Items = new List<ItemData>();
@@ -56,7 +48,6 @@ namespace MG.Server.Entities
             Visible = new Dictionary<string, bool>();
             ClickActions = new Dictionary<string, string>();
             HoverActions = new Dictionary<string, string>();
-
         }
 
         public ItemData? FindItem(string itemId)
@@ -82,9 +73,28 @@ namespace MG.Server.Entities
             return found;
         }
 
+        public void RemoveItem(string itemId)
+        {
+            var i = Items.Find(x => x.Id == itemId);
+            if (i != null)
+            {
+                Items.Remove(i);
+            }
+            Items.ForEach(item =>
+            {
+                item.RemoveItem(itemId);
+            });
+        }
+
+
         internal ItemData AddAction(Func<ExecuteActionData, Task> actionFunc)
         {
             ClickActions.Add("", actionFunc.Method.Name);
+            return this;
+        }
+        internal ItemData AddAction(string playerId, Func<ExecuteActionData, Task> actionFunc)
+        {
+            ClickActions.Add(playerId, actionFunc.Method.Name);
             return this;
         }
         internal ItemData SetPosition(double x, double y, double z)
@@ -94,20 +104,7 @@ namespace MG.Server.Entities
             Position.Z = z;
             return this;
         }
-        internal ItemData AddAttribute(string key)
-        {
-            return AddAttribute(key, "TRUE");
-        }
-        internal ItemData AddAttribute(string key, string val)
-        {
-            Attributes.Add(key, val);
-            return this;
-        }
 
-        internal bool HaveAttribute(string key)
-        {
-            return Attributes.ContainsKey(key);
-        }
 
         public static List<ItemData> GetItemsByAttribute(ItemData item, string key)
         {
@@ -118,7 +115,7 @@ namespace MG.Server.Entities
                 ret.Add(item);
             }
             ret.AddRange(GetItemsByAttribute(item.Items, key));
-            
+
 
             return ret;
         }

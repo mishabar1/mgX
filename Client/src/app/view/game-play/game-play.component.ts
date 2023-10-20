@@ -18,7 +18,7 @@ import {DALService} from '../../dal/dal.service';
 import {GameData} from '../../entities/game.data';
 import {ItemData} from '../../entities/item.data';
 import * as _ from 'lodash';
-import {debounce, forEach, isEqual} from 'lodash';
+import {debounce, find, forEach, isEqual, keys} from 'lodash';
 import * as dayjs from 'dayjs';
 import {PlayerData} from '../../entities/player.data';
 import {UserData} from '../../entities/user.data';
@@ -43,11 +43,15 @@ import {color} from 'three/examples/jsm/nodes/shadernode/ShaderNodeBaseElements'
 import {RouteNames} from '../../app-routing.module';
 import {environment} from '../../../environments/environment';
 import {Group} from 'three/src/objects/Group';
+import {GeneralService} from '../../bl/general.service';
+import {UnsubscriberService} from '../../services/unsubscriber.service';
+import {RoomEnvironment} from 'three/examples/jsm/environments/RoomEnvironment';
 
 @Component({
   selector: 'app-game-play',
   templateUrl: './game-play.component.html',
-  styleUrls: ['./game-play.component.scss']
+  styleUrls: ['./game-play.component.scss'],
+  providers: [UnsubscriberService]
 })
 export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnChanges {
 
@@ -82,7 +86,9 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   gameId:string|null = "";
   constructor(public signalRService: SignalrService,
               private router: Router,
+              private generalService: GeneralService,
               private activatedRoute: ActivatedRoute,
+              private unsubscriberService: UnsubscriberService,
               private dalService: DALService) {
   }
 
@@ -101,6 +107,10 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
   }
 
+  ngOnDestroy(): void {
+    this.signalRService.hubConnection.off('GameUpdated');
+  }
+
   ngAfterViewInit(): void {
     this.dalService.getGameById(this.gameId!).subscribe(game=>{
       if(!game){
@@ -108,72 +118,64 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
         return;
       }
       this.gameData = game;
+      this.playerData = this.getPlayerByUserId(this.generalService.User!.id)!;
+
       this.initThree();
     });
   }
 
-  updateGame(game: any) {
+  getPlayerByUserId(userId:string):PlayerData | null | undefined {
+    return find(this.gameData.players,p=> p.user?.id==userId);
+  }
+  updateGame(new_game: GameData) {
+    console.log("updateGame",new_game);
 
-    // items - move / add / remove
-    forEach(game.items, item => {
-      console.log(item);
-      this.updateItem(item,null);
+    //mark all items to delete - and each item that updated - will be mrked "not"
+    forEach(this.allItems, (item, key) => {
+      item.markForDelete=true;
     });
-    //TODO - need to handle remove...
 
+    this.updateItem(new_game.table,null);
+
+    forEach(this.allItems, (item, key) => {
+      if(item.markForDelete){
+        item.mesh?.parent?.remove(item.mesh);
+      }
+    });
     //players - move / add / remove
 
   }
 
-  updateItem(item: ItemData, parentMesh:any) {
+  updateItem(new_item: ItemData, parentMesh:any) {
+    console.log("updateItem",new_item, parentMesh);
 
-    if (this.allItems[item.id]) {
-      // item exist - update position/scale/rotation/actions....
-      this.updateItemPosition(this.allItems[item.id],item.position)
-
-
-    } else {
-      //item not exist - just add
-      this.createItem(item, parentMesh);
+    let old_item = this.allItems[new_item.id];
+    if(!old_item){
+      this.createItem(new_item, parentMesh);
+      return;
     }
 
-    parentMesh = this.allItems[item.id].mesh;
+    old_item.markForDelete=false;
+    // item exist - update position/scale/rotation/actions....
+    this.updateItemPosition(old_item, V3.FromJson(new_item.position))
+    // parentMesh = this.allItems[new_item.id].mesh;
 
-    forEach(item.items, item => {
-      this.updateItem(item,parentMesh);
+    forEach(new_item.items, new_item => {
+      this.updateItem(new_item, old_item.mesh);
     });
-  }
-  deepEqual(object1:any, object2:any) {
-    const keys1 = Object.keys(object1);
-    const keys2 = Object.keys(object2);
 
-    if (keys1.length !== keys2.length) {
-      return false;
-    }
-
-    for (const key of keys1) {
-      const val1 = object1[key];
-      const val2 = object2[key];
-      const areObjects = this.isObject(val1) && this.isObject(val2);
-      if (
-        areObjects && !this.deepEqual(val1, val2) ||
-        !areObjects && val1 !== val2
-      ) {
-        return false;
-      }
-    }
-
-    return true;
+    this.handleItemVisibility(old_item);
   }
 
-  isObject(object:any) {
-    return object != null && typeof object === 'object';
-  }
-  updateItemPosition(item: ItemData,position:any){
-    item.position = new V3(position.x, position.y, position.z);
+
+
+  updateItemPosition(item: ItemData, position:V3){
+    console.log("updateItemPosition", item, position);
+
+    item.position = position;
     // item.mesh!.position.set(position.x, position.y, position.z);
     // this.createMoveAnimation(item.mesh,item.mesh!.position,position)
-    if(!this.deepEqual(position,item.mesh!.position) ) {
+    if(!this.generalService.deepEqual(position,item.mesh!.position) ) {
       new TWEEN.Tween(item.mesh!.position).to(position,300).start();
     }
 
@@ -242,8 +244,10 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.interactionManager = new InteractionManager(this.renderer, this.camera, this.renderer.domElement);
 
     // Add ambient light
-    const ambientLight = new THREE.AmbientLight(0xffffff);
-    this.scene.add(ambientLight);
+    // const ambientLight = new THREE.AmbientLight(0xffffff,2);
+    // this.scene.add(ambientLight);
+    const pmremGenerator = new THREE.PMREMGenerator( this.renderer );
+    this.scene.environment = pmremGenerator.fromScene( new RoomEnvironment(), 0 ).texture;
 
     // Start the animation loop
     this.renderer.setAnimationLoop(  ()=> {
@@ -270,41 +274,6 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
     // Instantiate a loader
     this.loader = new GLTFLoader();
-    // const animate = () => {
-    //   requestAnimationFrame(animate);
-    //   this.controls.update();
-    //   this.interactionManager.update();
-    //   this.renderer.render(this.scene, this.camera);
-    //
-    //   this.animationsObjects.forEach((mesh:any) => {
-    //     if (mesh.userData.clock && mesh.userData.mixer) {
-    //       mesh.userData.mixer.update(mesh.userData.clock.getDelta());
-    //     }
-    //   });
-    //   //console.log("running");
-    // };
-    // animate();
-
-    // // Load 3D model
-    // this.loader.load('../../../assets/gltf/new/ss.glb', (gltf) => {
-    //   const model = gltf.scene;
-    //   model.position.set(0, 1, 0);
-    //   this.scene.add(model);
-    //
-
-    //
-    //   // Start the animation loop
-    //   const animate = () => {
-    //     requestAnimationFrame(animate);
-    //     this.controls.update();
-    //     this.renderer.render(this.scene, this.camera);
-    //     console.log("running");
-    //   };
-    //   animate();
-    //
-    // }, undefined, (error) => {
-    //   console.error('Error loading GLTF:', error);
-    // });
 
     document.body.appendChild( VRButton.createButton( this.renderer ) );
     this.controllers = this.buildControllers();
@@ -313,7 +282,6 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
       controller.addEventListener('selectend', this.onSelectEnd);
     });
 
-
     // @ts-ignore
     // document.body.appendChild(ARButton.createButton(this.renderer, {sessionInit: {requiredFeatures: ['hit-test']}}));
     // this.controller = this.renderer.xr.getController(0);
@@ -321,34 +289,35 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
     this.loadGame();
   }
-  onSelect() {
-    if (this.reticle.visible) {
-      this.box.position.setFromMatrixPosition(this.reticle.matrix);
-      this.box.position.y += this.box.geometry.parameters.height / 2;
-      this.box.visible = true;
-    }
-  }
-  async requestHitTestSource() {
-    const session = this.renderer.xr.getSession();
-    session.addEventListener('end', () => {
-      this.hitTestSourceRequested = false;
-      this.hitTestSource = null;
-    });
-    const referenceSpace = await session.requestReferenceSpace('viewer');
-    this.hitTestSource = await session.requestHitTestSource({ space: referenceSpace, entityTypes: ['plane'] });
-    this.hitTestSourceRequested = true;
-  }
-  getHitTestResults(frame:any) {
-    const hitTestResults = frame.getHitTestResults(this.hitTestSource);
-    if (hitTestResults.length) {
-      const hit = hitTestResults[0];
-      const pose = hit.getPose(this.renderer.xr.getReferenceSpace());
-      this.reticle.visible = true;
-      this.reticle.matrix.fromArray(pose.transform.matrix);
-    } else {
-      this.reticle.visible = false;
-    }
-  }
+
+  // onSelect() {
+  //   if (this.reticle.visible) {
+  //     this.box.position.setFromMatrixPosition(this.reticle.matrix);
+  //     this.box.position.y += this.box.geometry.parameters.height / 2;
+  //     this.box.visible = true;
+  //   }
+  // }
+  // async requestHitTestSource() {
+  //   const session = this.renderer.xr.getSession();
+  //   session.addEventListener('end', () => {
+  //     this.hitTestSourceRequested = false;
+  //     this.hitTestSource = null;
+  //   });
+  //   const referenceSpace = await session.requestReferenceSpace('viewer');
+  //   this.hitTestSource = await session.requestHitTestSource({ space: referenceSpace, entityTypes: ['plane'] });
+  //   this.hitTestSourceRequested = true;
+  // }
+  // getHitTestResults(frame:any) {
+  //   const hitTestResults = frame.getHitTestResults(this.hitTestSource);
+  //   if (hitTestResults.length) {
+  //     const hit = hitTestResults[0];
+  //     const pose = hit.getPose(this.renderer.xr.getReferenceSpace());
+  //     this.reticle.visible = true;
+  //     this.reticle.matrix.fromArray(pose.transform.matrix);
+  //   } else {
+  //     this.reticle.visible = false;
+  //   }
+  // }
 
   onSelectStart(x:any){
     console.log("onSelectStart",x);
@@ -424,56 +393,66 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     }
     controller.userData["selectPressedPrev"] = controller.userData["selectPressed"];
   }
-  randomIntFromInterval(min: number, max: number) { // min and max included
-    return Math.random() * (max - min + 1) + min
-    //Math.floor(
-
-    //)
-  }
 
 
   createItem(itemData: ItemData, parentMesh: THREE.Group | null) {
-    const loadUrl ='\\assets\\games\\' +  this.gameData.assets[itemData.asset].frontURL;
-    this.loader.load(  loadUrl, (gltf) => {
+    console.log("createItem",itemData,parentMesh);
 
-      const mesh = gltf.scene;
-      // model.position.set(0, 1, 0);
-      // this.scene.add(model);
-
-      // const color = THREE.MathUtils.randInt(0, 0xffffff)
-      //const geometry = new THREE.BoxGeometry(this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1));
-      // const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-      // const material = new THREE.MeshBasicMaterial({color});
-      // const cube = new THREE.Mesh(geometry, material);
-      //cube.position.set(this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1), this.randomIntFromInterval(-1, 1));
-      mesh.position.set(itemData.position.x, itemData.position.y, itemData.position.z);
-
-      if (parentMesh) {
-        parentMesh.add(mesh);
-      } else {
-        this.scene.add(mesh);
-      }
-      const pId = this.gameData.players[0].id;
-      mesh.userData['ItemData'] = itemData;
-
-      let action = itemData.clickActions[pId] || itemData.clickActions[''];
-      if (action) {
-        this.addClickAction(mesh, itemData, action);
-      }
-
-      forEach(itemData.items, (itemData: ItemData) => {
-        this.createItem(itemData, mesh);
+    if(itemData.asset) {
+      const loadUrl = '\\assets\\games\\' + this.gameData.assets[itemData.asset].frontURL;
+      this.loader.load(loadUrl, (gltf) => {
+        const mesh: THREE.Group = gltf.scene;
+        this.processItem(itemData, mesh, parentMesh);
       });
-
-      itemData.mesh = mesh;
-      this.allItems[itemData.id] = itemData;
-
-    });
+    }else{
+      const mesh: THREE.Group = new THREE.Group()
+      this.processItem(itemData, mesh, parentMesh);
+    }
 
 
   }
+  processItem(itemData: ItemData, mesh:THREE.Group, parentMesh: THREE.Group | null){
+    console.log("processItem",itemData,mesh,parentMesh);
 
-  private addClickAction(cube: THREE.Group, itemData: ItemData, action: string) {
+    mesh.position.set(itemData.position.x, itemData.position.y, itemData.position.z);
+
+    if (parentMesh) {
+      parentMesh.add(mesh);
+    } else {
+      this.scene.add(mesh);
+    }
+    const pId = this.gameData.players[0].id;
+    mesh.userData['ItemData'] = itemData;
+
+    let action = itemData.clickActions[pId] || itemData.clickActions[''];
+    if (action) {
+      this.addClickAction(mesh, itemData, action);
+    }
+
+    forEach(itemData.items, (itemData: ItemData) => {
+      this.createItem(itemData, mesh);
+    });
+
+    itemData.mesh = mesh;
+    this.allItems[itemData.id] = itemData;
+
+    // visibility
+    this.handleItemVisibility(itemData);
+  }
+
+  handleItemVisibility(itemData:ItemData){
+    console.log("handleItemVisibility",itemData);
+    let isVisible = itemData.visible[this.playerData.id] || keys(itemData.visible).length==0;
+    console.log("handleItemVisibility","isVisible",isVisible);
+    itemData.mesh!.visible = isVisible;
+    if(!isVisible){
+      this.removeAction(itemData);
+    }
+  }
+
+  addClickAction(cube: THREE.Group, itemData: ItemData, action: string) {
+    console.log("addClickAction",cube,itemData,action);
+
     cube.addEventListener('click', (event: any) => {
       event.stopPropagation();
       //this.signalRService.testSendXXX1();
@@ -502,47 +481,22 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
     this.interactionManager.add(cube);
   }
+  removeAction(itemData: ItemData) {
+    console.log("removeAction",itemData);
 
-
-  // onMouseUp(event: MouseEvent) {
-  //
-  //   let raycaster = new THREE.Raycaster();
-  //   let mouse = new THREE.Vector2();
-  //   event.preventDefault();
-  //
-  //   mouse.x = ( event.clientX / this.renderer.domElement.clientWidth ) * 2 - 1;
-  //   mouse.y = - ( event.clientY / this.renderer.domElement.clientHeight ) * 2 + 1;
-  //
-  //   raycaster.setFromCamera( mouse, this.camera );
-  //
-  //   var intersects = raycaster.intersectObjects( this.scene.children );
-  //
-  //   if ( intersects.length > 0 ) {
-  //     debugger;
-  //     intersects[0].object.userData["who"] ();
-  //
-  //   }
-  // }
-
-
+    this.interactionManager.remove(itemData.mesh!);
+  }
 
   loadGame() {
+    console.log("loadGame");
     // console.log(gameData, dayjs().startOf('month').add(1, 'day').set('year', 2018).format('YYYY-MM-DD HH:mm:ss'));
-
-    // this.gameData = gameData;
-    // TODO !!!! TEMP only !!!!
-    this.playerData = this.gameData.players[0];
-
-    forEach(this.gameData.items, (itemData: ItemData) => {
-      this.createItem(itemData, null);
-    })
+    this.createItem(this.gameData.table, null);
   }
 
   ngOnChanges(changes: SimpleChanges): void {
   }
 
-  ngOnDestroy(): void {
-  }
+
 
 
 }

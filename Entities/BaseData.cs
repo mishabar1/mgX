@@ -15,14 +15,33 @@ namespace MG.Server.Entities
             Attributes = new Dictionary<string, string>();
         }
 
+        internal BaseData<T> AddAttribute(string key)
+        {
+            return AddAttribute(key, "TRUE");
+        }
+        internal BaseData<T> AddAttribute(string key, string val)
+        {
+            Attributes.Add(key, val);
+            return this;
+        }
+        internal BaseData<T> AddAttribute(string key, double val)
+        {
+            Attributes.Add(key, val.ToString());
+            return this;
+        }
+
+        internal double GetNumberAddAttribute(string key)
+        {            
+            return Convert.ToDouble(Attributes.GetValueOrDefault(key)!);
+        }
+
+        internal bool HaveAttribute(string key)
+        {
+            return Attributes.ContainsKey(key);
+        }
         public override string ToString()
         {
-            return GetType().GetProperties()
-                .Select(info => (info.Name, Value: info.GetValue(this, null) ?? "(null)"))
-                .Aggregate(
-                    new StringBuilder(),
-                    (sb, pair) => sb.AppendLine($"{pair.Name}: {pair.Value}"),
-                    sb => sb.ToString());
+            return Utils.ListProperties(this);
         }
     }
 }

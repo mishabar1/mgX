@@ -41,8 +41,9 @@ namespace MG.Server.GameFlows
         public abstract Task StartGame();
         public abstract Task EndGame();
 
-        //public abstract Task ExecuteAction(ExecuteActionData data);
+        public abstract bool IsEndGame();
 
+        
         public async Task ExecuteAction(ExecuteActionData data)
         {
             data.Item = GameData.FindItem(data.itemId);
@@ -58,6 +59,48 @@ namespace MG.Server.GameFlows
 
 
             
+        }
+
+        internal void addAsset(string assetKey, AssetData asset)
+        {
+            this.GameData.Assets.Add(assetKey, asset);
+        }
+
+        internal ItemData addItem(string assetKey)
+        {
+            var item = new ItemData(assetKey,this.GameData.Table);
+            return item;
+        }
+        internal ItemData addItem(string assetKey, ItemData parentItem)
+        {
+            var item = new ItemData(assetKey, parentItem);
+            return item;
+        }
+
+        internal void removeItem(string itemId)
+        {
+            this.GameData.Table.RemoveItem(itemId);
+        }
+
+        internal void advanceNextTurn()
+        {
+            if (this.GameData.CurrentTurnId == null)
+            {
+                this.GameData.CurrentTurnId = this.GameData.Players.First().Id;
+            }
+            else
+            {
+                var idx = this.GameData.Players.FindIndex(x => x.Id == this.GameData.CurrentTurnId);
+                if(idx== this.GameData.Players.Count)
+                {
+                    idx = 0;
+                }
+                else
+                {
+                    idx++;
+                }
+                this.GameData.CurrentTurnId = this.GameData.Players[idx].Id;
+            }
         }
     }
 }

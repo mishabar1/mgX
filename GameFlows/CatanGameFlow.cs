@@ -28,5 +28,9 @@ namespace MG.Server.GameFlows
             Console.WriteLine("CatanGameFlow EndGame " + this.GameData);
             throw new NotImplementedException();
         }
+        public override bool IsEndGame()
+        {
+            throw new NotImplementedException();
+        }
     }
 }

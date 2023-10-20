@@ -25,6 +25,10 @@ namespace MG.Server.GameFlows
             Console.WriteLine("DnDGameFlow EndGame " + this.GameData);
             throw new NotImplementedException();
         }
+        public override bool IsEndGame()
+        {
+            throw new NotImplementedException();
+        }
 
     }
 }

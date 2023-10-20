@@ -8,11 +8,13 @@ import {DALService} from '../../dal/dal.service';
 import {UserData} from '../../entities/user.data';
 import {join} from 'lodash';
 import {PlayerData} from '../../entities/player.data';
+import {UnsubscriberService} from '../../services/unsubscriber.service';
 
 @Component({
   selector: 'app-game-setup',
   templateUrl: './game-setup.component.html',
-  styleUrls: ['./game-setup.component.scss']
+  styleUrls: ['./game-setup.component.scss'],
+  providers: [UnsubscriberService]
 })
 export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, OnChanges {
 
@@ -21,6 +23,7 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
   user!:UserData;
   constructor(public signalRService: SignalrService,
               private router: Router,
+              private unsubscriberService: UnsubscriberService,
               private activatedRoute: ActivatedRoute,
               private generalService: GeneralService,
               private dalService: DALService) {
@@ -51,6 +54,12 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
 
   }
 
+  ngOnDestroy(): void {
+    this.signalRService.hubConnection.off('GameUpdated');
+    this.signalRService.hubConnection.off('GamesUpdated');
+    this.signalRService.hubConnection.off('GameDeleted');
+  }
+
   updateGame(){
     this.dalService.getGameById(this.gameId!).subscribe(game=>{
       if(!game){
@@ -68,13 +77,10 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
   ngOnChanges(changes: SimpleChanges): void {
   }
 
-  ngOnDestroy(): void {
-  }
+
 
   start() {
-    this.dalService.startGame(this.gameId!).subscribe(gameData => {
-      this.router.navigate([RouteNames.GamePlay,this.gameId]);
-    })
+    this.dalService.startGame(this.gameId!).subscribe();
   }
 
 
@@ -88,5 +94,12 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
 
   join_game(player: PlayerData) {
     this.dalService.joinGame(this.gameId!, player.id, this.user, "HUMAN").subscribe();
+  }
+
+  setup() {
+    this.dalService.setupGame(this.gameId!, this.user.id).subscribe()
+  }
+  open() {
+    this.router.navigate([RouteNames.GamePlay,this.gameId]);
   }
 }

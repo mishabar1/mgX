@@ -16,6 +16,7 @@ export class ItemData {
 
 
   mesh?: THREE.Group;
+  markForDelete!:boolean;
 
 
 }

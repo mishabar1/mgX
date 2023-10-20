@@ -2,7 +2,6 @@
 {
     public class AssetData : BaseData<AssetData>
     {
-
         public string? FrontURL { get; set; }
         public string? BackURL { get; set; }
 

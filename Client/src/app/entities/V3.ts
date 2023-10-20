@@ -7,4 +7,8 @@ export class V3 {
     this.y=y;
     this.z=z;
   }
+
+    static FromJson(data: any) {
+        return new V3(data.x,data.y,data.z);
+    }
 }
