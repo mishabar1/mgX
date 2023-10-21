@@ -30,9 +30,13 @@ namespace MG.Server.Entities
             return this;
         }
 
-        internal double GetNumberAddAttribute(string key)
+        internal double GetNumberAttribute(string key)
         {            
             return Convert.ToDouble(Attributes.GetValueOrDefault(key)!);
+        }
+        internal string GetStringAttribute(string key)
+        {
+            return Attributes.GetValueOrDefault(key);
         }
 
         internal bool HaveAttribute(string key)

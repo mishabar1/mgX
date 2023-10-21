@@ -1,4 +1,5 @@
-﻿using MG.Server.Entities;
+﻿using MG.Server.BL;
+using MG.Server.Entities;
 using MG.Server.Services;
 using Microsoft.AspNetCore.SignalR;
 
@@ -10,25 +11,30 @@ namespace MG.Server.Database
         public List<UserData> Users;// = new List<UserData>();
         public List<GameData> Games;// = new List<GameData>();
 
+        public static DataRepository Singeltone;
+
         public DataRepository(IHubContext<NotificationHub> hub)
         {
             Users = new List<UserData>();
             Games = new List<GameData>();
             Hub = hub;
             //await Hub.Clients.Group(user_id).SendAsync("test", "some data");
+
+            //AIAgent._dataRepository = this;
+            DataRepository.Singeltone = this;
         }
 
-        internal void HubGameUpdated(GameData game)
+        internal async Task HubGameUpdated(GameData game)
         {
-            Hub.Clients.All.SendAsync("GameUpdated", game);            
+            await Hub.Clients.All.SendAsync("GameUpdated", game);            
         }
-        internal void HubGamesUpdated(GameData game)
+        internal async Task HubGamesUpdated(GameData game)
         {
-            Hub.Clients.All.SendAsync("GamesUpdated", game.Id);
+            await Hub.Clients.All.SendAsync("GamesUpdated", game.Id);
         }
-        internal void HubGameDeleted(string gameId)
+        internal async Task HubGameDeleted(string gameId)
         {
-            Hub.Clients.All.SendAsync("GameDeleted", gameId);
+            await Hub.Clients.All.SendAsync("GameDeleted", gameId);
         }
     }
 }

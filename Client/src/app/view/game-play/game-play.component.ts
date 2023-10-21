@@ -139,6 +139,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
     forEach(this.allItems, (item, key) => {
       if(item.markForDelete){
+        this.removeAction(item);
         item.mesh?.parent?.remove(item.mesh);
       }
     });
@@ -156,13 +157,22 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     }
 
     old_item.markForDelete=false;
-    // item exist - update position/scale/rotation/actions....
-    this.updateItemPosition(old_item, V3.FromJson(new_item.position))
-    // parentMesh = this.allItems[new_item.id].mesh;
 
+    //update props
+    old_item.clickActions = new_item.clickActions;
+    old_item.visible = new_item.visible;
+    old_item.hoverActions = new_item.hoverActions;
+
+    // update position/scale/rotation/actions....
+    this.updateItemPosition(old_item, V3.FromJson(new_item.position))
+
+    //update all child items
     forEach(new_item.items, new_item => {
       this.updateItem(new_item, old_item.mesh);
     });
+
+
+    this.handleItemClickActions(old_item);
 
     this.handleItemVisibility(old_item);
   }
@@ -421,42 +431,58 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     } else {
       this.scene.add(mesh);
     }
-    const pId = this.gameData.players[0].id;
-    mesh.userData['ItemData'] = itemData;
 
-    let action = itemData.clickActions[pId] || itemData.clickActions[''];
-    if (action) {
-      this.addClickAction(mesh, itemData, action);
-    }
+    mesh.userData['ItemData'] = itemData;
+    itemData.mesh = mesh
 
     forEach(itemData.items, (itemData: ItemData) => {
       this.createItem(itemData, mesh);
     });
 
-    itemData.mesh = mesh;
-    this.allItems[itemData.id] = itemData;
+    // ClickActions
+    this.handleItemClickActions(itemData);
 
     // visibility
     this.handleItemVisibility(itemData);
+
+    this.allItems[itemData.id] = itemData;
+  }
+
+  handleItemClickActions(itemData:ItemData){
+    console.log("handleItemClickActions",itemData);
+    let action = null;
+    if(this.playerData){
+      action = itemData.clickActions[this.playerData.id] || itemData.clickActions[''];
+    }
+    if (action) {
+      this.addClickAction(itemData, action);
+    }else{
+      this.removeAction(itemData);
+    }
+
   }
 
   handleItemVisibility(itemData:ItemData){
     console.log("handleItemVisibility",itemData);
-    let isVisible = itemData.visible[this.playerData.id] || keys(itemData.visible).length==0;
+    let isVisible = keys(itemData.visible).length==0;
+    if(this.playerData){
+      isVisible = isVisible || itemData.visible[this.playerData.id];
+    }
     console.log("handleItemVisibility","isVisible",isVisible);
     itemData.mesh!.visible = isVisible;
+
     if(!isVisible){
       this.removeAction(itemData);
     }
   }
 
-  addClickAction(cube: THREE.Group, itemData: ItemData, action: string) {
-    console.log("addClickAction",cube,itemData,action);
+  addClickAction(itemData: ItemData, action: string) {
+    console.log("addClickAction", itemData ,action);
 
-    cube.addEventListener('click', (event: any) => {
+    itemData.mesh!.addEventListener('click', (event: any) => {
       event.stopPropagation();
       //this.signalRService.testSendXXX1();
-      console.log(cube);
+      // console.log(cube);
 
       this.signalRService.executeAction(
         this.gameData.id,
@@ -466,20 +492,20 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
         '', 0, 0);
 
     });
-    cube.addEventListener('mouseover', (event: any) => {
+    itemData.mesh!.addEventListener('mouseover', (event: any) => {
       // event.target.userData['c'] = event.target.material.clone().color;
       // event.target.material.color.set(0xff0000);
       document.body.style.cursor = 'pointer';
       this.orbitControls.enabled = false;
     });
-    cube.addEventListener('mouseout', (event: any) => {
+    itemData.mesh!.addEventListener('mouseout', (event: any) => {
       // let c: any = event.target.userData['c'];
       // event.target.material.color.set(c.r, c.g, c.b);
       document.body.style.cursor = 'default';
       this.orbitControls.enabled = true;
     });
 
-    this.interactionManager.add(cube);
+    this.interactionManager.add(itemData.mesh!);
   }
   removeAction(itemData: ItemData) {
     console.log("removeAction",itemData);

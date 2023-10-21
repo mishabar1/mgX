@@ -37,6 +37,30 @@ namespace MG.Server.Entities
             return Players.Find(p => p.Id == playerId);
         }
 
+        public List<ItemData> GetAllGameItems()
+        {
+            var list = new List<ItemData>();
+
+            list.AddRange(GetAllItems(Table));
+            foreach (var player in Players)
+            {
+                list.AddRange(GetAllItems(player.Table));
+                list.AddRange(GetAllItems(player.Hand));
+            }
+
+            return list;
+        }
+
+        public List<ItemData> GetAllItems(ItemData item)
+        {
+            var list = new List<ItemData>();
+            list.Add(item);
+            foreach (var i in item.Items)
+            {
+                list.AddRange(GetAllItems(i));
+            }
+            return list;
+        }
 
     }
 

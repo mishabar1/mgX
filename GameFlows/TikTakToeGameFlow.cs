@@ -17,15 +17,7 @@ namespace MG.Server.GameFlows
         public override async Task Setup()
         {
             Console.WriteLine("TikTakToeGameFlow Setup " + this.GameData);
-
-            // reset all
-            this.GameData.Assets = new Dictionary<string, AssetData>();
-            this.GameData.Table = ItemData.Table();
-            this.GameData.Players = new List<PlayerData>();
-            this.GameData.Winners = null;
-            this.GameData.CurrentTurnId = null;
-            this.GameData.GameStatus = GameStatusEnum.SETUP;
-
+            
             // create assets
             addAsset(Assets.BOARD, new AssetData("ticktacktoe/board.glb"));
             addAsset(Assets.HOVER, new AssetData("ticktacktoe/hover.gltf"));
@@ -41,15 +33,15 @@ namespace MG.Server.GameFlows
 
         private void setActionsByCurrentTurn()
         {
-            List<ItemData> items = ItemData.GetItemsByAttribute(this.GameData.Table, "hover");
+            List<ItemData> hovers = ItemData.GetItemsByAttribute(this.GameData.Table, "hover");
 
-            items.ForEach(x =>
+            hovers.ForEach(x =>
             {
                 x.ClickActions = new Dictionary<string, string>();
                 x.Visible = new Dictionary<string, bool>();
 
                 x.AddAction(this.GameData.CurrentTurnId, HoverClick);
-                x.Visible!.Add(this.GameData.CurrentTurnId, true);
+                x.Visible.Add(this.GameData.CurrentTurnId, true);
             });
         }
 
@@ -59,12 +51,17 @@ namespace MG.Server.GameFlows
         {
             Console.WriteLine("TikTakToeGameFlow HoverClick " + data);
 
-            //data.Item.SetPosition(0, 1, 0);
-
-            // create x or o item in the hover place
-            var a = addItem(Assets.X);
-            a.AddAttribute("type", "x");
-            a.SetPosition(data.Item.GetNumberAddAttribute("x"), 0, data.Item.GetNumberAddAttribute("z"));
+            ItemData a;
+            if (data.Player.GetStringAttribute("type") == "x")
+            {
+                a = addItem(Assets.X);                
+            }
+            else
+            {
+                a = addItem(Assets.O);               
+            }
+            a.AddAttribute("type", data.Player.GetStringAttribute("type"));
+            a.SetPosition(data.Item.GetNumberAttribute("x"), 0, data.Item.GetNumberAttribute("z"));
 
             // delete hover item
             removeItem(data.itemId);
@@ -75,15 +72,6 @@ namespace MG.Server.GameFlows
             advanceNextTurn();
             setActionsByCurrentTurn();
         }
-
-        //private (double x, double y, double z) getPosByIndex(ItemData item)
-        //{
-        //    double x = 0;
-        //    double y = 0;
-        //    double z = 0;
-
-        //    return (0, 0, z);
-        //}
 
 
         public async override Task StartGame()
@@ -113,11 +101,18 @@ namespace MG.Server.GameFlows
             // TODO !!!
             Console.WriteLine("TikTakToeGameFlow EndGame " + this.GameData);
 
+
         }
 
-        public override bool IsEndGame()
+        public override async Task<bool> IsEndGame()
         {
-            throw new NotImplementedException();
+
+            return false;
+        }
+
+        public override List<PlayerData> GetGameWinners()
+        {
+            return GameData.Players;
         }
 
         class Assets

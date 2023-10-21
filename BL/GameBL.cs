@@ -10,12 +10,10 @@ namespace MG.Server.BL
     {
         ILogger<GameBL> _logger;
         DataRepository _dataRepository;
-        //NotificationHub _notificationHub;
-        public GameBL(ILogger<GameBL> logger,
-            DataRepository dataRepository)
+        public GameBL(ILogger<GameBL> logger,DataRepository dataRepository)
         {
             _logger = logger;
-            _dataRepository = dataRepository;
+            _dataRepository = dataRepository;            
         }
 
 
@@ -38,7 +36,7 @@ namespace MG.Server.BL
             _dataRepository.Games.Add(game);
 
             //update all clients
-            _dataRepository.HubGamesUpdated(game);
+            await DataRepository.Singeltone.HubGamesUpdated(game);
             return game;
         }
 
@@ -52,7 +50,7 @@ namespace MG.Server.BL
 
                 await game.GameFlow.ExecuteAction(data);
 
-                _dataRepository.HubGameUpdated(game);
+               
             }
 
             return new { x = "TODO !!! ExecuteAction" };
@@ -65,9 +63,7 @@ namespace MG.Server.BL
 
             if (game != null)
             {
-                await game.GameFlow.Setup();
-                _dataRepository.HubGamesUpdated(game);
-                _dataRepository.HubGameUpdated(game);
+                await game.GameFlow.RunSetupFlow();
 
             }
 
@@ -81,10 +77,7 @@ namespace MG.Server.BL
 
             if (game != null)
             {
-                await game.GameFlow.StartGame();
-                _dataRepository.HubGamesUpdated(game);
-                _dataRepository.HubGameUpdated(game);
-
+                await game.GameFlow.RunStartFlow();
             }
 
             return new { x = "TODO !!! StartGame" };
@@ -94,7 +87,7 @@ namespace MG.Server.BL
         {
 
             _dataRepository.Games.RemoveAll(x => x.Id == data.gameId);
-            _dataRepository.HubGameDeleted(data.gameId);
+            await DataRepository.Singeltone.HubGameDeleted(data.gameId);
 
             return new { x = "TODO !!! DeleteGame" };
         }
@@ -113,9 +106,8 @@ namespace MG.Server.BL
                     player.Type = data.type;
                 }
 
-                _dataRepository.HubGamesUpdated(game);
-                _dataRepository.HubGameUpdated(game);
-
+                await DataRepository.Singeltone.HubGameUpdated(game);
+                await DataRepository.Singeltone.HubGamesUpdated(game);
             }
 
             return new { x = "TODO !!! JoinGame" };

@@ -1,4 +1,6 @@
-﻿using MG.Server.Controllers;
+﻿using MG.Server.BL;
+using MG.Server.Controllers;
+using MG.Server.Database;
 using MG.Server.Entities;
 using System.Reflection;
 
@@ -37,13 +39,50 @@ namespace MG.Server.GameFlows
             GameData = gameData;
             GameData.GameFlow = this;
         }
+
+        public async Task RunSetupFlow()
+        {
+            // reset all
+            this.GameData.Assets = new Dictionary<string, AssetData>();
+            this.GameData.Table = ItemData.Table();
+            this.GameData.Players = new List<PlayerData>();
+            this.GameData.Winners = null;
+            this.GameData.CurrentTurnId = null;
+            this.GameData.GameStatus = GameStatusEnum.SETUP;
+            
+            await Setup();
+
+            await DataRepository.Singeltone.HubGameUpdated(GameData);
+            await DataRepository.Singeltone.HubGamesUpdated(GameData);
+        } 
         public abstract Task Setup();
+
+        public async Task RunStartFlow()
+        {
+
+            this.GameData.GameStatus = GameStatusEnum.PLAY;
+
+            await StartGame();
+
+            // create AI agents
+            foreach (var player in this.GameData.Players)
+            {
+                if (player.Type == PlayerTypeEnum.AI)
+                {
+                    player.AIAgent = new AIAgent(this.GameData, player);
+                }
+            }
+
+            await DataRepository.Singeltone.HubGameUpdated(GameData);
+            await DataRepository.Singeltone.HubGamesUpdated(GameData);
+
+        }
         public abstract Task StartGame();
         public abstract Task EndGame();
 
-        public abstract bool IsEndGame();
+        public abstract Task<bool> IsEndGame();
+        public abstract List<PlayerData> GetGameWinners();
 
-        
         public async Task ExecuteAction(ExecuteActionData data)
         {
             data.Item = GameData.FindItem(data.itemId);
@@ -53,12 +92,24 @@ namespace MG.Server.GameFlows
                 Console.WriteLine("TikTakToeGameFlow ExecuteAction " + data);
                 Type thisType = GetType();
                 MethodInfo theMethod = thisType.GetMethod(data.actionId);
-                theMethod.Invoke(this, new object[] { data });
+                await (Task)theMethod.Invoke(this, new object[] { data });
             }
 
+            // check if game ended - 
+            var ended = await IsEndGame();
+            if (ended)
+            {
+                await EndGame();
 
+                this.GameData.Winners = GetGameWinners();
+                this.GameData.GameStatus = GameStatusEnum.ENDED;
 
-            
+                
+            }
+
+            await DataRepository.Singeltone.HubGameUpdated(GameData);
+            await DataRepository.Singeltone.HubGamesUpdated(GameData);
+
         }
 
         internal void addAsset(string assetKey, AssetData asset)
@@ -91,7 +142,7 @@ namespace MG.Server.GameFlows
             else
             {
                 var idx = this.GameData.Players.FindIndex(x => x.Id == this.GameData.CurrentTurnId);
-                if(idx== this.GameData.Players.Count)
+                if(idx == (this.GameData.Players.Count-1))
                 {
                     idx = 0;
                 }
