@@ -18,7 +18,7 @@ import {DALService} from '../../dal/dal.service';
 import {GameData} from '../../entities/game.data';
 import {ItemData} from '../../entities/item.data';
 import * as _ from 'lodash';
-import {debounce, find, forEach, isEqual, keys} from 'lodash';
+import {debounce, filter, find, forEach, isEqual, keys} from 'lodash';
 import * as dayjs from 'dayjs';
 import {PlayerData} from '../../entities/player.data';
 import {UserData} from '../../entities/user.data';
@@ -141,8 +141,10 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
       if(item.markForDelete){
         this.removeAction(item);
         item.mesh?.parent?.remove(item.mesh);
+        delete this.allItems[item.id];
       }
     });
+
     //players - move / add / remove
 
   }
@@ -464,9 +466,9 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
   handleItemVisibility(itemData:ItemData){
     console.log("handleItemVisibility",itemData);
-    let isVisible = keys(itemData.visible).length==0;
+    let isVisible:boolean = keys(itemData.visible).length==0;
     if(this.playerData){
-      isVisible = isVisible || itemData.visible[this.playerData.id];
+      isVisible = isVisible || itemData.visible[this.playerData.id]==true;
     }
     console.log("handleItemVisibility","isVisible",isVisible);
     itemData.mesh!.visible = isVisible;
