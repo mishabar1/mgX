@@ -1,6 +1,7 @@
 ﻿using MG.Server.Controllers;
 using MG.Server.Database;
 using MG.Server.Entities;
+using MG.Server.Services;
 using System.Collections.Generic;
 
 namespace MG.Server.BL
@@ -11,7 +12,8 @@ namespace MG.Server.BL
         private GameData gameData;
         private PlayerData player;
 
-        PeriodicTimer t;
+        //PeriodicTimer t;
+        Random rnd = new Random();
         //public static DataRepository _dataRepository;
 
         public AIAgent(GameData _gameData, PlayerData _player)
@@ -26,8 +28,7 @@ namespace MG.Server.BL
 
         private async void onTimerTick(object? state)
         {
-            Console.WriteLine("onTimerTick" + player.Name);
-                       
+            Console.WriteLine("onTimerTick " + player.Name);                       
 
             if (this.gameData.GameStatus != GameStatusEnum.PLAY)
             {
@@ -60,8 +61,10 @@ namespace MG.Server.BL
 
             if (allGameItems.Count > 0)
             {
-                var item = allGameItems.First();
-                // TODO - execute the best action
+                // play random
+                var idx = rnd.Next(0, allGameItems.Count - 1);
+                var item = allGameItems[idx];
+                
 
                 ExecuteActionData action = new ExecuteActionData()
                 {
@@ -76,7 +79,7 @@ namespace MG.Server.BL
             }
 
             //continue the timer
-            timer.Change(TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(1));
+            timer.Change(TimeSpan.FromSeconds(rnd.Next(1,5)), TimeSpan.FromSeconds(1));
 
 
         }

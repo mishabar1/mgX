@@ -34,6 +34,10 @@ namespace MG.Server.Entities
         {            
             return Convert.ToDouble(Attributes.GetValueOrDefault(key)!);
         }
+        internal int GetIntAttribute(string key)
+        {
+            return Convert.ToInt32(Attributes.GetValueOrDefault(key)!);
+        }
         internal string GetStringAttribute(string key)
         {
             return Attributes.GetValueOrDefault(key);
@@ -42,6 +46,10 @@ namespace MG.Server.Entities
         internal bool HaveAttribute(string key)
         {
             return Attributes.ContainsKey(key);
+        }
+        internal bool HaveAttribute(string key,string val)
+        {
+            return Attributes.ContainsKey(key) && Attributes.GetValueOrDefault(key)==val;
         }
         public override string ToString()
         {

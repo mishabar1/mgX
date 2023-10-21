@@ -60,7 +60,10 @@ namespace MG.Server.GameFlows
             {
                 a = addItem(Assets.O);               
             }
+            a.AddAttribute("item"); // x or o
+            a.AddAttribute(data.Player.GetStringAttribute("type")); // x or o
             a.AddAttribute("type", data.Player.GetStringAttribute("type"));
+            a.AddAttribute("idx", data.Item.GetStringAttribute("idx"));
             a.SetPosition(data.Item.GetNumberAttribute("x"), 0, data.Item.GetNumberAttribute("z"));
 
             // delete hover item
@@ -81,15 +84,15 @@ namespace MG.Server.GameFlows
 
             addItem(Assets.BOARD).SetPosition(0, 0, 0);
 
-            addItem(Assets.HOVER).SetPosition(-1, 0, 1).AddAttribute("hover").AddAttribute("idx", "1").AddAttribute("x", -1).AddAttribute("z", 1);
-            addItem(Assets.HOVER).SetPosition(0, 0, 1).AddAttribute("hover").AddAttribute("idx", "2").AddAttribute("x", 0).AddAttribute("z", 1);
-            addItem(Assets.HOVER).SetPosition(1, 0, 1).AddAttribute("hover").AddAttribute("idx", "3").AddAttribute("x", 1).AddAttribute("z", 1);
-            addItem(Assets.HOVER).SetPosition(-1, 0, 0).AddAttribute("hover").AddAttribute("idx", "4").AddAttribute("x", -1).AddAttribute("z", 0);
-            addItem(Assets.HOVER).SetPosition(0, 0, 0).AddAttribute("hover").AddAttribute("idx", "5").AddAttribute("x", 0).AddAttribute("z", 0);
-            addItem(Assets.HOVER).SetPosition(1, 0, 0).AddAttribute("hover").AddAttribute("idx", "6").AddAttribute("x", 1).AddAttribute("z", 0);
-            addItem(Assets.HOVER).SetPosition(-1, 0, -1).AddAttribute("hover").AddAttribute("idx", "7").AddAttribute("x", -1).AddAttribute("z", -1);
-            addItem(Assets.HOVER).SetPosition(0, 0, -1).AddAttribute("hover").AddAttribute("idx", "8").AddAttribute("x", 0).AddAttribute("z", -1);
-            addItem(Assets.HOVER).SetPosition(1, 0, -1).AddAttribute("hover").AddAttribute("idx", "9").AddAttribute("x", 1).AddAttribute("z", -1);
+            addItem(Assets.HOVER).SetPosition(-1, 0, 1).AddAttribute("hover").AddAttribute("idx", "0").AddAttribute("x", -1).AddAttribute("z", 1);
+            addItem(Assets.HOVER).SetPosition(0, 0, 1).AddAttribute("hover").AddAttribute("idx", "1").AddAttribute("x", 0).AddAttribute("z", 1);
+            addItem(Assets.HOVER).SetPosition(1, 0, 1).AddAttribute("hover").AddAttribute("idx", "2").AddAttribute("x", 1).AddAttribute("z", 1);
+            addItem(Assets.HOVER).SetPosition(-1, 0, 0).AddAttribute("hover").AddAttribute("idx", "3").AddAttribute("x", -1).AddAttribute("z", 0);
+            addItem(Assets.HOVER).SetPosition(0, 0, 0).AddAttribute("hover").AddAttribute("idx", "4").AddAttribute("x", 0).AddAttribute("z", 0);
+            addItem(Assets.HOVER).SetPosition(1, 0, 0).AddAttribute("hover").AddAttribute("idx", "5").AddAttribute("x", 1).AddAttribute("z", 0);
+            addItem(Assets.HOVER).SetPosition(-1, 0, -1).AddAttribute("hover").AddAttribute("idx", "6").AddAttribute("x", -1).AddAttribute("z", -1);
+            addItem(Assets.HOVER).SetPosition(0, 0, -1).AddAttribute("hover").AddAttribute("idx", "7").AddAttribute("x", 0).AddAttribute("z", -1);
+            addItem(Assets.HOVER).SetPosition(1, 0, -1).AddAttribute("hover").AddAttribute("idx", "8").AddAttribute("x", 1).AddAttribute("z", -1);
 
             advanceNextTurn();
             setActionsByCurrentTurn();
@@ -107,12 +110,75 @@ namespace MG.Server.GameFlows
         public override async Task<bool> IsEndGame()
         {
 
+            var board = getGameAsBoard();
+
+            Console.WriteLine(board);
+            ;
+
+            if (isAWon(board,"x") || isAWon(board,"o") || (board.Where(x => x != "").Count() == 9))
+            {
+                return true;
+            }                      
+;
+
+            return false;
+        }
+        private List<string> getGameAsBoard()
+        {
+            // get board as list
+            var board = new List<string>() { "", "", "", "", "", "", "", "", "" };
+            //board[0] = "x";
+            var allItems = GameData.GetAllGameItems();
+            var x_items = allItems.Where(x => x.HaveAttribute("x") && x.HaveAttribute("item"));
+            foreach (var item in x_items)
+            {
+                try
+                {
+                    board[item.GetIntAttribute("idx")] = "x";
+                }
+                catch (Exception)
+                {
+                    Console.WriteLine(board.ToString() + item);
+                    throw;
+                }
+                
+            }
+            var o_items = allItems.Where(x => x.HaveAttribute("o") && x.HaveAttribute("item"));
+            foreach (var item in o_items)
+            {
+                board[item.GetIntAttribute("idx")] = "o";
+            }
+            return board;
+        }
+        private bool isAWon(List<string> board, string a)
+        {
+            if ((board[0] == board[1] && board[1] == board[2] && board[2] == a) ||
+                (board[3] == board[4] && board[4] == board[5] && board[5] == a) ||
+                (board[6] == board[7] && board[7] == board[8] && board[8] == a) ||
+                (board[0] == board[3] && board[3] == board[6] && board[6] == a) ||
+                (board[1] == board[4] && board[4] == board[7] && board[7] == a) ||
+                (board[2] == board[5] && board[5] == board[8] && board[8] == a) ||
+                (board[0] == board[4] && board[4] == board[8] && board[8] == a) ||
+                (board[2] == board[4] && board[4] == board[6] && board[6] == a))
+            {
+                return true;
+            }
             return false;
         }
 
         public override List<PlayerData> GetGameWinners()
         {
-            return GameData.Players;
+            var board = getGameAsBoard();
+            if (isAWon(board, "x"))
+            {
+                return GameData.Players.Where(x=>x.HaveAttribute("type","x")).ToList();
+            }
+            if (isAWon(board, "o"))
+            {
+                return GameData.Players.Where(x => x.HaveAttribute("type", "o")).ToList();
+            }
+
+            return null;
         }
 
         class Assets

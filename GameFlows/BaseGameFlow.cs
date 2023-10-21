@@ -99,12 +99,13 @@ namespace MG.Server.GameFlows
             var ended = await IsEndGame();
             if (ended)
             {
+                this.GameData.GameStatus = GameStatusEnum.ENDED;
+                
                 await EndGame();
 
                 this.GameData.Winners = GetGameWinners();
-                this.GameData.GameStatus = GameStatusEnum.ENDED;
+                Console.WriteLine("TikTakToeGameFlow GAME ENDED !!!!!! winners count: " + this.GameData.Winners.Count());
 
-                
             }
 
             await DataRepository.Singeltone.HubGameUpdated(GameData);
