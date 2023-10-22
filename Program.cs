@@ -65,6 +65,7 @@ app.UseSpa(spa =>
 {
     spa.Options.SourcePath = "wwwroot";
 
+
     //if (app.Environment.IsDevelopment())
     //{
     //    spa.UseAngularCliServer(npmScript: "start");
