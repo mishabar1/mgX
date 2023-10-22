@@ -28,7 +28,7 @@ import {
   AnimationMixer,
   BufferGeometry,
   Clock,
-  Line,
+  Line, Loader,
   LoopOnce, Matrix4, Raycaster,
   Vector3,
   VectorKeyframeTrack
@@ -46,6 +46,8 @@ import {Group} from 'three/src/objects/Group';
 import {GeneralService} from '../../bl/general.service';
 import {UnsubscriberService} from '../../services/unsubscriber.service';
 import {RoomEnvironment} from 'three/examples/jsm/environments/RoomEnvironment';
+import {STLLoader} from 'three/examples/jsm/loaders/STLLoader';
+import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader';
 
 @Component({
   selector: 'app-game-play',
@@ -63,7 +65,9 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   public camera!: THREE.PerspectiveCamera;
   public renderer!: any;
   public orbitControls!: OrbitControls;
-  public loader!: GLTFLoader;
+  public gltfLoader!: GLTFLoader;
+  public stlLoader!: STLLoader  ;
+  public objLoader!: OBJLoader  ;
   interactionManager!: InteractionManager;
 
   controllers:any;
@@ -285,7 +289,9 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     } );
 
     // Instantiate a loader
-    this.loader = new GLTFLoader();
+    this.gltfLoader = new GLTFLoader();
+    this.stlLoader  = new STLLoader();
+    this.objLoader = new OBJLoader();
 
     document.body.appendChild( VRButton.createButton( this.renderer ) );
     this.controllers = this.buildControllers();
@@ -412,7 +418,26 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
     if(itemData.asset) {
       const loadUrl = '\\assets\\games\\' + this.gameData.assets[itemData.asset].frontURL;
-      this.loader.load(loadUrl, (gltf) => {
+
+      // objLoader.load(
+      //   'models/cube.obj',
+      //   (object) => {
+      //     // (object.children[0] as THREE.Mesh).material = material
+      //     // object.traverse(function (child) {
+      //     //     if ((child as THREE.Mesh).isMesh) {
+      //     //         (child as THREE.Mesh).material = material
+      //     //     }
+      //     // })
+      //     scene.add(object)
+
+      // loader.load(
+      //   'models/example.stl',
+      //   function (geometry) {
+      //     const mesh = new THREE.Mesh(geometry, material)
+      //     scene.add(mesh)
+
+
+      this.gltfLoader.load(loadUrl, (gltf) => {
         const mesh: THREE.Group = gltf.scene;
         this.processItem(itemData, mesh, parentMesh);
       });

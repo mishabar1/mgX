@@ -70,7 +70,7 @@ namespace MG.Server.Entities
     public class GameTypeEnum
     {
         public const string TIK_TAK_TOE = "TIK_TAK_TOE";
-        public const string CATAN = "CATAN";
+        public const string CHESS = "CHESS";
         public const string DND = "DND";
 
     }

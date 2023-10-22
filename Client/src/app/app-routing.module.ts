@@ -5,12 +5,14 @@ import {AuthGuard} from './bl/auth.guard';
 import {HomeViewComponent} from './view/home-view/home-view.component';
 import {GamesListComponent} from './view/games-list/games-list.component';
 import {GameSetupComponent} from './view/game-setup/game-setup.component';
+import {EditorComponent} from './view/editor/editor.component';
 
 export enum RouteNames {
   Home = 'home',
   GamesList = 'games-list',
   GameSetup = 'game-setup',
   GamePlay = 'game-play',
+  Editor = 'editor',
 
 }
 
@@ -20,6 +22,11 @@ const routes: Routes = [
   {
     path: RouteNames.Home,
     component: HomeViewComponent
+  },
+  {
+    path: RouteNames.Editor,
+    component: EditorComponent,
+    canActivate: [AuthGuard]
   },
   {
     path: RouteNames.GamesList,

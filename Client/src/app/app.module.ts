@@ -12,6 +12,7 @@ import {HomeViewComponent} from './view/home-view/home-view.component';
 import { GamesListComponent } from './view/games-list/games-list.component';
 import { GameSetupComponent } from './view/game-setup/game-setup.component';
 import {NgxJsonViewerModule} from 'ngx-json-viewer';
+import { EditorComponent } from './view/editor/editor.component';
 
 @NgModule({
   declarations: [
@@ -19,7 +20,8 @@ import {NgxJsonViewerModule} from 'ngx-json-viewer';
     HomeViewComponent,
     GamesListComponent,
     GameSetupComponent,
-    GamePlayComponent
+    GamePlayComponent,
+    EditorComponent
   ],
   imports: [
     BrowserModule,

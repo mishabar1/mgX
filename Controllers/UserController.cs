@@ -24,6 +24,14 @@ namespace MG.Server.Controllers
             //await _dataRepository.GetGameByID(gameId)
             return Ok(await _userBL.Login(data) );
         }
+
+        [HttpGet("TensofFlowTest")]
+        public async Task<IActionResult> TensofFlowTest()
+        {
+            _logger.LogTrace("TensofFlowTest");
+            await _userBL.TensofFlowTest();
+            return Ok(new {ok=true});
+        }
     }
 
     public class LoginData

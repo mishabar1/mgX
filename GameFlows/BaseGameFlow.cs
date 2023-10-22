@@ -20,8 +20,8 @@ namespace MG.Server.GameFlows
                 case GameTypeEnum.TIK_TAK_TOE:
                     game.GameFlow = new TikTakToeGameFlow(game);
                     break;
-                case GameTypeEnum.CATAN:
-                    game.GameFlow = new CatanGameFlow(game);
+                case GameTypeEnum.CHESS:
+                    game.GameFlow = new ChessGameFlow(game);
                     break;
                 case GameTypeEnum.DND:
                     game.GameFlow = new DnDGameFlow(game);
