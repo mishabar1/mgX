@@ -18,7 +18,6 @@
     <PackageReference Include="Microsoft.AspNetCore.SpaServices.Extensions" Version="7.0.12" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.19.5" />
     <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.11.4" />
-    <PackageReference Include="SciSharp.TensorFlow.Redist-Windows-GPU" Version="2.10.3" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="TensorFlow.Keras" Version="0.11.4" />
     <PackageReference Include="TensorFlow.NET" Version="0.110.4" />
