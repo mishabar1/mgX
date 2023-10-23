@@ -29,7 +29,7 @@ import {
   BufferGeometry,
   Clock,
   Line, Loader,
-  LoopOnce, Matrix4, Raycaster,
+  LoopOnce, Matrix4, Raycaster, TextureLoader,
   Vector3,
   VectorKeyframeTrack
 } from 'three';
@@ -61,13 +61,14 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   playerData!: PlayerData;
 
   @ViewChild('rendererContainer', {static: true}) rendererContainer!: ElementRef;
-  public scene!: THREE.Scene;
-  public camera!: THREE.PerspectiveCamera;
-  public renderer!: any;
-  public orbitControls!: OrbitControls;
-  public gltfLoader!: GLTFLoader;
-  public stlLoader!: STLLoader  ;
-  public objLoader!: OBJLoader  ;
+  scene!: THREE.Scene;
+  camera!: THREE.PerspectiveCamera;
+  renderer!: any;
+  orbitControls!: OrbitControls;
+  gltfLoader!: GLTFLoader;
+  stlLoader!: STLLoader  ;
+  objLoader!: OBJLoader  ;
+  textureLoader!: TextureLoader;
   interactionManager!: InteractionManager;
 
   controllers:any;
@@ -292,6 +293,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.gltfLoader = new GLTFLoader();
     this.stlLoader  = new STLLoader();
     this.objLoader = new OBJLoader();
+    this.textureLoader = new TextureLoader();
 
     document.body.appendChild( VRButton.createButton( this.renderer ) );
     this.controllers = this.buildControllers();
@@ -413,34 +415,91 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   }
 
 
-  createItem(itemData: ItemData, parentMesh: THREE.Group | null) {
+  createItem(itemData: ItemData, parentMesh: THREE.Object3D | null) {
     console.log("createItem",itemData,parentMesh);
 
     if(itemData.asset) {
-      const loadUrl = '\\assets\\games\\' + this.gameData.assets[itemData.asset].frontURL;
+      const frontURL = '\\assets\\games\\' + this.gameData.assets[itemData.asset].frontURL;
+      const backURL = '\\assets\\games\\' + (this.gameData.assets[itemData.asset].backURL || this.gameData.assets[itemData.asset].frontURL);
+      const assetType = this.gameData.assets[itemData.asset].type;
 
-      // objLoader.load(
-      //   'models/cube.obj',
-      //   (object) => {
-      //     // (object.children[0] as THREE.Mesh).material = material
-      //     // object.traverse(function (child) {
-      //     //     if ((child as THREE.Mesh).isMesh) {
-      //     //         (child as THREE.Mesh).material = material
-      //     //     }
-      //     // })
-      //     scene.add(object)
+      if(assetType=="OBJECT") {
+        if (frontURL.toLowerCase().endsWith("glb") || frontURL.toLowerCase().endsWith("gltf")) {
+          this.gltfLoader.load(frontURL, (gltf) => {
+            const mesh: THREE.Group = gltf.scene;
+            this.processItem(itemData, mesh, parentMesh);
+          });
+        }
 
-      // loader.load(
-      //   'models/example.stl',
-      //   function (geometry) {
-      //     const mesh = new THREE.Mesh(geometry, material)
-      //     scene.add(mesh)
+        if (frontURL.toLowerCase().endsWith("stl")) {
+          this.stlLoader.load(frontURL, (geometry) => {
+            const mesh = new THREE.Mesh(geometry);
+            this.processItem(itemData, mesh, parentMesh);
+          });
+        }
+
+        if (frontURL.toLowerCase().endsWith("obj")) {
+          this.objLoader.load(frontURL, (group) => {
+            //     // (object.children[0] as THREE.Mesh).material = material
+            //     // object.traverse(function (child) {
+            //     //     if ((child as THREE.Mesh).isMesh) {
+            //     //         (child as THREE.Mesh).material = material
+            //     //     }
+            //     // })
+            this.processItem(itemData, group, parentMesh);
+          });
+        }
+      }
+
+      if(assetType=="TOKEN") {
+
+        this.textureLoader.load(frontURL,frontTexture=>{
+          // console.log( frontTexture.image.width, frontTexture.image.height );
+          let aspect = frontTexture.image.width / frontTexture.image.height;
+          let x = 1;
+          let z = 1 / aspect;
+          if(aspect < 1){
+            z = 1;
+            x = aspect;
+          }
+
+          var cubeMaterial = [
+
+            new THREE.MeshBasicMaterial({
+              //left
+              color: 0xffffff, opacity: 0.5, transparent: true
+            }),
+            new THREE.MeshBasicMaterial({
+              //right
+              color: 0xffffff, opacity: 0.5, transparent: true
+            }),
+            new THREE.MeshBasicMaterial({
+              // top
+              map: frontTexture, transparent:true
+            }),
+            new THREE.MeshBasicMaterial({
+              // bottom
+              map: this.textureLoader.load(backURL),transparent:true
+            }),
+            new THREE.MeshBasicMaterial({
+              // front
+              color: 0xffffff, opacity: 0.5, transparent: true
+            }),
+            new THREE.MeshBasicMaterial({
+              //back
+              color: 0xffffff, opacity: 0.5, transparent: true
+            })
+          ];
+
+          let  mesh = new THREE.Mesh(new THREE.BoxGeometry(x,x/100,z), cubeMaterial);
+          this.processItem(itemData, mesh, parentMesh);
+
+        });
 
 
-      this.gltfLoader.load(loadUrl, (gltf) => {
-        const mesh: THREE.Group = gltf.scene;
-        this.processItem(itemData, mesh, parentMesh);
-      });
+      }
+
+
     }else{
       const mesh: THREE.Group = new THREE.Group()
       this.processItem(itemData, mesh, parentMesh);
@@ -448,10 +507,15 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
 
   }
-  processItem(itemData: ItemData, mesh:THREE.Group, parentMesh: THREE.Group | null){
+  processItem(itemData: ItemData, mesh:THREE.Object3D, parentMesh: THREE.Object3D | null){
     console.log("processItem",itemData,mesh,parentMesh);
 
+    // position
     mesh.position.set(itemData.position.x, itemData.position.y, itemData.position.z);
+
+    //scale
+    mesh.scale.set(itemData.scale.x, itemData.scale.y, itemData.scale.z);
+
 
     if (parentMesh) {
       parentMesh.add(mesh);

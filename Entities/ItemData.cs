@@ -104,6 +104,14 @@ namespace MG.Server.Entities
             Position.Z = z;
             return this;
         }
+        
+            internal ItemData SetScale(double x, double y, double z)
+        {
+            Scale.X = x;
+            Scale.Y = y;
+            Scale.Z = z;
+            return this;
+        }
 
 
         public static List<ItemData> GetItemsByAttribute(ItemData item, string key)

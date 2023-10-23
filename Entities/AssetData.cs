@@ -7,18 +7,19 @@
 
         public string Type { get; set; }
 
-        public AssetData(string frontURL, string backUrl = "") :base()
+        public AssetData(string frontURL, string backUrl = "", string assetType = AssetTypeEnum.OBJECT) :base()
         {
-            FrontURL = frontURL;
+            FrontURL = frontURL;    
             BackURL = backUrl;
+            Type = assetType;
         }
     }
 
     public class AssetTypeEnum
     {
-        public const string TOKKEN = "TOKKEN";
-        public const string SOUND = "SOUND";
-        public const string OBJECT = "OBJECT";
+        public const string TOKEN = "TOKEN"; // some "box" with very small height and 2 sides - front and back
+        public const string SOUND = "SOUND"; // mp3 sound - can be played on demand
+        public const string OBJECT = "OBJECT"; // stl, gbl or obj file to load a 3d model
 
     }
 }

@@ -24,6 +24,14 @@ namespace MG.Server.GameFlows
             addAsset(Assets.X, new AssetData("ticktacktoe/x.glb"));
             addAsset(Assets.O, new AssetData("ticktacktoe/o.glb"));
 
+            addAsset(Assets.BOARD_PNG, new AssetData("ticktacktoe/board.png","",AssetTypeEnum.TOKEN));
+            addAsset(Assets.X_PNG, new AssetData("ticktacktoe/x.png", "", AssetTypeEnum.TOKEN));
+            addAsset(Assets.O_PNG, new AssetData("ticktacktoe/o.png", "", AssetTypeEnum.TOKEN));
+
+            addAsset("a1", new AssetData("ticktacktoe/a1.png", "", AssetTypeEnum.TOKEN));
+            addAsset("a2", new AssetData("ticktacktoe/a22.png", "", AssetTypeEnum.TOKEN));
+            addAsset("a3", new AssetData("ticktacktoe/a3.jpg", "", AssetTypeEnum.TOKEN));
+
             // set players
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }.AddAttribute("type", "x");
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }.AddAttribute("type", "o");
@@ -81,8 +89,11 @@ namespace MG.Server.GameFlows
         {
             Console.WriteLine("TikTakToeGameFlow StartGame " + this.GameData);
 
+            addItem("a1").SetPosition(2, 1, -1);
+            addItem("a2").SetPosition(2, 1, 0);
+            addItem("a3").SetPosition(2, 1, 1);
 
-            addItem(Assets.BOARD).SetPosition(0, 0, 0);
+            addItem(Assets.BOARD_PNG).SetPosition(0, 0, 0).SetScale(3,1,3);
 
             addItem(Assets.HOVER).SetPosition(-1, 0, 1).AddAttribute("hover").AddAttribute("idx", "0").AddAttribute("x", -1).AddAttribute("z", 1);
             addItem(Assets.HOVER).SetPosition(0, 0, 1).AddAttribute("hover").AddAttribute("idx", "1").AddAttribute("x", 0).AddAttribute("z", 1);
@@ -187,6 +198,11 @@ namespace MG.Server.GameFlows
             public const string HOVER = "HOVER";
             public const string X = "X";
             public const string O = "O";
+
+            public const string BOARD_PNG = "BOARD_PNG";
+            public const string HOVER_PNG = "HOVER_PNG";
+            public const string X_PNG = "X_PNG";
+            public const string O_PNG = "O_PNG";
         }
     }
 

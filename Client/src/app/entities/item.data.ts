@@ -1,5 +1,6 @@
 import { V3 } from "./V3";
 import {Group} from 'three/src/objects/Group';
+import {Object3D} from 'three/src/core/Object3D';
 
 export class ItemData {
   id!: string;
@@ -15,7 +16,7 @@ export class ItemData {
   hoverActions! : any;
 
 
-  mesh?: THREE.Group;
+  mesh?: THREE.Object3D;
   markForDelete!:boolean;
 
 
