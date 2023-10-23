@@ -1,4 +1,6 @@
 ﻿using MG.Server.GameFlows;
+//using Microsoft.Owin.BuilderProperties;
+//using Newtonsoft.Json;
 using System.Text.Json.Serialization;
 
 namespace MG.Server.Entities
@@ -21,6 +23,12 @@ namespace MG.Server.Entities
             Assets = new Dictionary<string, AssetData>();
             Table = ItemData.Table();
             Players = new List<PlayerData>();
+        }
+
+        public GameData DeepCopy()
+        {
+            //var serialized = JsonConvert.SerializeObject(this);
+            return this; //JsonConvert.DeserializeObject<GameData>(serialized);
         }
 
 

@@ -10,11 +10,14 @@ namespace MG.Server.GameFlows
     {
 
         public GameData GameData { get; set; }
+        public List<GameData> HistoryGameData { get; set; }
 
 
         public static GameData CreateGame(string gameType,string userId)
         {
             var game = new GameData();
+            
+
             switch (gameType)
             {
                 case GameTypeEnum.TIK_TAK_TOE:
@@ -37,7 +40,7 @@ namespace MG.Server.GameFlows
         public BaseGameFlow(GameData gameData)
         {
             GameData = gameData;
-            GameData.GameFlow = this;
+            GameData.GameFlow = this;            
         }
 
         public async Task RunSetupFlow()
@@ -51,6 +54,9 @@ namespace MG.Server.GameFlows
             this.GameData.GameStatus = GameStatusEnum.SETUP;
             
             await Setup();
+
+            // reset history
+            HistoryGameData = new List<GameData>() { GameData.DeepCopy() };
 
             await DataRepository.Singeltone.HubGameUpdated(GameData);
             await DataRepository.Singeltone.HubGamesUpdated(GameData);
@@ -72,6 +78,8 @@ namespace MG.Server.GameFlows
                     player.AIAgent = new AIAgent(this.GameData, player);
                 }
             }
+
+            HistoryGameData.Add(GameData.DeepCopy());
 
             await DataRepository.Singeltone.HubGameUpdated(GameData);
             await DataRepository.Singeltone.HubGamesUpdated(GameData);
@@ -107,6 +115,8 @@ namespace MG.Server.GameFlows
                 Console.WriteLine("TikTakToeGameFlow GAME ENDED !!!!!! winners count: " + this.GameData.Winners.Count());
 
             }
+
+            HistoryGameData.Add(GameData.DeepCopy());
 
             await DataRepository.Singeltone.HubGameUpdated(GameData);
             await DataRepository.Singeltone.HubGamesUpdated(GameData);

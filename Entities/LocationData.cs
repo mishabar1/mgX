@@ -1,6 +1,6 @@
 ﻿namespace MG.Server.Entities
 {
-    public class LocationData
+    public class LocationData: BaseData<LocationData>
     {
         public V3 Position { get; set; }
         public V3 Rotation { get; set; }

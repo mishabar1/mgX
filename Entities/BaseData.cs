@@ -55,5 +55,7 @@ namespace MG.Server.Entities
         {
             return Utils.ListProperties(this);
         }
+
+        
     }
 }

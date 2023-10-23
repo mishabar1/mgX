@@ -3,7 +3,7 @@ using System.Text;
 
 namespace MG.Server.Entities
 {
-    public class V2
+    public class V2 : BaseData<LocationData>
     {
         public double X { get; set; }
         public double Y { get; set; }

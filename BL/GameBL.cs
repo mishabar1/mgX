@@ -35,6 +35,8 @@ namespace MG.Server.BL
             var game = BaseGameFlow.CreateGame(data.gameType, data.userId);
             _dataRepository.Games.Add(game);
 
+
+
             //update all clients
             await DataRepository.Singeltone.HubGamesUpdated(game);
             return game;
