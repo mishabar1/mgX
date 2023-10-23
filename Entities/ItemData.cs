@@ -97,6 +97,10 @@ namespace MG.Server.Entities
             ClickActions.Add(playerId, actionFunc.Method.Name);
             return this;
         }
+        internal ItemData SetPosition(double x, double z)
+        {
+            return SetPosition(x, 0, z);
+        }
         internal ItemData SetPosition(double x, double y, double z)
         {
             Position.X = x;
@@ -104,14 +108,32 @@ namespace MG.Server.Entities
             Position.Z = z;
             return this;
         }
-        
-            internal ItemData SetScale(double x, double y, double z)
+
+        internal ItemData SetScale(double a)
+        {
+            return SetScale(a, a, a);
+        }
+        internal ItemData SetScale(double x, double y, double z)
         {
             Scale.X = x;
             Scale.Y = y;
             Scale.Z = z;
             return this;
         }
+        
+        // rotate only on xz plane
+        internal ItemData SetRotation(double deg)
+        {
+            return SetRotation(0, deg, 0);
+        }
+        internal ItemData SetRotation(double x, double y, double z)
+        {
+            Rotation.X = x;
+            Rotation.Y = y;
+            Rotation.Z = z;
+            return this;
+        }
+
 
 
         public static List<ItemData> GetItemsByAttribute(ItemData item, string key)

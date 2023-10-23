@@ -29,7 +29,7 @@ import {
   BufferGeometry,
   Clock,
   Line, Loader,
-  LoopOnce, Matrix4, Raycaster, TextureLoader,
+  LoopOnce, MathUtils, Matrix4, Raycaster, TextureLoader,
   Vector3,
   VectorKeyframeTrack
 } from 'three';
@@ -104,7 +104,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
 
     // this.signalRService.addTransferChartDataListener();
-
+    this.signalRService.hubConnection.off('GameUpdated');
     this.signalRService.hubConnection.on('GameUpdated', data => {
       console.log('GameUpdated', data);
       this.updateGame(data);
@@ -171,7 +171,9 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     old_item.hoverActions = new_item.hoverActions;
 
     // update position/scale/rotation/actions....
-    this.updateItemPosition(old_item, V3.FromJson(new_item.position))
+    this.updateItemPosition(old_item, V3.FromJson(new_item.position));
+    this.updateItemScale(old_item, V3.FromJson(new_item.scale))
+    this.updateItemRotation(old_item, V3.FromJson(new_item.rotation))
 
     //update all child items
     forEach(new_item.items, new_item => {
@@ -194,6 +196,40 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     // this.createMoveAnimation(item.mesh,item.mesh!.position,position)
     if(!this.generalService.deepEqual(position,item.mesh!.position) ) {
       new TWEEN.Tween(item.mesh!.position).to(position,300).start();
+    }
+
+  }
+
+  updateItemScale(item: ItemData, scale:V3){
+    console.log("updateItemScale", item, scale);
+
+    item.scale = scale;
+    // item.mesh!.position.set(position.x, position.y, position.z);
+    // this.createMoveAnimation(item.mesh,item.mesh!.position,position)
+    if(!this.generalService.deepEqual(scale,item.mesh!.scale) ) {
+      new TWEEN.Tween(item.mesh!.scale).to(scale,300).start();
+    }
+
+  }
+
+  updateItemRotation(item: ItemData, rot:V3){
+    console.log("updateItemRotation", item, rot);
+
+    item.rotation = rot;
+
+    rot = {
+      x:MathUtils.degToRad( rot.x),
+      y:MathUtils.degToRad(rot.y),
+      z:MathUtils.degToRad(rot.z)
+    }
+
+    // item.mesh!.position.set(position.x, position.y, position.z);
+    // this.createMoveAnimation(item.mesh,item.mesh!.position,position)
+    // let meshRot =new THREE.Vector3();
+    // meshRot = meshRot.applyEuler(item.mesh!.rotation);
+    if(!this.generalService.deepEqual(rot, {x:item.mesh!.rotation.x,y:item.mesh!.rotation.y,z:item.mesh!.rotation.z} ) ) {
+      // const u = new THREE.Euler( rot.x, rot.y, rot.z, 'XYZ' )
+      new TWEEN.Tween(item.mesh!.rotation).to(rot,300).start();
     }
 
   }
@@ -513,6 +549,12 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     // position
     mesh.position.set(itemData.position.x, itemData.position.y, itemData.position.z);
 
+    // rotation
+    mesh.rotation.set(
+      MathUtils.degToRad( itemData.rotation.x),
+      MathUtils.degToRad(itemData.rotation.y),
+      MathUtils.degToRad(itemData.rotation.z));
+
     //scale
     mesh.scale.set(itemData.scale.x, itemData.scale.y, itemData.scale.z);
 
@@ -567,40 +609,54 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     }
   }
 
-  addClickAction(itemData: ItemData, action: string) {
-    console.log("addClickAction", itemData ,action);
+  MeshClickFunc(event:any){
+    console.log(event);
+    // debugger;
+    // event.stopPropagation();
 
-    itemData.mesh!.addEventListener('click', (event: any) => {
-      event.stopPropagation();
-      //this.signalRService.testSendXXX1();
-      // console.log(cube);
-
+    if(this.playerData){
+      let action = event.target.userData.ItemData.clickActions[this.playerData.id] || event.target.userData.ItemData.clickActions[''];
       this.signalRService.executeAction(
         this.gameData.id,
         this.playerData.id,
-        itemData.id,
+        event.target.userData.ItemData.id,
         action,
         '', 0, 0);
+    }
+  }
+  MeshMouseOverFunc(event:any){
+    // event.target.userData['c'] = event.target.material.clone().color;
+    // event.target.material.color.set(0xff0000);
+    document.body.style.cursor = 'pointer';
+    this.orbitControls.enabled = false;
+  }
+  MeshMouseOutFunc(event:any){
+    // let c: any = event.target.userData['c'];
+    // event.target.material.color.set(c.r, c.g, c.b);
+    document.body.style.cursor = 'default';
+    this.orbitControls.enabled = true;
+  }
 
-    });
-    itemData.mesh!.addEventListener('mouseover', (event: any) => {
-      // event.target.userData['c'] = event.target.material.clone().color;
-      // event.target.material.color.set(0xff0000);
-      document.body.style.cursor = 'pointer';
-      this.orbitControls.enabled = false;
-    });
-    itemData.mesh!.addEventListener('mouseout', (event: any) => {
-      // let c: any = event.target.userData['c'];
-      // event.target.material.color.set(c.r, c.g, c.b);
-      document.body.style.cursor = 'default';
-      this.orbitControls.enabled = true;
-    });
+  onMeshClickFunc = this.MeshClickFunc.bind(this);
+  onMeshMouseOverFunc = this.MeshMouseOverFunc.bind(this);
+  onMeshMouseOutFunc = this.MeshMouseOutFunc.bind(this);
+  addClickAction(itemData: ItemData, action: string) {
+    console.log("addClickAction", itemData ,action);
+
+    this.removeAction(itemData);
+
+    itemData.mesh!.addEventListener('click', this.onMeshClickFunc );
+
+    itemData.mesh!.addEventListener('mouseover', this.onMeshMouseOverFunc);
+
+    itemData.mesh!.addEventListener('mouseout', this.onMeshMouseOutFunc);
 
     this.interactionManager.add(itemData.mesh!);
   }
   removeAction(itemData: ItemData) {
     console.log("removeAction",itemData);
-
+    itemData.mesh!.removeEventListener('click',this.onMeshClickFunc);
+    itemData.mesh!.removeEventListener('click',this.onMeshMouseOverFunc);
     this.interactionManager.remove(itemData.mesh!);
   }
 

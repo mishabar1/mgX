@@ -58,8 +58,8 @@ namespace MG.Server.GameFlows
             // reset history
             HistoryGameData = new List<GameData>() { GameData.DeepCopy() };
 
-            await DataRepository.Singeltone.HubGameUpdated(GameData);
-            await DataRepository.Singeltone.HubGamesUpdated(GameData);
+            await DataRepository.Singleton.HubGameUpdated(GameData);
+            await DataRepository.Singleton.HubGamesUpdated(GameData);
         } 
         public abstract Task Setup();
 
@@ -81,8 +81,8 @@ namespace MG.Server.GameFlows
 
             HistoryGameData.Add(GameData.DeepCopy());
 
-            await DataRepository.Singeltone.HubGameUpdated(GameData);
-            await DataRepository.Singeltone.HubGamesUpdated(GameData);
+            await DataRepository.Singleton.HubGameUpdated(GameData);
+            await DataRepository.Singleton.HubGamesUpdated(GameData);
 
         }
         public abstract Task StartGame();
@@ -118,8 +118,8 @@ namespace MG.Server.GameFlows
 
             HistoryGameData.Add(GameData.DeepCopy());
 
-            await DataRepository.Singeltone.HubGameUpdated(GameData);
-            await DataRepository.Singeltone.HubGamesUpdated(GameData);
+            await DataRepository.Singleton.HubGameUpdated(GameData);
+            await DataRepository.Singleton.HubGamesUpdated(GameData);
 
         }
 

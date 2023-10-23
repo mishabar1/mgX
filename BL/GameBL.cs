@@ -38,7 +38,7 @@ namespace MG.Server.BL
 
 
             //update all clients
-            await DataRepository.Singeltone.HubGamesUpdated(game);
+            await DataRepository.Singleton.HubGamesUpdated(game);
             return game;
         }
 
@@ -89,7 +89,7 @@ namespace MG.Server.BL
         {
 
             _dataRepository.Games.RemoveAll(x => x.Id == data.gameId);
-            await DataRepository.Singeltone.HubGameDeleted(data.gameId);
+            await DataRepository.Singleton.HubGameDeleted(data.gameId);
 
             return new { x = "TODO !!! DeleteGame" };
         }
@@ -108,8 +108,8 @@ namespace MG.Server.BL
                     player.Type = data.type;
                 }
 
-                await DataRepository.Singeltone.HubGameUpdated(game);
-                await DataRepository.Singeltone.HubGamesUpdated(game);
+                await DataRepository.Singleton.HubGameUpdated(game);
+                await DataRepository.Singleton.HubGamesUpdated(game);
             }
 
             return new { x = "TODO !!! JoinGame" };

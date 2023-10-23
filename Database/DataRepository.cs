@@ -11,7 +11,7 @@ namespace MG.Server.Database
         public List<UserData> Users;// = new List<UserData>();
         public List<GameData> Games;// = new List<GameData>();
 
-        public static DataRepository Singeltone;
+        public static DataRepository Singleton;
 
         public DataRepository(IHubContext<NotificationHub> hub)
         {
@@ -21,7 +21,7 @@ namespace MG.Server.Database
             //await Hub.Clients.Group(user_id).SendAsync("test", "some data");
 
             //AIAgent._dataRepository = this;
-            DataRepository.Singeltone = this;
+            DataRepository.Singleton = this;
         }
 
         internal async Task HubGameUpdated(GameData game)

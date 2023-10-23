@@ -84,6 +84,18 @@ namespace MG.Server.GameFlows
             setActionsByCurrentTurn();
         }
 
+        public async Task RotateMe(ExecuteActionData data)
+        {
+            Console.WriteLine("TikTakToeGameFlow RotateMe " + data);
+
+            data.Item.Rotation.Y += 10;
+            data.Item.Scale.X += 0.5;
+            if (data.Item.Scale.X > 3)
+            {
+                data.Item.Scale.X = 0.5;
+            }
+        }
+
 
         public async override Task StartGame()
         {
@@ -91,7 +103,7 @@ namespace MG.Server.GameFlows
 
             addItem("a1").SetPosition(2, 1, -1);
             addItem("a2").SetPosition(2, 1, 0);
-            addItem("a3").SetPosition(2, 1, 1);
+            addItem("a3").SetPosition(2, 1, 1).SetRotation(45).AddAction(RotateMe); ;
 
             addItem(Assets.BOARD_PNG).SetPosition(0, 0, 0).SetScale(3,1,3);
 

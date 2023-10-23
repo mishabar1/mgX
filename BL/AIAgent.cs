@@ -74,7 +74,7 @@ namespace MG.Server.BL
                     itemId = item.Id
                 };
                 await gameData.GameFlow.ExecuteAction(action);
-                await DataRepository.Singeltone.HubGameUpdated(gameData);
+                await DataRepository.Singleton.HubGameUpdated(gameData);
                                 
             }
 
