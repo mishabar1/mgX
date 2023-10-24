@@ -48,6 +48,9 @@ import {UnsubscriberService} from '../../services/unsubscriber.service';
 import {RoomEnvironment} from 'three/examples/jsm/environments/RoomEnvironment';
 import {STLLoader} from 'three/examples/jsm/loaders/STLLoader';
 import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader';
+import {FontLoader} from 'three/examples/jsm/loaders/FontLoader';
+import {TextGeometry} from 'three/examples/jsm/geometries/TextGeometry';
+import {CSS2DObject, CSS2DRenderer} from 'three/examples/jsm/renderers/CSS2DRenderer';
 
 @Component({
   selector: 'app-game-play',
@@ -63,12 +66,14 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   @ViewChild('rendererContainer', {static: true}) rendererContainer!: ElementRef;
   scene!: THREE.Scene;
   camera!: THREE.PerspectiveCamera;
-  renderer!: any;
+  renderer!: THREE.WebGLRenderer;
+  labelRenderer!:CSS2DRenderer;
   orbitControls!: OrbitControls;
   gltfLoader!: GLTFLoader;
   stlLoader!: STLLoader  ;
   objLoader!: OBJLoader  ;
   textureLoader!: TextureLoader;
+  fontLoader!: FontLoader;
   interactionManager!: InteractionManager;
 
   controllers:any;
@@ -234,27 +239,6 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
   }
 
-  // createMoveAnimation(mesh:any, startPosition:any, endPosition:any )  {
-  //   mesh.userData.mixer = new AnimationMixer(mesh);
-  //   let track = new VectorKeyframeTrack(
-  //     '.position',
-  //     [0, 1],
-  //     [
-  //       startPosition.x,
-  //       startPosition.y,
-  //       startPosition.z,
-  //       endPosition.x,
-  //       endPosition.y,
-  //       endPosition.z,
-  //     ]
-  //   );
-  //   const animationClip = new AnimationClip(undefined, 5, [track]);
-  //   const animationAction = mesh.userData.mixer.clipAction(animationClip);
-  //   animationAction.setLoop(LoopOnce);
-  //   animationAction.play();
-  //   mesh.userData.clock = new Clock();
-  //   this.animationsObjects.push(mesh);
-  // };
 
   resizeCanvasToDisplaySize() {
     const canvas = this.renderer.domElement;
@@ -285,22 +269,32 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.renderer.setSize(this.rendererContainer.nativeElement.clientWidth, this.rendererContainer.nativeElement.clientHeight);
     this.rendererContainer.nativeElement.appendChild(this.renderer.domElement);
 
-    // Initialize OrbitControls
-    this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.orbitControls.addEventListener('change', () => {
-      this.renderer.render(this.scene, this.camera);
-    });
-    this.orbitControls.enableZoom = true
-    this.orbitControls.update();
 
 
-    this.interactionManager = new InteractionManager(this.renderer, this.camera, this.renderer.domElement);
+
+
 
     // Add ambient light
     // const ambientLight = new THREE.AmbientLight(0xffffff,2);
     // this.scene.add(ambientLight);
     const pmremGenerator = new THREE.PMREMGenerator( this.renderer );
     this.scene.environment = pmremGenerator.fromScene( new RoomEnvironment(), 0 ).texture;
+
+    this.labelRenderer = new CSS2DRenderer();
+    this.labelRenderer.setSize( window.innerWidth, window.innerHeight );
+    this.labelRenderer.domElement.style.position = 'absolute';
+    this.labelRenderer.domElement.style.top = '0px';
+    document.body.appendChild( this.labelRenderer.domElement );
+
+    // Initialize OrbitControls
+    this.orbitControls = new OrbitControls(this.camera, this.labelRenderer.domElement);
+    this.orbitControls.addEventListener('change', () => {
+      this.renderer.render(this.scene, this.camera);
+    });
+    this.orbitControls.enableZoom = true
+    this.orbitControls.update();
+
+    this.interactionManager = new InteractionManager(this.renderer, this.camera, this.labelRenderer.domElement);
 
     // Start the animation loop
     this.renderer.setAnimationLoop(  ()=> {
@@ -314,6 +308,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
       this.orbitControls.update();
       this.interactionManager.update();
       this.renderer.render(this.scene, this.camera);
+      this.labelRenderer.render( this.scene, this.camera );
 
       TWEEN.update();
       // this.animationsObjects.forEach((mesh:any) => {
@@ -330,6 +325,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.stlLoader  = new STLLoader();
     this.objLoader = new OBJLoader();
     this.textureLoader = new TextureLoader();
+    this.fontLoader = new FontLoader();
 
     document.body.appendChild( VRButton.createButton( this.renderer ) );
     this.controllers = this.buildControllers();
@@ -338,42 +334,10 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
       controller.addEventListener('selectend', this.onSelectEnd);
     });
 
-    // @ts-ignore
-    // document.body.appendChild(ARButton.createButton(this.renderer, {sessionInit: {requiredFeatures: ['hit-test']}}));
-    // this.controller = this.renderer.xr.getController(0);
-    // this.controller.addEventListener('select', this.onSelect.bind(this));
-
     this.loadGame();
   }
 
-  // onSelect() {
-  //   if (this.reticle.visible) {
-  //     this.box.position.setFromMatrixPosition(this.reticle.matrix);
-  //     this.box.position.y += this.box.geometry.parameters.height / 2;
-  //     this.box.visible = true;
-  //   }
-  // }
-  // async requestHitTestSource() {
-  //   const session = this.renderer.xr.getSession();
-  //   session.addEventListener('end', () => {
-  //     this.hitTestSourceRequested = false;
-  //     this.hitTestSource = null;
-  //   });
-  //   const referenceSpace = await session.requestReferenceSpace('viewer');
-  //   this.hitTestSource = await session.requestHitTestSource({ space: referenceSpace, entityTypes: ['plane'] });
-  //   this.hitTestSourceRequested = true;
-  // }
-  // getHitTestResults(frame:any) {
-  //   const hitTestResults = frame.getHitTestResults(this.hitTestSource);
-  //   if (hitTestResults.length) {
-  //     const hit = hitTestResults[0];
-  //     const pose = hit.getPose(this.renderer.xr.getReferenceSpace());
-  //     this.reticle.visible = true;
-  //     this.reticle.matrix.fromArray(pose.transform.matrix);
-  //   } else {
-  //     this.reticle.visible = false;
-  //   }
-  // }
+
 
   onSelectStart(x:any){
     console.log("onSelectStart",x);
@@ -534,6 +498,61 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
 
       }
+      if(assetType=="SOUND") {
+
+      }
+      if(assetType=="TEXT3D") {
+        this.fontLoader.load( 'https://threejs.org/examples/fonts/helvetiker_regular.typeface.json',  ( font )=> {
+
+          const geometry = new TextGeometry( 'Hello three.js!', {
+            font: font,
+            size: 0.5,
+            height: 0.2,
+            curveSegments: 12,
+            bevelEnabled: true,
+            bevelThickness: 0.03,
+            bevelSize: 0.02,
+            bevelOffset: 0,
+            bevelSegments: 5,
+          } );
+          var textMaterial = new THREE.MeshPhongMaterial(
+            { color: 0xff0000, specular: 0xffffff }
+          );
+          let  mesh = new THREE.Mesh(geometry,textMaterial);
+          this.processItem(itemData, mesh, parentMesh);
+        } );
+
+      }
+      if(assetType=="TEXTCSS") {
+
+        const moon = new THREE.Mesh( new THREE.BoxGeometry(1,1,1), new THREE.MeshBasicMaterial({color: 0xff0000 }) );
+        //moon.layers.enableAll();
+
+        const moonDiv = document.createElement( 'div' );
+        moonDiv.className = 'label';
+        moonDiv.textContent = 'Moon Moon Moon Moon';
+        moonDiv.style.backgroundColor = 'blue';
+
+        const moonLabel = new CSS2DObject( moonDiv );
+        moonLabel.position.set( 0, 0, 0 );
+        moonLabel.center.set( 0, 0 );
+        moon.add( moonLabel );
+        moonLabel.layers.set( 0 );
+
+        const moonMassDiv = document.createElement( 'div' );
+        moonMassDiv.className = 'label';
+        moonMassDiv.textContent = '7.342e22 kg';
+        moonMassDiv.style.backgroundColor = 'transparent';
+
+        const moonMassLabel = new CSS2DObject( moonMassDiv );
+        moonMassLabel.position.set( 2, 2, 2 );
+        moonMassLabel.center.set( 0, 0 );
+        moon.add( moonMassLabel );
+        moonMassLabel.layers.set( 1 );
+
+        this.processItem(itemData, moon, parentMesh);
+      }
+
 
 
     }else{

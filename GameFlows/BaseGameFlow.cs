@@ -123,9 +123,10 @@ namespace MG.Server.GameFlows
 
         }
 
-        internal void addAsset(string assetKey, AssetData asset)
+        internal AssetData addAsset(string assetKey, AssetData asset)
         {
             this.GameData.Assets.Add(assetKey, asset);
+            return asset;
         }
 
         internal ItemData addItem(string assetKey)

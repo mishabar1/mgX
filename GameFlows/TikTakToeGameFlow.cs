@@ -31,6 +31,9 @@ namespace MG.Server.GameFlows
             addAsset("a1", new AssetData("ticktacktoe/a1.png", "", AssetTypeEnum.TOKEN));
             addAsset("a2", new AssetData("ticktacktoe/a22.png", "", AssetTypeEnum.TOKEN));
             addAsset("a3", new AssetData("ticktacktoe/a3.jpg", "", AssetTypeEnum.TOKEN));
+            addAsset("t1", new AssetData("","",AssetTypeEnum.TEXT3D));
+            addAsset("t2", new AssetData("", "", AssetTypeEnum.TEXTCSS));
+            addAsset("s1", new AssetData("", "", AssetTypeEnum.SOUND));
 
             // set players
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }.AddAttribute("type", "x");
@@ -104,6 +107,10 @@ namespace MG.Server.GameFlows
             addItem("a1").SetPosition(2, 1, -1);
             addItem("a2").SetPosition(2, 1, 0);
             addItem("a3").SetPosition(2, 1, 1).SetRotation(45).AddAction(RotateMe); ;
+
+            addItem("t1").SetPosition(1, 2, -1);
+            addItem("t2").SetPosition(2, 2, -1);
+            addItem("s1").SetPosition(1, 2, 1);
 
             addItem(Assets.BOARD_PNG).SetPosition(0, 0, 0).SetScale(3,1,3);
 
