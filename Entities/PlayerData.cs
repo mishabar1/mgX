@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace MG.Server.Entities
 {
-    public class PlayerData : BaseData<GameData>
+    public class PlayerData : BaseData<PlayerData>
     {
         public string Type { get; set; }
 

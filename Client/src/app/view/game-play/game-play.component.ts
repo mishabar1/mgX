@@ -29,7 +29,7 @@ import {
   BufferGeometry,
   Clock,
   Line, Loader,
-  LoopOnce, MathUtils, Matrix4, Raycaster, TextureLoader,
+  LoopOnce, MathUtils, Matrix4, Mesh, MeshBasicMaterial, PlaneGeometry, Raycaster, TextureLoader,
   Vector3,
   VectorKeyframeTrack
 } from 'three';
@@ -50,7 +50,7 @@ import {STLLoader} from 'three/examples/jsm/loaders/STLLoader';
 import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader';
 import {FontLoader} from 'three/examples/jsm/loaders/FontLoader';
 import {TextGeometry} from 'three/examples/jsm/geometries/TextGeometry';
-import {CSS2DObject, CSS2DRenderer} from 'three/examples/jsm/renderers/CSS2DRenderer';
+import * as ThreeMeshUI from 'three-mesh-ui'
 
 @Component({
   selector: 'app-game-play',
@@ -67,7 +67,6 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   scene!: THREE.Scene;
   camera!: THREE.PerspectiveCamera;
   renderer!: THREE.WebGLRenderer;
-  labelRenderer!:CSS2DRenderer;
   orbitControls!: OrbitControls;
   gltfLoader!: GLTFLoader;
   stlLoader!: STLLoader  ;
@@ -180,6 +179,8 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.updateItemScale(old_item, V3.FromJson(new_item.scale))
     this.updateItemRotation(old_item, V3.FromJson(new_item.rotation))
 
+    this.updateItemText(old_item, new_item.text)
+
     //update all child items
     forEach(new_item.items, new_item => {
       this.updateItem(new_item, old_item.mesh);
@@ -239,6 +240,12 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
   }
 
+  updateItemText(item: ItemData, text?:string){
+    if(item.asset=="TEXTBLOCK"){
+      item.text = text;
+      (item.mesh! as any).childrenTexts[0].set({content: text});
+    }
+  }
 
   resizeCanvasToDisplaySize() {
     const canvas = this.renderer.domElement;
@@ -280,24 +287,29 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     const pmremGenerator = new THREE.PMREMGenerator( this.renderer );
     this.scene.environment = pmremGenerator.fromScene( new RoomEnvironment(), 0 ).texture;
 
-    this.labelRenderer = new CSS2DRenderer();
-    this.labelRenderer.setSize( window.innerWidth, window.innerHeight );
-    this.labelRenderer.domElement.style.position = 'absolute';
-    this.labelRenderer.domElement.style.top = '0px';
-    document.body.appendChild( this.labelRenderer.domElement );
+    // this.labelRenderer = new CSS2DRenderer();
+    // this.labelRenderer.setSize( window.innerWidth, window.innerHeight );
+    // this.labelRenderer.domElement.style.position = 'absolute';
+    // this.labelRenderer.domElement.style.top = '0px';
+    // document.body.appendChild( this.labelRenderer.domElement );
 
     // Initialize OrbitControls
-    this.orbitControls = new OrbitControls(this.camera, this.labelRenderer.domElement);
+    this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
     this.orbitControls.addEventListener('change', () => {
       this.renderer.render(this.scene, this.camera);
     });
     this.orbitControls.enableZoom = true
     this.orbitControls.update();
 
-    this.interactionManager = new InteractionManager(this.renderer, this.camera, this.labelRenderer.domElement);
+    this.interactionManager = new InteractionManager(this.renderer, this.camera, this.renderer.domElement);
 
     // Start the animation loop
     this.renderer.setAnimationLoop(  ()=> {
+
+      // Don't forget, ThreeMeshUI must be updated manually.
+      // This has been introduced in version 3.0.0 in order
+      // to improve performance
+      ThreeMeshUI.update()
 
       if (this.controllers) {
         this.controllers.forEach((controller: any) => {
@@ -308,7 +320,6 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
       this.orbitControls.update();
       this.interactionManager.update();
       this.renderer.render(this.scene, this.camera);
-      this.labelRenderer.render( this.scene, this.camera );
 
       TWEEN.update();
       // this.animationsObjects.forEach((mesh:any) => {
@@ -523,34 +534,34 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
         } );
 
       }
-      if(assetType=="TEXTCSS") {
+      if(assetType=="TEXTBLOCK") {
 
-        const moon = new THREE.Mesh( new THREE.BoxGeometry(1,1,1), new THREE.MeshBasicMaterial({color: 0xff0000 }) );
-        //moon.layers.enableAll();
+        // DOCS ! - RTFM !
+        // https://github.com/felixmariotto/three-mesh-ui/wiki/API-documentation
+        //
+        const container:any = new ThreeMeshUI.Block( {
 
-        const moonDiv = document.createElement( 'div' );
-        moonDiv.className = 'label';
-        moonDiv.textContent = 'Moon Moon Moon Moon';
-        moonDiv.style.backgroundColor = 'blue';
+          bestFit:'auto',
+          width: 100,
+          height: 100,
+          justifyContent: 'center',
+          textAlign: 'center',
+          fontFamily: 'assets/fonts/Roboto-msdf.json',
+          fontTexture: 'assets/fonts/Roboto-msdf.png',
+          fontColor:  new THREE.Color( 0x000000 ),
+          // borderRadius: 0.05,
+          backgroundOpacity:0
+        } );
 
-        const moonLabel = new CSS2DObject( moonDiv );
-        moonLabel.position.set( 0, 0, 0 );
-        moonLabel.center.set( 0, 0 );
-        moon.add( moonLabel );
-        moonLabel.layers.set( 0 );
+        // container.position.set( 0, 0, 0 );
+        // container.rotation.x = -0.55;
+        // this.scene.add( container );
 
-        const moonMassDiv = document.createElement( 'div' );
-        moonMassDiv.className = 'label';
-        moonMassDiv.textContent = '7.342e22 kg';
-        moonMassDiv.style.backgroundColor = 'transparent';
+        const t1:any = new ThreeMeshUI.Text( {content: itemData.text } );
+        container.add(t1);
 
-        const moonMassLabel = new CSS2DObject( moonMassDiv );
-        moonMassLabel.position.set( 2, 2, 2 );
-        moonMassLabel.center.set( 0, 0 );
-        moon.add( moonMassLabel );
-        moonMassLabel.layers.set( 1 );
+        this.processItem(itemData, container, parentMesh);
 
-        this.processItem(itemData, moon, parentMesh);
       }
 
 

@@ -16,7 +16,7 @@ namespace MG.Server.GameFlows
 
         public override async Task Setup()
         {
-            Console.WriteLine("TikTakToeGameFlow Setup " + this.GameData);
+            Console.WriteLine("TikTakToeGameFlow Setup ");
             
             // create assets
             addAsset(Assets.BOARD, new AssetData("ticktacktoe/board.glb"));
@@ -32,7 +32,7 @@ namespace MG.Server.GameFlows
             addAsset("a2", new AssetData("ticktacktoe/a22.png", "", AssetTypeEnum.TOKEN));
             addAsset("a3", new AssetData("ticktacktoe/a3.jpg", "", AssetTypeEnum.TOKEN));
             addAsset("t1", new AssetData("","",AssetTypeEnum.TEXT3D));
-            addAsset("t2", new AssetData("", "", AssetTypeEnum.TEXTCSS));
+            addAsset("t2", new AssetData("", "", AssetTypeEnum.TEXTBLOCK));
             addAsset("s1", new AssetData("", "", AssetTypeEnum.SOUND));
 
             // set players
@@ -54,13 +54,17 @@ namespace MG.Server.GameFlows
                 x.AddAction(this.GameData.CurrentTurnId, HoverClick);
                 x.Visible.Add(this.GameData.CurrentTurnId, true);
             });
+
+            ItemData text1 = ItemData.GetItemsByAttribute(this.GameData.Table, "text1").First();
+            PlayerData player = GameData.Players.Where(x => x.Id == GameData.CurrentTurnId).First();
+            text1.Text = "Turn " + player.Name + " " + player.GetStringAttribute("type").ToUpper();
         }
 
 
 
         public async Task HoverClick(ExecuteActionData data)
         {
-            Console.WriteLine("TikTakToeGameFlow HoverClick " + data);
+            Console.WriteLine("TikTakToeGameFlow HoverClick ");
 
             ItemData a;
             if (data.Player.GetStringAttribute("type") == "x")
@@ -89,7 +93,7 @@ namespace MG.Server.GameFlows
 
         public async Task RotateMe(ExecuteActionData data)
         {
-            Console.WriteLine("TikTakToeGameFlow RotateMe " + data);
+            Console.WriteLine("TikTakToeGameFlow RotateMe ");
 
             data.Item.Rotation.Y += 10;
             data.Item.Scale.X += 0.5;
@@ -102,15 +106,17 @@ namespace MG.Server.GameFlows
 
         public async override Task StartGame()
         {
-            Console.WriteLine("TikTakToeGameFlow StartGame " + this.GameData);
+            Console.WriteLine("TikTakToeGameFlow StartGame ");
 
-            addItem("a1").SetPosition(2, 1, -1);
-            addItem("a2").SetPosition(2, 1, 0);
-            addItem("a3").SetPosition(2, 1, 1).SetRotation(45).AddAction(RotateMe); ;
+            //addItem("a1").SetPosition(2, 1, -1);
+            //addItem("a2").SetPosition(2, 1, 0);
+            //addItem("a3").SetPosition(2, 1, 1).SetRotation(45).AddAction(RotateMe); ;
 
-            addItem("t1").SetPosition(1, 2, -1);
-            addItem("t2").SetPosition(2, 2, -1);
-            addItem("s1").SetPosition(1, 2, 1);
+            //addItem("t1").SetPosition(1, 2, -1);
+            //addItem("t2").SetPosition(0, 1, 0);
+            //addItem("s1").SetPosition(1, 2, 1);
+
+            addTextItem("this  is test !").SetPosition(0, 1, 0).AddAttribute("text1");
 
             addItem(Assets.BOARD_PNG).SetPosition(0, 0, 0).SetScale(3,1,3);
 
@@ -132,7 +138,21 @@ namespace MG.Server.GameFlows
         public async override Task EndGame()
         {
             // TODO !!!
-            Console.WriteLine("TikTakToeGameFlow EndGame " + this.GameData);
+            Console.WriteLine("TikTakToeGameFlow EndGame ");
+
+            ItemData text1 = ItemData.GetItemsByAttribute(this.GameData.Table, "text1").First();
+            
+            text1.Text = "Game ended: ";//  "Turn " + player.Name + " " + player.GetStringAttribute("type").ToUpper();
+            if (GameData.Winners.Count > 0)
+            {
+                PlayerData player = GameData.Winners[0];
+                text1.Text += player.GetStringAttribute("type").ToUpper() + " WIN !"; 
+
+            }
+            else
+            {
+                text1.Text += "TIE !";
+            }
 
 
         }
@@ -142,8 +162,8 @@ namespace MG.Server.GameFlows
 
             var board = getGameAsBoard();
 
-            Console.WriteLine(board);
-            ;
+            //Console.WriteLine(board);
+            
 
             if (isAWon(board,"x") || isAWon(board,"o") || (board.Where(x => x != "").Count() == 9))
             {
@@ -168,6 +188,7 @@ namespace MG.Server.GameFlows
                 }
                 catch (Exception)
                 {
+                    Console.WriteLine("ERRRRROOOROROROROORRORO  !!!!!!!!!!!!!!!!!!!!!!!!!!!!");
                     Console.WriteLine(board.ToString() + item);
                     throw;
                 }

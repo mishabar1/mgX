@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace MG.Server.Entities
 {
-    public class ItemData : BaseData<GameData>
+    public class ItemData : BaseData<ItemData>
     {
         public string Asset { get; set; }
 
@@ -16,6 +16,7 @@ namespace MG.Server.Entities
         public Dictionary<string, string> ClickActions { get; set; } // player id - action name
         public Dictionary<string, string> HoverActions { get; set; } // player id - action name
 
+        public string Text { get; set; }
 
         public List<ItemData> Items { get; set; }
 

@@ -21,7 +21,7 @@
         public const string SOUND = "SOUND"; // mp3 sound - can be played on demand
         public const string OBJECT = "OBJECT"; // stl, gbl or obj file to load a 3d model
         public const string TEXT3D = "TEXT3D"; // 3d text
-        public const string TEXTCSS = "TEXTCSS"; // 3d text
+        public const string TEXTBLOCK = "TEXTBLOCK"; // 3d text
         
 
     }

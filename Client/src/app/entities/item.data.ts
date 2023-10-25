@@ -11,10 +11,11 @@ export class ItemData {
   rotation!: V3;
   scale!: V3;
 
+  text?:string;
+
   visible! : any;
   clickActions! : any;
   hoverActions! : any;
-
 
   mesh?: THREE.Object3D;
   markForDelete!:boolean;

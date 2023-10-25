@@ -30,13 +30,14 @@ namespace MG.Server.Services
 
         public async void SetConnectionIDUser(string userId)
         {
+            Console.WriteLine("NotificationHub SetConnectionIDUser");
             await Groups.AddToGroupAsync(Context.ConnectionId, userId.ToString());
         }
 
 
         public async void ExecuteAction(ExecuteActionData s)
         {
-            Console.WriteLine("ExecuteAction "   + s);
+            Console.WriteLine("NotificationHub ExecuteAction");
             await _gameBL.ExecuteAction(s);
         }
 

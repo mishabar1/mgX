@@ -14,18 +14,18 @@ namespace MG.Server.GameFlows
 
         public override async Task Setup()
         {
-            Console.WriteLine("ChessGameFlow Setup " + this.GameData);
+            //Console.WriteLine("ChessGameFlow Setup " + this.GameData);
             throw new NotImplementedException();
         }
         public override Task StartGame()
         {
-            Console.WriteLine("ChessGameFlow StartGame " + this.GameData);
+            //Console.WriteLine("ChessGameFlow StartGame " + this.GameData);
             throw new NotImplementedException();
         }
 
         public override Task EndGame()
         {
-            Console.WriteLine("ChessGameFlow EndGame " + this.GameData);
+            //Console.WriteLine("ChessGameFlow EndGame " + this.GameData);
             throw new NotImplementedException();
         }
 

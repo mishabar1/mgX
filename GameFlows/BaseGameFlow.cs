@@ -93,11 +93,13 @@ namespace MG.Server.GameFlows
 
         public async Task ExecuteAction(ExecuteActionData data)
         {
+            Console.WriteLine("TikTakToeGameFlow ExecuteAction ");
+
             data.Item = GameData.FindItem(data.itemId);
             data.Player = GameData.FindPlayer(data.playerId);
             if(data.Item != null && data.Player != null)
             {
-                Console.WriteLine("TikTakToeGameFlow ExecuteAction " + data);
+                
                 Type thisType = GetType();
                 MethodInfo theMethod = thisType.GetMethod(data.actionId);
                 await (Task)theMethod.Invoke(this, new object[] { data });
@@ -107,12 +109,12 @@ namespace MG.Server.GameFlows
             var ended = await IsEndGame();
             if (ended)
             {
-                this.GameData.GameStatus = GameStatusEnum.ENDED;
-                
-                await EndGame();
+                this.GameData.GameStatus = GameStatusEnum.ENDED;                               
 
                 this.GameData.Winners = GetGameWinners();
                 Console.WriteLine("TikTakToeGameFlow GAME ENDED !!!!!! winners count: " + this.GameData.Winners.Count());
+
+                await EndGame();
 
             }
 
@@ -137,6 +139,14 @@ namespace MG.Server.GameFlows
         internal ItemData addItem(string assetKey, ItemData parentItem)
         {
             var item = new ItemData(assetKey, parentItem);
+            return item;
+        }
+
+        internal ItemData addTextItem(string text)
+        {
+            this.GameData.Assets.TryAdd("TEXTBLOCK", new AssetData("","", "TEXTBLOCK"));
+            var item = new ItemData("TEXTBLOCK", this.GameData.Table);
+            item.Text = text;
             return item;
         }
 

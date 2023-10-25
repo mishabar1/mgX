@@ -28,7 +28,7 @@ namespace MG.Server.BL
 
         private async void onTimerTick(object? state)
         {
-            Console.WriteLine("onTimerTick " + player.Name);                       
+            Console.WriteLine("AIAgent onTimerTick " + player.Name);                       
 
             if (this.gameData.GameStatus != GameStatusEnum.PLAY)
             {
@@ -62,7 +62,7 @@ namespace MG.Server.BL
             if (allGameItems.Count > 0)
             {
                 // play random
-                var idx = rnd.Next(0, allGameItems.Count - 1);
+                var idx = rnd.Next(0, allGameItems.Count);
                 var item = allGameItems[idx];
                 
 
