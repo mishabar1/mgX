@@ -33,10 +33,8 @@ import {
   Vector3,
   VectorKeyframeTrack
 } from 'three';
-import {VRButton} from 'three/examples/jsm/webxr/VRButton';
 import * as TWEEN from "@tweenjs/tween.js";
 import {XRControllerModelFactory} from 'three/examples/jsm/webxr/XRControllerModelFactory';
-import {ARButton} from 'three/examples/jsm/webxr/ARButton';
 import {XRTargetRaySpace} from 'three/src/renderers/webxr/WebXRController';
 import {ActivatedRoute, Router} from '@angular/router';
 import {color} from 'three/examples/jsm/nodes/shadernode/ShaderNodeBaseElements';
@@ -51,6 +49,7 @@ import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader';
 import {FontLoader} from 'three/examples/jsm/loaders/FontLoader';
 import {TextGeometry} from 'three/examples/jsm/geometries/TextGeometry';
 import * as ThreeMeshUI from 'three-mesh-ui'
+import {VRButton} from 'three/examples/jsm/webxr/VRButton';
 
 @Component({
   selector: 'app-game-play',
@@ -338,7 +337,9 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.textureLoader = new TextureLoader();
     this.fontLoader = new FontLoader();
 
-    document.body.appendChild( VRButton.createButton( this.renderer ) );
+    // debugger;
+    // const x = VRButton.createButton( this.renderer )
+    // document.body.appendChild( x );
     this.controllers = this.buildControllers();
     this.controllers.forEach((controller:any) => {
       controller.addEventListener('selectstart', this.onSelectStart);
@@ -699,6 +700,20 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   ngOnChanges(changes: SimpleChanges): void {
   }
 
+
+  currentSession:any = null;
+  onVrClick() {
+
+    const sessionInit = { optionalFeatures: [ 'local-floor', 'bounded-floor', 'hand-tracking', 'layers' ] };
+    // @ts-ignore
+    window.navigator.xr.requestSession( 'immersive-vr', sessionInit ).then( async session=>{
+      //session.addEventListener( 'end', this.onSessionEnded );
+      await this.renderer.xr.setSession( session );
+      this.currentSession = session;
+    } );
+
+
+  }
 
 
 

@@ -229,7 +229,7 @@ namespace MG.Server.GameFlows
                 return GameData.Players.Where(x => x.HaveAttribute("type", "o")).ToList();
             }
 
-            return null;
+            return new List<PlayerData>();
         }
 
         class Assets
