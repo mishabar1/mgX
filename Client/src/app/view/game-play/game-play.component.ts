@@ -64,7 +64,9 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
   @ViewChild('rendererContainer', {static: true}) rendererContainer!: ElementRef;
   scene!: THREE.Scene;
+  cameraGroup!:Group;
   camera!: THREE.PerspectiveCamera;
+  audioListener!: THREE.AudioListener;
   renderer!: THREE.WebGLRenderer;
   orbitControls!: OrbitControls;
   gltfLoader!: GLTFLoader;
@@ -148,6 +150,10 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     forEach(this.allItems, (item, key) => {
       if(item.markForDelete){
         this.removeAction(item);
+
+        if(item.playType){
+          (item.mesh!.children[0] as THREE.PositionalAudio).stop()
+        }
         item.mesh?.parent?.remove(item.mesh);
         delete this.allItems[item.id];
       }
@@ -269,12 +275,79 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.camera = new THREE.PerspectiveCamera(75, this.rendererContainer.nativeElement.clientWidth / this.rendererContainer.nativeElement.clientHeight, 0.1, 1000);
     this.camera.position.set(-1.8, 0.6, 2.7);
 
+    // create an AudioListener and add it to the camera
+    this.audioListener = new THREE.AudioListener();
+    this.camera.add( this.audioListener );
+
     // Initialize renderer
     this.renderer = new THREE.WebGLRenderer({antialias: true});
     this.renderer.xr.enabled = true;
     this.renderer.setSize(this.rendererContainer.nativeElement.clientWidth, this.rendererContainer.nativeElement.clientHeight);
     this.rendererContainer.nativeElement.appendChild(this.renderer.domElement);
 
+    this.renderer.xr.addEventListener("sessionstart", () => {
+
+
+      this.renderer.xr.getCamera().position.copy( this.camera.position);
+      this.renderer.xr.getCamera().lookAt( this.orbitControls.target );
+
+      // const xrManager = this.renderer.xr,
+      //   camera = this.camera,
+      //   baseReferenceSpace = xrManager.getReferenceSpace(),
+      //   offsetPosition = camera.position,
+      //   offsetRotation = camera.quaternion;
+      //
+      // // const transform = new XRRigidTransform( offsetPosition, { x: this.config.xrTiltOffset ? offsetRotation.x : 0, y: -(offsetRotation.y - this.config.xrPanOffset), z: offsetRotation.z, w: offsetRotation.w } ),
+      // //   //const transform = new XRRigidTransform( offsetPosition, { x: offsetRotation.x, y: -(offsetRotation.y - 0.5) , z: offsetRotation.z, w: offsetRotation.w } ),
+      // //   teleportSpaceOffset = baseReferenceSpace.getOffsetReferenceSpace( transform );
+      //
+      // const transform = new XRRigidTransform(offsetPosition, {
+      //     x: offsetRotation.x,
+      //     y: offsetRotation.y,
+      //     z: offsetRotation.z,
+      //     w: offsetRotation.w,
+      //   }),
+      //   teleportSpaceOffset = baseReferenceSpace!.getOffsetReferenceSpace( transform );
+      //
+      // xrManager.setReferenceSpace( teleportSpaceOffset );
+
+      // this.orbitControls.update();
+      //
+      // const baseReferenceSpace = this.renderer.xr.getReferenceSpace();
+      //
+      // const offsetPosition = this.camera.position;
+      //
+      // //const offsetRotation = camera.rotation;
+      //
+      // const offsetRotation = this.camera.quaternion;
+      //
+      // // const transform = new XRRigidTransform( offsetPosition, { x: offsetRotation.x, y: -(offsetRotation.y), z: offsetRotation.z, w: offsetRotation.w } );
+      // const transform = new XRRigidTransform( offsetPosition, { x: offsetRotation.x, y: -(offsetRotation.y - 0.85), z: offsetRotation.z, w: offsetRotation.w } );
+      // const teleportSpaceOffset = baseReferenceSpace!.getOffsetReferenceSpace( transform );
+      //
+      // this.renderer.xr.setReferenceSpace( teleportSpaceOffset );
+
+      // this.orbitControls.update();
+      //
+      // const baseReferenceSpace = this.renderer.xr.getReferenceSpace();
+      //
+      // const offsetPosition = this.camera.position;
+      //
+      //
+      // const offsetRotation = this.camera.quaternion;
+      //
+      // const transform = new XRRigidTransform( offsetPosition, { x: offsetRotation.x, y: -(offsetRotation.y), z: offsetRotation.z, w: offsetRotation.w } );
+      //
+      // const teleportSpaceOffset = baseReferenceSpace!.getOffsetReferenceSpace( transform );
+      //
+      // this.renderer.xr.setReferenceSpace( teleportSpaceOffset );
+
+    });
+    this.renderer.xr.addEventListener('sessionend', () => {
+      // this.camera.position
+      // TODO !!!!
+      debugger
+    });
 
 
 
@@ -337,7 +410,6 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.textureLoader = new TextureLoader();
     this.fontLoader = new FontLoader();
 
-    // debugger;
     // const x = VRButton.createButton( this.renderer )
     // document.body.appendChild( x );
     this.controllers = this.buildControllers();
@@ -510,9 +582,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
 
       }
-      if(assetType=="SOUND") {
 
-      }
       if(assetType=="TEXT3D") {
         this.fontLoader.load( 'https://threejs.org/examples/fonts/helvetiker_regular.typeface.json',  ( font )=> {
 
@@ -562,6 +632,29 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
         container.add(t1);
 
         this.processItem(itemData, container, parentMesh);
+
+      }
+      if(assetType=="SOUND") {
+
+        // console.log(itemData,frontURL,backURL,assetType);
+
+        // create the PositionalAudio object (passing in the listener)
+        const sound = new THREE.PositionalAudio( this.audioListener );
+
+        // load a sound and set it as the Audio object's buffer
+        const audioLoader = new THREE.AudioLoader();
+        audioLoader.load( frontURL, function( buffer ) {
+          sound.setBuffer( buffer );
+          sound.setLoop(itemData.playType=="LOOP");
+          sound.setVolume(1);
+          sound.play();
+          // sound.stop()
+        });
+
+        let soundGroup = new THREE.Group()
+        soundGroup.add(sound);
+        this.processItem(itemData, soundGroup, parentMesh);
+
 
       }
 
@@ -642,8 +735,6 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
   MeshClickFunc(event:any){
     console.log(event);
-    // debugger;
-    // event.stopPropagation();
 
     if(this.playerData){
       let action = event.target.userData.ItemData.clickActions[this.playerData.id] || event.target.userData.ItemData.clickActions[''];
@@ -695,6 +786,8 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     console.log("loadGame");
     // console.log(gameData, dayjs().startOf('month').add(1, 'day').set('year', 2018).format('YYYY-MM-DD HH:mm:ss'));
     this.createItem(this.gameData.table, null);
+
+    this.camera.position.set(this.playerData.camera.position.x,this.playerData.camera.position.y,this.playerData.camera.position.z);
   }
 
   ngOnChanges(changes: SimpleChanges): void {

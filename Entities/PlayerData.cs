@@ -28,6 +28,15 @@ namespace MG.Server.Entities
 
             game.Players.Add(this);
         }
+
+        internal PlayerData SetCameraPosition(int x, int y, int z)
+        {
+            this.Camera.Position.X = x;
+            this.Camera.Position.Y = y;
+            this.Camera.Position.Z = z;
+
+            return this;
+        }
     }
 
     

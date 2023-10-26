@@ -3,7 +3,7 @@ using System.Text;
 
 namespace MG.Server.Entities
 {
-    public class BaseData<T>
+    public class BaseData<T> where T: BaseData<T>
     {
         public string Id { get; set; }
         public string? Name { get; set; }
@@ -15,19 +15,19 @@ namespace MG.Server.Entities
             Attributes = new Dictionary<string, string>();
         }
 
-        internal BaseData<T> AddAttribute(string key)
+        internal T AddAttribute(string key)
         {
             return AddAttribute(key, "TRUE");
         }
-        internal BaseData<T> AddAttribute(string key, string val)
+        internal T AddAttribute(string key, string val)
         {
             Attributes.Add(key, val);
-            return this;
+            return (T)this;
         }
-        internal BaseData<T> AddAttribute(string key, double val)
+        internal T AddAttribute(string key, double val)
         {
             Attributes.Add(key, val.ToString());
-            return this;
+            return (T)this; 
         }
 
         internal double GetNumberAttribute(string key)

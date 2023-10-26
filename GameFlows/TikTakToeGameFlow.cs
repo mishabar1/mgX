@@ -33,11 +33,20 @@ namespace MG.Server.GameFlows
             addAsset("a3", new AssetData("ticktacktoe/a3.jpg", "", AssetTypeEnum.TOKEN));
             addAsset("t1", new AssetData("","",AssetTypeEnum.TEXT3D));
             addAsset("t2", new AssetData("", "", AssetTypeEnum.TEXTBLOCK));
-            addAsset("s1", new AssetData("", "", AssetTypeEnum.SOUND));
+
+            //add sound asset
+            addAsset("s1", new AssetData("ticktacktoe/beep.mp3", "", AssetTypeEnum.SOUND));
 
             // set players
-            new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }.AddAttribute("type", "x");
-            new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }.AddAttribute("type", "o");
+            // X
+            new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
+            .AddAttribute("type", "x")
+            .SetCameraPosition(0,2,3);
+            
+            //O
+            new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
+            .AddAttribute("type", "o")
+            .SetCameraPosition(0, 2, 3);
 
         }
 
@@ -84,6 +93,13 @@ namespace MG.Server.GameFlows
             // delete hover item
             removeItem(data.itemId);
 
+
+            //remove the sound
+            ItemData.GetItemsByAsset(GameData.Table, "s1").ForEach(x => { removeItem(x.Id); });
+
+            // start sound
+            playSound("s1", "ONCE"); // or "LOOP" // 
+
             //advance turn
 
             // set
@@ -120,6 +136,9 @@ namespace MG.Server.GameFlows
 
             addItem(Assets.BOARD_PNG).SetPosition(0, 0, 0).SetScale(3,1,3);
 
+            // start sound
+            playSound("s1", "LOOP"); // or "LOOP" // 
+
             addItem(Assets.HOVER).SetPosition(-1, 0, 1).AddAttribute("hover").AddAttribute("idx", "0").AddAttribute("x", -1).AddAttribute("z", 1);
             addItem(Assets.HOVER).SetPosition(0, 0, 1).AddAttribute("hover").AddAttribute("idx", "1").AddAttribute("x", 0).AddAttribute("z", 1);
             addItem(Assets.HOVER).SetPosition(1, 0, 1).AddAttribute("hover").AddAttribute("idx", "2").AddAttribute("x", 1).AddAttribute("z", 1);
@@ -143,7 +162,7 @@ namespace MG.Server.GameFlows
             ItemData text1 = ItemData.GetItemsByAttribute(this.GameData.Table, "text1").First();
             
             text1.Text = "Game ended: ";//  "Turn " + player.Name + " " + player.GetStringAttribute("type").ToUpper();
-            if (GameData.Winners.Count > 0)
+            if (GameData.Winners?.Count > 0)
             {
                 PlayerData player = GameData.Winners[0];
                 text1.Text += player.GetStringAttribute("type").ToUpper() + " WIN !"; 
@@ -173,6 +192,21 @@ namespace MG.Server.GameFlows
 
             return false;
         }
+        public override List<PlayerData> GetGameWinners()
+        {
+            var board = getGameAsBoard();
+            if (isAWon(board, "x"))
+            {
+                return GameData.Players.Where(x => x.HaveAttribute("type", "x")).ToList();
+            }
+            if (isAWon(board, "o"))
+            {
+                return GameData.Players.Where(x => x.HaveAttribute("type", "o")).ToList();
+            }
+
+            return new List<PlayerData>();
+        }
+
         private List<string> getGameAsBoard()
         {
             // get board as list
@@ -217,20 +251,7 @@ namespace MG.Server.GameFlows
             return false;
         }
 
-        public override List<PlayerData> GetGameWinners()
-        {
-            var board = getGameAsBoard();
-            if (isAWon(board, "x"))
-            {
-                return GameData.Players.Where(x=>x.HaveAttribute("type","x")).ToList();
-            }
-            if (isAWon(board, "o"))
-            {
-                return GameData.Players.Where(x => x.HaveAttribute("type", "o")).ToList();
-            }
-
-            return new List<PlayerData>();
-        }
+        
 
         class Assets
         {

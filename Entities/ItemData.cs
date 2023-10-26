@@ -17,6 +17,8 @@ namespace MG.Server.Entities
         public Dictionary<string, string> HoverActions { get; set; } // player id - action name
 
         public string Text { get; set; }
+        public string PlayType { get; set; }
+        
 
         public List<ItemData> Items { get; set; }
 
@@ -159,6 +161,31 @@ namespace MG.Server.Entities
             }
             return ret;
         }
+        public static List<ItemData> GetItemsByAsset(ItemData item, string assetKey)
+        {
+            var ret = new List<ItemData>();
+
+            if (item.Asset== assetKey)
+            {
+                ret.Add(item);
+            }
+            ret.AddRange(GetItemsByAsset(item.Items, assetKey));
+
+
+            return ret;
+        }
+        public static List<ItemData> GetItemsByAsset(List<ItemData> items, string assetKey)
+        {
+            var ret = new List<ItemData>();
+            foreach (var item in items)
+            {
+                ret.AddRange(GetItemsByAsset(item, assetKey));
+            }
+            return ret;
+        }
+
+
+
     }
 
 }

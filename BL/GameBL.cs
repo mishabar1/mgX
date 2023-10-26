@@ -87,8 +87,12 @@ namespace MG.Server.BL
 
         internal async Task<object> DeleteGame(StartGameData data)
         {
+            // find game in db
+            var game = _dataRepository.Games.Where(x => x.Id == data.gameId).FirstOrDefault();
+            game.GameStatus = GameStatusEnum.ENDED;
+            await game.GameFlow.EndGame();
 
-            _dataRepository.Games.RemoveAll(x => x.Id == data.gameId);
+            _dataRepository.Games.Remove(game);
             await DataRepository.Singleton.HubGameDeleted(data.gameId);
 
             return new { x = "TODO !!! DeleteGame" };

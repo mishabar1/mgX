@@ -13,10 +13,10 @@ namespace MG.Server.GameFlows
         public List<GameData> HistoryGameData { get; set; }
 
 
-        public static GameData CreateGame(string gameType,string userId)
+        public static GameData CreateGame(string gameType, string userId)
         {
             var game = new GameData();
-            
+
 
             switch (gameType)
             {
@@ -40,7 +40,7 @@ namespace MG.Server.GameFlows
         public BaseGameFlow(GameData gameData)
         {
             GameData = gameData;
-            GameData.GameFlow = this;            
+            GameData.GameFlow = this;
         }
 
         public async Task RunSetupFlow()
@@ -52,7 +52,7 @@ namespace MG.Server.GameFlows
             this.GameData.Winners = null;
             this.GameData.CurrentTurnId = null;
             this.GameData.GameStatus = GameStatusEnum.SETUP;
-            
+
             await Setup();
 
             // reset history
@@ -60,7 +60,7 @@ namespace MG.Server.GameFlows
 
             await DataRepository.Singleton.HubGameUpdated(GameData);
             await DataRepository.Singleton.HubGamesUpdated(GameData);
-        } 
+        }
         public abstract Task Setup();
 
         public async Task RunStartFlow()
@@ -97,9 +97,9 @@ namespace MG.Server.GameFlows
 
             data.Item = GameData.FindItem(data.itemId);
             data.Player = GameData.FindPlayer(data.playerId);
-            if(data.Item != null && data.Player != null)
+            if (data.Item != null && data.Player != null)
             {
-                
+
                 Type thisType = GetType();
                 MethodInfo theMethod = thisType.GetMethod(data.actionId);
                 await (Task)theMethod.Invoke(this, new object[] { data });
@@ -109,7 +109,7 @@ namespace MG.Server.GameFlows
             var ended = await IsEndGame();
             if (ended)
             {
-                this.GameData.GameStatus = GameStatusEnum.ENDED;                               
+                this.GameData.GameStatus = GameStatusEnum.ENDED;
 
                 this.GameData.Winners = GetGameWinners();
                 Console.WriteLine("TikTakToeGameFlow GAME ENDED !!!!!! winners count: " + this.GameData.Winners.Count());
@@ -133,7 +133,7 @@ namespace MG.Server.GameFlows
 
         internal ItemData addItem(string assetKey)
         {
-            var item = new ItemData(assetKey,this.GameData.Table);
+            var item = new ItemData(assetKey, this.GameData.Table);
             return item;
         }
         internal ItemData addItem(string assetKey, ItemData parentItem)
@@ -144,11 +144,20 @@ namespace MG.Server.GameFlows
 
         internal ItemData addTextItem(string text)
         {
-            this.GameData.Assets.TryAdd("TEXTBLOCK", new AssetData("","", "TEXTBLOCK"));
+            this.GameData.Assets.TryAdd("TEXTBLOCK", new AssetData("", "", "TEXTBLOCK"));
             var item = new ItemData("TEXTBLOCK", this.GameData.Table);
             item.Text = text;
             return item;
         }
+
+        internal ItemData playSound(string soundAssetKey, string playType="ONCE") // "ONCE" OR "LOOP"
+        {
+            var item = new ItemData(soundAssetKey, this.GameData.Table);
+            item.PlayType = playType;
+            return item;
+        }
+        
+
 
         internal void removeItem(string itemId)
         {
@@ -164,7 +173,7 @@ namespace MG.Server.GameFlows
             else
             {
                 var idx = this.GameData.Players.FindIndex(x => x.Id == this.GameData.CurrentTurnId);
-                if(idx == (this.GameData.Players.Count-1))
+                if (idx == (this.GameData.Players.Count - 1))
                 {
                     idx = 0;
                 }

@@ -47,7 +47,6 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
     // this.signalRService.hubConnection.off('GamesUpdated');
     // this.signalRService.hubConnection.on('GamesUpdated', data => {
     //   console.log('GamesUpdated', data);
-    //   debugger;
     //   // TODO !!!
     // });
     this.signalRService.hubConnection.off('GameDeleted');

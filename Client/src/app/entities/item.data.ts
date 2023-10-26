@@ -12,6 +12,7 @@ export class ItemData {
   scale!: V3;
 
   text?:string;
+  playType?:string;
 
   visible! : any;
   clickActions! : any;
