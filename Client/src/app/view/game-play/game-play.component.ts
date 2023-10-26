@@ -11,7 +11,7 @@ import {
 import * as THREE from 'three';
 import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader';
-import {InteractionManager} from 'three.interactive';
+// import {InteractionManager} from 'three.interactive';
 import {SignalrService} from '../../services/SignalrService';
 import {HttpClient} from '@angular/common/http';
 import {DALService} from '../../dal/dal.service';
@@ -50,6 +50,7 @@ import {FontLoader} from 'three/examples/jsm/loaders/FontLoader';
 import {TextGeometry} from 'three/examples/jsm/geometries/TextGeometry';
 import * as ThreeMeshUI from 'three-mesh-ui'
 import {VRButton} from 'three/examples/jsm/webxr/VRButton';
+import {InteractionManager} from '../../services/mg.interaction.manager';
 
 @Component({
   selector: 'app-game-play',
@@ -138,7 +139,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     return find(this.gameData.players,p=> p.user?.id==userId);
   }
   updateGame(new_game: GameData) {
-    console.log("updateGame",new_game);
+    //console.log("updateGame",new_game);
 
     //mark all items to delete - and each item that updated - will be mrked "not"
     forEach(this.allItems, (item, key) => {
@@ -164,7 +165,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   }
 
   updateItem(new_item: ItemData, parentMesh:any) {
-    console.log("updateItem",new_item, parentMesh);
+    //console.log("updateItem",new_item, parentMesh);
 
     let old_item = this.allItems[new_item.id];
     if(!old_item){
@@ -200,7 +201,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
 
   updateItemPosition(item: ItemData, position:V3){
-    console.log("updateItemPosition", item, position);
+    //console.log("updateItemPosition", item, position);
 
     item.position = position;
     // item.mesh!.position.set(position.x, position.y, position.z);
@@ -212,7 +213,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   }
 
   updateItemScale(item: ItemData, scale:V3){
-    console.log("updateItemScale", item, scale);
+    //console.log("updateItemScale", item, scale);
 
     item.scale = scale;
     // item.mesh!.position.set(position.x, position.y, position.z);
@@ -224,7 +225,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   }
 
   updateItemRotation(item: ItemData, rot:V3){
-    console.log("updateItemRotation", item, rot);
+    //console.log("updateItemRotation", item, rot);
 
     item.rotation = rot;
 
@@ -500,7 +501,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
 
   createItem(itemData: ItemData, parentMesh: THREE.Object3D | null) {
-    console.log("createItem",itemData,parentMesh);
+    //console.log("createItem",itemData,parentMesh);
 
     if(itemData.asset) {
       const frontURL = '\\assets\\games\\' + this.gameData.assets[itemData.asset].frontURL;
@@ -668,7 +669,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
   }
   processItem(itemData: ItemData, mesh:THREE.Object3D, parentMesh: THREE.Object3D | null){
-    console.log("processItem",itemData,mesh,parentMesh);
+    //console.log("processItem",itemData,mesh,parentMesh);
 
     // position
     mesh.position.set(itemData.position.x, itemData.position.y, itemData.position.z);
@@ -706,7 +707,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   }
 
   handleItemClickActions(itemData:ItemData){
-    console.log("handleItemClickActions",itemData);
+    //console.log("handleItemClickActions",itemData);
     let action = null;
     if(this.playerData){
       action = itemData.clickActions[this.playerData.id] || itemData.clickActions[''];
@@ -720,12 +721,12 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   }
 
   handleItemVisibility(itemData:ItemData){
-    console.log("handleItemVisibility",itemData);
+    //console.log("handleItemVisibility",itemData);
     let isVisible:boolean = keys(itemData.visible).length==0;
     if(this.playerData){
       isVisible = isVisible || itemData.visible[this.playerData.id]==true;
     }
-    console.log("handleItemVisibility","isVisible",isVisible);
+    //console.log("handleItemVisibility","isVisible",isVisible);
     itemData.mesh!.visible = isVisible;
 
     if(!isVisible){
@@ -734,16 +735,21 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   }
 
   MeshClickFunc(event:any){
-    console.log(event);
+    // console.log(event.point);
+    // const direction = new THREE.Vector3();
+    // direction.subVectors( event.target.position, event.point ) ;
+    // console.log(direction);
 
     if(this.playerData){
+
       let action = event.target.userData.ItemData.clickActions[this.playerData.id] || event.target.userData.ItemData.clickActions[''];
       this.signalRService.executeAction(
         this.gameData.id,
         this.playerData.id,
         event.target.userData.ItemData.id,
         action,
-        '', 0, 0);
+        '',
+        event.point);
     }
   }
   MeshMouseOverFunc(event:any){
@@ -763,7 +769,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   onMeshMouseOverFunc = this.MeshMouseOverFunc.bind(this);
   onMeshMouseOutFunc = this.MeshMouseOutFunc.bind(this);
   addClickAction(itemData: ItemData, action: string) {
-    console.log("addClickAction", itemData ,action);
+    //console.log("addClickAction", itemData ,action);
 
     this.removeAction(itemData);
 
@@ -776,7 +782,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.interactionManager.add(itemData.mesh!);
   }
   removeAction(itemData: ItemData) {
-    console.log("removeAction",itemData);
+    //console.log("removeAction",itemData);
     itemData.mesh!.removeEventListener('click',this.onMeshClickFunc);
     itemData.mesh!.removeEventListener('click',this.onMeshMouseOverFunc);
     this.interactionManager.remove(itemData.mesh!);

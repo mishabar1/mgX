@@ -137,7 +137,7 @@ namespace MG.Server.GameFlows
             addItem(Assets.BOARD_PNG).SetPosition(0, 0, 0).SetScale(3,1,3);
 
             // start sound
-            playSound("s1", "LOOP"); // or "LOOP" // 
+            //playSound("s1", "LOOP"); // or "LOOP" // 
 
             addItem(Assets.HOVER).SetPosition(-1, 0, 1).AddAttribute("hover").AddAttribute("idx", "0").AddAttribute("x", -1).AddAttribute("z", 1);
             addItem(Assets.HOVER).SetPosition(0, 0, 1).AddAttribute("hover").AddAttribute("idx", "1").AddAttribute("x", 0).AddAttribute("z", 1);

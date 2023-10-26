@@ -114,8 +114,7 @@ namespace MG.Server.Controllers
         public string actionId { get; set; }
         public string itemId { get; set; }
         public string? dragTargetItemId { get; set; }
-        public double clientX { get; set; }
-        public double clientY { get; set; }
+        public V3 point { get; set; }
 
         [JsonIgnore]public PlayerData? Player { get; set; }
         [JsonIgnore] public ItemData? Item { get; set; }
