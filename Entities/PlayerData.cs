@@ -25,8 +25,10 @@ namespace MG.Server.Entities
             Camera = new LocationData();
             Table = new ItemData("", null) { Name = "PLAYER_TABLE" };
             Hand = new ItemData("", null) { Name = "PLAYER_HAND" };
-
-            game.Players.Add(this);
+            if (game != null)
+            {
+                game.Players.Add(this);
+            }
         }
 
         internal PlayerData SetCameraPosition(int x, int y, int z)
@@ -43,6 +45,7 @@ namespace MG.Server.Entities
 
         public class PlayerTypeEnum
     {
+        public const string OBSERVER = "OBSERVER";
         public const string EMPTY_SEAT = "EMPTY_SEAT";
         public const string HUMAN = "HUMAN";
         public const string AI = "AI";

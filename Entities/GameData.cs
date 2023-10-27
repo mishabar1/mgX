@@ -16,6 +16,8 @@ namespace MG.Server.Entities
         public string CurrentTurnId { get; set; }
         public List<PlayerData> Winners { get; set; }
 
+        public LocationData Observer { get; set; }
+
         [JsonIgnore] public BaseGameFlow GameFlow { get; set; }
 
         public GameData() : base()
@@ -23,6 +25,7 @@ namespace MG.Server.Entities
             Assets = new Dictionary<string, AssetData>();
             Table = ItemData.Table();
             Players = new List<PlayerData>();
+            Observer = new LocationData();
         }
 
         public GameData DeepCopy()

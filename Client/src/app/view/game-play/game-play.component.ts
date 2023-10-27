@@ -270,11 +270,23 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   initThree() {
     // Initialize scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xffffff)
+    // this.scene.background = new THREE.Color(0xffffff)
+    const loader = new THREE.CubeTextureLoader();
+    // 'ft', 'bk', 'up', 'dn', 'rt', 'lf'
+    const texture = loader.load([
+      'assets/skyboxes/afterrain/afterrain_ft.jpg',
+      'assets/skyboxes/afterrain/afterrain_bk.jpg',
+      'assets/skyboxes/afterrain/afterrain_up.jpg',
+      'assets/skyboxes/afterrain/afterrain_dn.jpg',
+      'assets/skyboxes/afterrain/afterrain_rt.jpg',
+      'assets/skyboxes/afterrain/afterrain_lf.jpg'
+    ]);
+    this.scene.background = texture;
+
 
     // Initialize camera
-    this.camera = new THREE.PerspectiveCamera(75, this.rendererContainer.nativeElement.clientWidth / this.rendererContainer.nativeElement.clientHeight, 0.1, 1000);
-    this.camera.position.set(-1.8, 0.6, 2.7);
+    this.camera = new THREE.PerspectiveCamera(75, this.rendererContainer.nativeElement.clientWidth / this.rendererContainer.nativeElement.clientHeight, 0.1, 5000);
+    // this.camera.position.set(-1.8, 0.6, 2.7);
 
     // create an AudioListener and add it to the camera
     this.audioListener = new THREE.AudioListener();
@@ -370,6 +382,9 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
     this.orbitControls.addEventListener('change', () => {
       this.renderer.render(this.scene, this.camera);
+
+      console.log("CAMERA",this.camera.position);
+
     });
     this.orbitControls.enableZoom = true
     this.orbitControls.update();
@@ -793,7 +808,12 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     // console.log(gameData, dayjs().startOf('month').add(1, 'day').set('year', 2018).format('YYYY-MM-DD HH:mm:ss'));
     this.createItem(this.gameData.table, null);
 
-    this.camera.position.set(this.playerData.camera.position.x,this.playerData.camera.position.y,this.playerData.camera.position.z);
+    if(this.playerData){
+      this.camera.position.set(this.playerData.camera.position.x,this.playerData.camera.position.y,this.playerData.camera.position.z);
+    }else{
+      this.camera.position.set(this.gameData.observer.position.x,this.gameData.observer.position.y,this.gameData.observer.position.z);
+    }
+
   }
 
   ngOnChanges(changes: SimpleChanges): void {

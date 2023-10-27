@@ -35,6 +35,7 @@ namespace MG.Server.GameFlows
 
             game.GameStatus = GameStatusEnum.CREATED;
             game.CreatorId = userId;
+
             return game;
         }
         public BaseGameFlow(GameData gameData)

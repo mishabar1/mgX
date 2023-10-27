@@ -2,6 +2,7 @@ import { ItemData } from "./item.data";
 import { PlayerData } from "./player.data";
 import {AssetData} from './asset.data';
 import {find} from 'lodash';
+import {LocationData} from './location.data';
 
 export class GameData {
 
@@ -17,8 +18,7 @@ export class GameData {
   players!: PlayerData[];
   winners?: PlayerData[];
 
-
-
+  observer!:LocationData;
 
 }
 
