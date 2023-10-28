@@ -20,12 +20,14 @@ namespace MG.Server.GameFlows
             addAsset("MAP_1_2", new AssetData("dnd/map_1_2.png", "", AssetTypeEnum.TOKEN));
             addAsset("MAP_1_3", new AssetData("dnd/map_1_3.png", "", AssetTypeEnum.TOKEN));
 
-            GameData.Observer.Position.Y = 2;
-            GameData.Observer.Position.Z = 3;
+            addAsset("X", new AssetData("ticktacktoe/x.glb"));
+            addAsset("O", new AssetData("ticktacktoe/o.glb"));
+
+            GameData.Observer.Position.Set(0, 12, 0);
 
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
             .AddAttribute("type", "DungeonMaster")
-            .SetCameraPosition(0, 800, 450);
+            .SetCameraPosition(0, 20, 10);
         }
         public override async Task StartGame()
         {
@@ -33,13 +35,16 @@ namespace MG.Server.GameFlows
 
             addItem("MAP_1_0")
                 .SetPosition(0, 0, 0)
-                .SetScale(1128, 1, 876).AddAction(MapClick); ;
+                .SetScale(1128/40, 1, 876/40).AddAction(MapClick); ;
 
         }
 
         public async Task MapClick(ExecuteActionData data)
         {
             Console.WriteLine(data.point);
+
+            addItem("X").SetPosition(data.point);
+
         }
 
         public override async Task EndGame()

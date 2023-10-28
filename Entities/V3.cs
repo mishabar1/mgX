@@ -17,6 +17,20 @@ namespace MG.Server.Entities
             Z = z;
         }
 
+        public void Set(double x, double y, double z)
+        {
+            X = x;
+            Y = y;
+            Z = z;
+        }
+
+        public void Set(V3 v3)
+        {
+            X = v3.X;
+            Y = v3.Y;
+            Z = v3.Z;
+        }
+
 
     }
 }

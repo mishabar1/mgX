@@ -111,6 +111,11 @@ namespace MG.Server.Entities
             Position.Z = z;
             return this;
         }
+        internal ItemData SetPosition(V3 pos)
+        {
+            Position = pos;
+            return this;
+        }
 
         internal ItemData SetScale(double a)
         {

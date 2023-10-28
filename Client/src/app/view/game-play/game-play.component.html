@@ -9,3 +9,22 @@
 <div style="position: absolute;bottom: 0;right: 0;">
   <button (click)="onVrClick()" style="width: 100px;height: 30px">VR</button>
 </div>
+
+<div *ngIf="scene" style="position: absolute;top: 0px;right: 0px;">
+  <button (click)="showDebug()" style="width: 100px;height: 30px">DEBUG</button>
+</div>
+
+<div *ngIf="scene && showDebugWindow" style="position: absolute;top: 0px;right: 0px;width: 500px;height: 400px;background: red;overflow: auto;">
+  <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: camera}"></ng-container>
+  <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: scene}"></ng-container>
+</div>
+
+<ng-template  #tmpl let-obj>
+
+  {{getAnyClass(obj)}} {{obj.name}} <button (click)="onRemoveClick(obj)">REMOVE</button>
+  {{obj.position | json}}
+
+  <div *ngFor="let chobj of obj.children;" style="padding-left: 10px;">
+    <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: chobj}"></ng-container>
+  </div>
+</ng-template >

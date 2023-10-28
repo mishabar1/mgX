@@ -95,6 +95,9 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   // animationsObjects:any=[];
 
   gameId:string|null = "";
+
+  debugObjects:any[]=[];
+
   constructor(public signalRService: SignalrService,
               private router: Router,
               private generalService: GeneralService,
@@ -428,11 +431,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
     // const x = VRButton.createButton( this.renderer )
     // document.body.appendChild( x );
-    this.controllers = this.buildControllers();
-    this.controllers.forEach((controller:any) => {
-      controller.addEventListener('selectstart', this.onSelectStart);
-      controller.addEventListener('selectend', this.onSelectEnd);
-    });
+
 
     this.loadGame();
   }
@@ -823,6 +822,12 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   currentSession:any = null;
   onVrClick() {
 
+    this.controllers = this.buildControllers();
+    this.controllers.forEach((controller:any) => {
+      controller.addEventListener('selectstart', this.onSelectStart);
+      controller.addEventListener('selectend', this.onSelectEnd);
+    });
+
     const sessionInit = { optionalFeatures: [ 'local-floor', 'bounded-floor', 'hand-tracking', 'layers' ] };
     // @ts-ignore
     window.navigator.xr.requestSession( 'immersive-vr', sessionInit ).then( async session=>{
@@ -835,5 +840,29 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   }
 
 
+  loadDebugObjects() {
+    this.debugObjects=[];
+    this.scene.traverse( ( object:any ) =>{
 
+      // if ( object.isMesh ) {
+        this.debugObjects.push(object);
+        console.log( object )
+      // };
+
+    } );
+  }
+
+  showDebugWindow=false;
+  getAnyClass(obj:any) {
+    if (typeof obj === "undefined") return "undefined";
+    if (obj === null) return "null";
+    return obj.constructor.name  }
+
+  onRemoveClick(obj: any) {
+    obj.removeFromParent();
+  }
+
+  showDebug() {
+    this.showDebugWindow=true;
+  }
 }
