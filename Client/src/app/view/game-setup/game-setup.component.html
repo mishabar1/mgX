@@ -1,7 +1,10 @@
 <div *ngIf="gameData" style="overflow: auto;width: 100%;height: 100%;padding: 20px;">
   <div style="font-size: 20px;">Settings</div>
-  <div>
-    <ngx-json-viewer [json]="gameData" [depth]="1"></ngx-json-viewer>
+
+  <div class="mg-row-center" style="margin-top: 20px;">
+    <p-button (onClick)="setup()" severity="secondary">SETUP</p-button>
+    <p-button (onClick)="start()" severity="warning">START</p-button>
+    <p-button (onClick)="open()" severity="success">OPEN</p-button>
   </div>
 
   <div class="mg-col">
@@ -15,10 +18,10 @@
     </div>
   </div>
 
-  <div class="mg-row-center" style="margin-top: 20px;">
-    <p-button (onClick)="setup()" severity="secondary">SETUP</p-button>
-    <p-button (onClick)="start()" severity="warning">START</p-button>
-    <p-button (onClick)="open()" severity="success">OPEN</p-button>
+
+
+  <div>
+    <ngx-json-viewer [json]="gameData" [depth]="1"></ngx-json-viewer>
   </div>
 
 <!--  {{gameData | json}}-->

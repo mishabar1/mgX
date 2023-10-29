@@ -17,8 +17,7 @@ namespace MG.Server.GameFlows
         {
             var game = new GameData();
 
-
-            switch (gameType)
+            switch (gameType!)
             {
                 case GameTypeEnum.TIK_TAK_TOE:
                     game.GameFlow = new TikTakToeGameFlow(game);
@@ -33,6 +32,13 @@ namespace MG.Server.GameFlows
                     break;
             }
 
+            //switch (gameType)
+            //{
+            //    case GameTypeEnum.TIK_TAK_TOE.Name:
+            //        break;
+
+            //}
+
             game.GameStatus = GameStatusEnum.CREATED;
             game.CreatorId = userId;
 
@@ -46,8 +52,7 @@ namespace MG.Server.GameFlows
 
         public async Task RunSetupFlow()
         {
-            // reset all
-            this.GameData.Assets = new Dictionary<string, AssetData>();
+            // reset all            
             this.GameData.Table = ItemData.Table();
             this.GameData.Players = new List<PlayerData>();
             this.GameData.Winners = null;
@@ -126,34 +131,36 @@ namespace MG.Server.GameFlows
 
         }
 
-        internal AssetData addAsset(string assetKey, AssetData asset)
+        internal AssetData addAsset(AssetData asset)
         {
-            this.GameData.Assets.Add(assetKey, asset);
+            this.GameData.Assets.Add(asset.Name, asset);
             return asset;
         }
-
-        internal ItemData addItem(string assetKey)
+        
+        internal ItemData addItem(AssetData asset)
         {
-            var item = new ItemData(assetKey, this.GameData.Table);
+            var item = new ItemData(asset.Name, this.GameData.Table);
             return item;
         }
-        internal ItemData addItem(string assetKey, ItemData parentItem)
+        //internal ItemData addItem(string assetKey)
+        //{
+        //    var item = new ItemData(assetKey, this.GameData.Table);
+        //    return item;
+        //}
+
+        internal ItemData addTextItem(AssetData asset)
         {
-            var item = new ItemData(assetKey, parentItem);
+            // TODO !!!!
+            //this.GameData.Assets.TryAdd("TEXTBLOCK", new AssetData("", "", "TEXTBLOCK"));
+            //var item = new ItemData("TEXTBLOCK", this.GameData.Table);
+            var item = new ItemData(asset.Name, this.GameData.Table);
+            //item.Text = text;
             return item;
         }
 
-        internal ItemData addTextItem(string text)
+        internal ItemData playSound(AssetData asset, string playType="ONCE") // "ONCE" OR "LOOP"
         {
-            this.GameData.Assets.TryAdd("TEXTBLOCK", new AssetData("", "", "TEXTBLOCK"));
-            var item = new ItemData("TEXTBLOCK", this.GameData.Table);
-            item.Text = text;
-            return item;
-        }
-
-        internal ItemData playSound(string soundAssetKey, string playType="ONCE") // "ONCE" OR "LOOP"
-        {
-            var item = new ItemData(soundAssetKey, this.GameData.Table);
+            var item = new ItemData(asset.Name, this.GameData.Table);
             item.PlayType = playType;
             return item;
         }

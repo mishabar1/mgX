@@ -143,6 +143,12 @@ namespace MG.Server.Entities
         }
 
 
+        internal ItemData SetText(string text)
+        {
+            Text = text;
+            return this;
+        }
+
 
         public static List<ItemData> GetItemsByAttribute(ItemData item, string key)
         {
@@ -166,25 +172,25 @@ namespace MG.Server.Entities
             }
             return ret;
         }
-        public static List<ItemData> GetItemsByAsset(ItemData item, string assetKey)
+        public static List<ItemData> GetItemsByAsset(ItemData item, AssetData asset)
         {
             var ret = new List<ItemData>();
 
-            if (item.Asset== assetKey)
+            if (item.Asset== asset.Name)
             {
                 ret.Add(item);
             }
-            ret.AddRange(GetItemsByAsset(item.Items, assetKey));
+            ret.AddRange(GetItemsByAsset(item.Items, asset));
 
 
             return ret;
         }
-        public static List<ItemData> GetItemsByAsset(List<ItemData> items, string assetKey)
+        public static List<ItemData> GetItemsByAsset(List<ItemData> items, AssetData asset)
         {
             var ret = new List<ItemData>();
             foreach (var item in items)
             {
-                ret.AddRange(GetItemsByAsset(item, assetKey));
+                ret.AddRange(GetItemsByAsset(item, asset));
             }
             return ret;
         }

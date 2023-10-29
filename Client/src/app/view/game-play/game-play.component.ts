@@ -386,7 +386,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.orbitControls.addEventListener('change', () => {
       this.renderer.render(this.scene, this.camera);
 
-      console.log("CAMERA",this.camera.position);
+      //console.log("CAMERA",this.camera.position);
 
     });
     this.orbitControls.enableZoom = true

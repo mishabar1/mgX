@@ -8,34 +8,41 @@ namespace MG.Server.GameFlows
 {
     public class TikTakToeGameFlow : BaseGameFlow
     {
+        internal class Assets
+        {
+            internal static TokenAssetData BOARD = new TokenAssetData("BOARD", "ticktacktoe/board.png");
+            internal static ObjectAssetData HOVER = new ObjectAssetData("HOVER", "ticktacktoe/hover.gltf");
+            internal static ObjectAssetData X = new ObjectAssetData("X", "ticktacktoe/x.glb");
+            internal static ObjectAssetData O = new ObjectAssetData("O", "ticktacktoe/o.glb");
+
+            internal static Text3dAssetData TEST_TEXT3D = new Text3dAssetData("TEST_TEXT3D", "this is test text");
+            internal static TextBlockAssetData TEST_TEXTBLOCK = new TextBlockAssetData("TEST_TEXTBLOCK", "xxx");
+            internal static SoundAssetData TEST_SOUND = new SoundAssetData("TEST_SOUND", "ticktacktoe/beep.mp3");
+
+        }
+
         public TikTakToeGameFlow(GameData gameData) : base(gameData)
         {
             gameData.GameType = GameTypeEnum.TIK_TAK_TOE;
+
+            addAsset(Assets.BOARD);
+            addAsset(Assets.HOVER);
+            addAsset(Assets.X);
+            addAsset(Assets.O);
+
+            //some tests
+            addAsset(Assets.TEST_TEXT3D);
+            addAsset(Assets.TEST_TEXTBLOCK);
+            addAsset(Assets.TEST_SOUND);
+
         }
 
 
         public override async Task Setup()
         {
             Console.WriteLine("TikTakToeGameFlow Setup ");
-            
-            // create assets
-            addAsset(Assets.BOARD, new AssetData("ticktacktoe/board.glb"));
-            addAsset(Assets.HOVER, new AssetData("ticktacktoe/hover.gltf"));
-            addAsset(Assets.X, new AssetData("ticktacktoe/x.glb"));
-            addAsset(Assets.O, new AssetData("ticktacktoe/o.glb"));
 
-            addAsset(Assets.BOARD_PNG, new AssetData("ticktacktoe/board.png","",AssetTypeEnum.TOKEN));
-            addAsset(Assets.X_PNG, new AssetData("ticktacktoe/x.png", "", AssetTypeEnum.TOKEN));
-            addAsset(Assets.O_PNG, new AssetData("ticktacktoe/o.png", "", AssetTypeEnum.TOKEN));
-
-            addAsset("a1", new AssetData("ticktacktoe/a1.png", "", AssetTypeEnum.TOKEN));
-            addAsset("a2", new AssetData("ticktacktoe/a22.png", "", AssetTypeEnum.TOKEN));
-            addAsset("a3", new AssetData("ticktacktoe/a3.jpg", "", AssetTypeEnum.TOKEN));
-            addAsset("t1", new AssetData("","",AssetTypeEnum.TEXT3D));
-            addAsset("t2", new AssetData("", "", AssetTypeEnum.TEXTBLOCK));
-
-            //add sound asset
-            addAsset("s1", new AssetData("ticktacktoe/beep.mp3", "", AssetTypeEnum.SOUND));
+            GameData.Observer.Position.Set(0, 3, 0);
 
             // set players
             // X
@@ -70,7 +77,6 @@ namespace MG.Server.GameFlows
         }
 
 
-
         public async Task HoverClick(ExecuteActionData data)
         {
             Console.WriteLine("TikTakToeGameFlow HoverClick ");
@@ -95,10 +101,11 @@ namespace MG.Server.GameFlows
 
 
             //remove the sound
-            ItemData.GetItemsByAsset(GameData.Table, "s1").ForEach(x => { removeItem(x.Id); });
+            ItemData.GetItemsByAsset(GameData.Table, Assets.TEST_SOUND).ForEach(x => { removeItem(x.Id); });
 
             // start sound
-            playSound("s1", "ONCE"); // or "LOOP" // 
+            playSound(Assets.TEST_SOUND, "ONCE"); // or "LOOP" // 
+
 
             //advance turn
 
@@ -132,9 +139,9 @@ namespace MG.Server.GameFlows
             //addItem("t2").SetPosition(0, 1, 0);
             //addItem("s1").SetPosition(1, 2, 1);
 
-            addTextItem("this  is test !").SetPosition(0, 1, 0).AddAttribute("text1");
+            addTextItem(Assets.TEST_TEXTBLOCK).SetPosition(0, 1, 0).AddAttribute("text1").SetText("aaa");
 
-            addItem(Assets.BOARD_PNG).SetPosition(0, 0, 0).SetScale(3,1,3);
+            addItem(Assets.BOARD).SetPosition(0, 0, 0).SetScale(3,1,3);
 
             // start sound
             //playSound("s1", "LOOP"); // or "LOOP" // 
@@ -251,20 +258,8 @@ namespace MG.Server.GameFlows
             return false;
         }
 
-        
+       
 
-        class Assets
-        {
-            public const string BOARD = "BOARD";
-            public const string HOVER = "HOVER";
-            public const string X = "X";
-            public const string O = "O";
-
-            public const string BOARD_PNG = "BOARD_PNG";
-            public const string HOVER_PNG = "HOVER_PNG";
-            public const string X_PNG = "X_PNG";
-            public const string O_PNG = "O_PNG";
-        }
     }
 
 
