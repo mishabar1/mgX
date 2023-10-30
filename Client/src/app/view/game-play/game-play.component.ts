@@ -855,7 +855,9 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   getAnyClass(obj:any) {
     if (typeof obj === "undefined") return "undefined";
     if (obj === null) return "null";
-    return obj.constructor.name  }
+    return obj.type
+      //.constructor.name
+     }
 
   onRemoveClick(obj: any) {
     obj.removeFromParent();
