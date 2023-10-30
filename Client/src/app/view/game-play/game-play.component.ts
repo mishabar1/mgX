@@ -595,13 +595,12 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
         });
 
-
       }
 
       if(assetType=="TEXT3D") {
         this.fontLoader.load( 'https://threejs.org/examples/fonts/helvetiker_regular.typeface.json',  ( font )=> {
 
-          const geometry = new TextGeometry( 'Hello three.js!', {
+          const geometry = new TextGeometry( itemData.text!, {
             font: font,
             size: 0.5,
             height: 0.2,

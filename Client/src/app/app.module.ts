@@ -13,6 +13,7 @@ import { GamesListComponent } from './view/games-list/games-list.component';
 import { GameSetupComponent } from './view/game-setup/game-setup.component';
 import {NgxJsonViewerModule} from 'ngx-json-viewer';
 import { EditorComponent } from './view/editor/editor.component';
+import { FontAwesomeModule } from '@fortawesome/angular-fontawesome'
 
 @NgModule({
   declarations: [
@@ -31,7 +32,8 @@ import { EditorComponent } from './view/editor/editor.component';
     ButtonModule,
     CheckboxModule,
     HttpClientModule,
-    NgxJsonViewerModule
+    NgxJsonViewerModule,
+    FontAwesomeModule
   ],
   providers: [],
   bootstrap: [AppComponent]

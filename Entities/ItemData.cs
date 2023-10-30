@@ -142,12 +142,12 @@ namespace MG.Server.Entities
             return this;
         }
 
-
         internal ItemData SetText(string text)
         {
             Text = text;
             return this;
         }
+
 
 
         public static List<ItemData> GetItemsByAttribute(ItemData item, string key)

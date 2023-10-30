@@ -10,15 +10,15 @@ namespace MG.Server.GameFlows
     {
         internal class Assets
         {
-            internal static TokenAssetData BOARD = new TokenAssetData("BOARD", "ticktacktoe/board.png");
-            internal static ObjectAssetData HOVER = new ObjectAssetData("HOVER", "ticktacktoe/hover.gltf");
-            internal static ObjectAssetData X = new ObjectAssetData("X", "ticktacktoe/x.glb");
-            internal static ObjectAssetData O = new ObjectAssetData("O", "ticktacktoe/o.glb");
+            //internal static AssetData BOARD = new TokenAssetData("BOARD", "ticktacktoe/board.png");
+            internal static AssetData BOARD = new ObjectAssetData("BOARD", "ticktacktoe/board.glb");
+            internal static AssetData HOVER = new ObjectAssetData("HOVER", "ticktacktoe/hover.gltf");
+            internal static AssetData X = new ObjectAssetData("X", "ticktacktoe/x.glb");
+            internal static AssetData O = new ObjectAssetData("O", "ticktacktoe/o.glb");
 
-            internal static Text3dAssetData TEST_TEXT3D = new Text3dAssetData("TEST_TEXT3D", "this is test text");
-            internal static TextBlockAssetData TEST_TEXTBLOCK = new TextBlockAssetData("TEST_TEXTBLOCK", "xxx");
-            internal static SoundAssetData TEST_SOUND = new SoundAssetData("TEST_SOUND", "ticktacktoe/beep.mp3");
-
+            internal static AssetData TEST_TEXT3D = new Text3dAssetData("TEST_TEXT3D", "this is test text");
+            internal static AssetData TEST_TEXTBLOCK = new TextBlockAssetData("TEST_TEXTBLOCK", "xxx");
+            internal static AssetData TEST_SOUND = new SoundAssetData("TEST_SOUND", "ticktacktoe/beep.mp3");
         }
 
         public TikTakToeGameFlow(GameData gameData) : base(gameData)
@@ -42,7 +42,7 @@ namespace MG.Server.GameFlows
         {
             Console.WriteLine("TikTakToeGameFlow Setup ");
 
-            GameData.Observer.Position.Set(0, 3, 0);
+            GameData.Observer.Position.Set(0, 4, 0);
 
             // set players
             // X
@@ -56,6 +56,39 @@ namespace MG.Server.GameFlows
             .SetCameraPosition(0, 2, 3);
 
         }
+
+        public async override Task StartGame()
+        {
+            Console.WriteLine("TikTakToeGameFlow StartGame ");
+
+            addTextItem(Assets.TEST_TEXTBLOCK).SetPosition(0, 1, 0).AddAttribute("text1").SetText("START");
+
+            //demo
+            //addItem(Assets.BOARD).SetPosition(0, 0, 0).SetScale(3, 1, 3);
+            
+            addItem(Assets.BOARD).SetPosition(0, 0, 0);
+
+            // start sound
+            //playSound(Assets.SOUND1, "LOOP"); // or "LOOP" // 
+
+            addItem(Assets.HOVER).SetPosition(-1, 0, 1).AddAttribute("hover").AddAttribute("idx", "0").AddAttribute("x", -1).AddAttribute("z", 1);
+            addItem(Assets.HOVER).SetPosition(0, 0, 1).AddAttribute("hover").AddAttribute("idx", "1").AddAttribute("x", 0).AddAttribute("z", 1);
+            addItem(Assets.HOVER).SetPosition(1, 0, 1).AddAttribute("hover").AddAttribute("idx", "2").AddAttribute("x", 1).AddAttribute("z", 1);
+            addItem(Assets.HOVER).SetPosition(-1, 0, 0).AddAttribute("hover").AddAttribute("idx", "3").AddAttribute("x", -1).AddAttribute("z", 0);
+            addItem(Assets.HOVER).SetPosition(0, 0, 0).AddAttribute("hover").AddAttribute("idx", "4").AddAttribute("x", 0).AddAttribute("z", 0);
+            addItem(Assets.HOVER).SetPosition(1, 0, 0).AddAttribute("hover").AddAttribute("idx", "5").AddAttribute("x", 1).AddAttribute("z", 0);
+            addItem(Assets.HOVER).SetPosition(-1, 0, -1).AddAttribute("hover").AddAttribute("idx", "6").AddAttribute("x", -1).AddAttribute("z", -1);
+            addItem(Assets.HOVER).SetPosition(0, 0, -1).AddAttribute("hover").AddAttribute("idx", "7").AddAttribute("x", 0).AddAttribute("z", -1);
+            addItem(Assets.HOVER).SetPosition(1, 0, -1).AddAttribute("hover").AddAttribute("idx", "8").AddAttribute("x", 1).AddAttribute("z", -1);
+
+
+            // demo
+            //addItem(Assets.TEST_TEXT3D).SetPosition(0, 1, 0).SetText("aaaa").AddAction(RotateMe);
+
+            advanceNextTurn();
+            setActionsByCurrentTurn();
+        }
+
 
 
         private void setActionsByCurrentTurn()
@@ -125,40 +158,7 @@ namespace MG.Server.GameFlows
                 data.Item.Scale.X = 0.5;
             }
         }
-
-
-        public async override Task StartGame()
-        {
-            Console.WriteLine("TikTakToeGameFlow StartGame ");
-
-            //addItem("a1").SetPosition(2, 1, -1);
-            //addItem("a2").SetPosition(2, 1, 0);
-            //addItem("a3").SetPosition(2, 1, 1).SetRotation(45).AddAction(RotateMe); ;
-
-            //addItem("t1").SetPosition(1, 2, -1);
-            //addItem("t2").SetPosition(0, 1, 0);
-            //addItem("s1").SetPosition(1, 2, 1);
-
-            addTextItem(Assets.TEST_TEXTBLOCK).SetPosition(0, 1, 0).AddAttribute("text1").SetText("aaa");
-
-            addItem(Assets.BOARD).SetPosition(0, 0, 0).SetScale(3,1,3);
-
-            // start sound
-            //playSound("s1", "LOOP"); // or "LOOP" // 
-
-            addItem(Assets.HOVER).SetPosition(-1, 0, 1).AddAttribute("hover").AddAttribute("idx", "0").AddAttribute("x", -1).AddAttribute("z", 1);
-            addItem(Assets.HOVER).SetPosition(0, 0, 1).AddAttribute("hover").AddAttribute("idx", "1").AddAttribute("x", 0).AddAttribute("z", 1);
-            addItem(Assets.HOVER).SetPosition(1, 0, 1).AddAttribute("hover").AddAttribute("idx", "2").AddAttribute("x", 1).AddAttribute("z", 1);
-            addItem(Assets.HOVER).SetPosition(-1, 0, 0).AddAttribute("hover").AddAttribute("idx", "3").AddAttribute("x", -1).AddAttribute("z", 0);
-            addItem(Assets.HOVER).SetPosition(0, 0, 0).AddAttribute("hover").AddAttribute("idx", "4").AddAttribute("x", 0).AddAttribute("z", 0);
-            addItem(Assets.HOVER).SetPosition(1, 0, 0).AddAttribute("hover").AddAttribute("idx", "5").AddAttribute("x", 1).AddAttribute("z", 0);
-            addItem(Assets.HOVER).SetPosition(-1, 0, -1).AddAttribute("hover").AddAttribute("idx", "6").AddAttribute("x", -1).AddAttribute("z", -1);
-            addItem(Assets.HOVER).SetPosition(0, 0, -1).AddAttribute("hover").AddAttribute("idx", "7").AddAttribute("x", 0).AddAttribute("z", -1);
-            addItem(Assets.HOVER).SetPosition(1, 0, -1).AddAttribute("hover").AddAttribute("idx", "8").AddAttribute("x", 1).AddAttribute("z", -1);
-
-            advanceNextTurn();
-            setActionsByCurrentTurn();
-        }
+                
 
 
         public async override Task EndGame()
@@ -166,9 +166,14 @@ namespace MG.Server.GameFlows
             // TODO !!!
             Console.WriteLine("TikTakToeGameFlow EndGame ");
 
-            ItemData text1 = ItemData.GetItemsByAttribute(this.GameData.Table, "text1").First();
-            
-            text1.Text = "Game ended: ";//  "Turn " + player.Name + " " + player.GetStringAttribute("type").ToUpper();
+            //remove the sounds
+            getItemsByAsset(Assets.TEST_SOUND).ForEach(x => { removeItem(x.Id); });
+            //remove hovers
+            removeItemsByAsset(Assets.HOVER);
+
+            ItemData text1 = getItemsByAttribute("text1").First();            
+            text1.Text = "Game ended: ";
+
             if (GameData.Winners?.Count > 0)
             {
                 PlayerData player = GameData.Winners[0];

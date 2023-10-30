@@ -3,6 +3,7 @@ using MG.Server.Controllers;
 using MG.Server.Database;
 using MG.Server.Entities;
 using System.Reflection;
+using static MG.Server.GameFlows.TikTakToeGameFlow;
 
 namespace MG.Server.GameFlows
 {
@@ -192,5 +193,21 @@ namespace MG.Server.GameFlows
                 this.GameData.CurrentTurnId = this.GameData.Players[idx].Id;
             }
         }
+
+        internal List<ItemData> getItemsByAsset(AssetData asset)
+        {
+            return ItemData.GetItemsByAsset(GameData.Table, asset);
+        }
+        internal void removeItemsByAsset(AssetData asset)
+        {
+            ItemData.GetItemsByAsset(GameData.Table, asset).ForEach(x => { removeItem(x.Id); });
+        }
+
+        internal List<ItemData> getItemsByAttribute(string key) {
+            return ItemData.GetItemsByAttribute(this.GameData.Table, key);
+        }
+
+
+
     }
 }
