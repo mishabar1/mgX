@@ -14,6 +14,8 @@ import { GameSetupComponent } from './view/game-setup/game-setup.component';
 import {NgxJsonViewerModule} from 'ngx-json-viewer';
 import { EditorComponent } from './view/editor/editor.component';
 import { FontAwesomeModule } from '@fortawesome/angular-fontawesome'
+import {TooltipModule} from "primeng/tooltip";
+import {InputNumberModule} from "primeng/inputnumber";
 
 @NgModule({
   declarations: [
@@ -33,7 +35,9 @@ import { FontAwesomeModule } from '@fortawesome/angular-fontawesome'
     CheckboxModule,
     HttpClientModule,
     NgxJsonViewerModule,
-    FontAwesomeModule
+    TooltipModule,
+    FontAwesomeModule,
+    InputNumberModule
   ],
   providers: [],
   bootstrap: [AppComponent]

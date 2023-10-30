@@ -1,9 +1,8 @@
-
 <div class="main-div">
-    <div style="flex-shrink:0">
+  <div style="flex-shrink:0">
 
-    </div>
-    <div #rendererContainer style="flex-grow:1;border: 1px dashed red;"></div>
+  </div>
+  <div #rendererContainer style="flex-grow:1;border: 1px dashed red;"></div>
 </div>
 
 <div style="position: absolute;bottom: 0;right: 0;">
@@ -14,22 +13,72 @@
   <button (click)="showDebug()" style="width: 100px;height: 30px">DEBUG</button>
 </div>
 
-<div *ngIf="scene && showDebugWindow" style="position: absolute;top: 0px;right: 0px;width: 500px;height: 400px;background: red;overflow: auto;">
+<div *ngIf="scene && showDebugWindow"
+     style="position: absolute;top: 0px;right: 0px;width: 500px;height: 400px;background: red;overflow: auto;">
   <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: camera}"></ng-container>
   <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: scene}"></ng-container>
 </div>
 
-<ng-template  #tmpl let-obj>
+<ng-template #tmpl let-obj>
 
-  {{getAnyClass(obj)}} {{obj.name}}
-  <i class="pi pi-trash" (click)="onRemoveClick(obj)" style="color: black;cursor: pointer;"></i>
-  <i class="fa-solid fa-crosshairs"></i>
-  <i class="fa-solid fa-hippo"></i>
-  <i class="fa-solid fa-eye"></i>
+  <div style="padding: 5px 0px 5px 0px;border-top: 1px solid blue;border-bottom: 1px solid blue;border-left: 1px solid blue;">
+    <div class="mg-row-center"
+         style="border-bottom: 1px solid blue;">
 
-  {{obj.position | json}}
+      <div style="flex-grow: 1;"> {{getAnyClass(obj)}} {{obj.name}}</div>
 
-  <div *ngFor="let chobj of obj.children;" style="padding-left: 10px;">
-    <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: chobj}"></ng-container>
+      <i class="fa-solid fa-crosshairs debug-icon"
+         [style.background-color]="obj.showDebugPosition ? 'gray' : ''"
+         [pTooltip]="'Position:' + (obj.position | json)"
+         (click)="obj.showDebugPosition=!obj.showDebugPosition"></i>
+
+      <i class="fa-solid fa-rotate debug-icon"
+         pTooltip="Rotation"
+         (click)="obj.showDebugRotation=!obj.showDebugRotation"
+         [style.background-color]="obj.showDebugRotation ? 'gray' : ''"></i>
+
+      <i class="fa-solid fa-up-right-and-down-left-from-center debug-icon"
+         [style.background-color]="obj.showDebugScale ? 'gray' : ''"
+         pTooltip="Scale"
+         (click)="obj.showDebugScale=!obj.showDebugScale"></i>
+
+      <i class="fa-solid fa-eye debug-icon"
+         [style.background-color]="obj.visible ? '' : 'gray'"
+         pTooltip="Visible"
+         (click)="obj.visible=!obj.visible"></i>
+
+      <i class="fa-solid fa-trash-can debug-icon" (click)="onRemoveClick(obj)"></i>
+
+    </div>
+    <div *ngIf="obj.showDebugPosition">Position: {{obj.position | json}}
+      <p-inputNumber [(ngModel)]="obj.position.x" [showButtons]="true" buttonLayout="horizontal" inputId="horizontal" spinnerMode="horizontal" [step]="0.25"
+                     decrementButtonClass="p-button-danger" incrementButtonClass="p-button-success" incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus" mode="currency" currency="EUR">
+      </p-inputNumber>
+      <p-inputNumber [(ngModel)]="obj.position.y" [showButtons]="true" buttonLayout="horizontal" inputId="horizontal" spinnerMode="horizontal" [step]="0.25"
+                     decrementButtonClass="p-button-danger" incrementButtonClass="p-button-success" incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus" mode="currency" currency="EUR">
+      </p-inputNumber>
+      <p-inputNumber [(ngModel)]="obj.position.z" [showButtons]="true" buttonLayout="horizontal" inputId="horizontal" spinnerMode="horizontal" [step]="0.25"
+                     decrementButtonClass="p-button-danger" incrementButtonClass="p-button-success" incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus" mode="currency" currency="EUR">
+      </p-inputNumber>
+
+    </div>
+    <div *ngIf="obj.showDebugRotation" class="mg-row-center" style="width: 100px">Rot: {{obj.rotation | json}}
+
+      <p-inputNumber [(ngModel)]="obj.rotation.x" [showButtons]="true" buttonLayout="vertical" spinnerMode="vertical"
+                     decrementButtonClass="p-button-secondary" incrementButtonClass="p-button-secondary" incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus">
+      </p-inputNumber>
+      <p-inputNumber [(ngModel)]="obj.rotation.y" [showButtons]="true" buttonLayout="vertical" spinnerMode="vertical"
+                     decrementButtonClass="p-button-secondary" incrementButtonClass="p-button-secondary" incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus">
+      </p-inputNumber>
+      <p-inputNumber [(ngModel)]="obj.rotation.z" [showButtons]="true" buttonLayout="vertical" spinnerMode="vertical"
+                     decrementButtonClass="p-button-secondary" incrementButtonClass="p-button-secondary" incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus">
+      </p-inputNumber>
+
+    </div>
+    <div *ngIf="obj.showDebugScale">Scal: {{obj.scale | json}}</div>
+
+    <div *ngFor="let chobj of obj.children;" style="padding-left: 20px;">
+      <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: chobj}"></ng-container>
+    </div>
   </div>
-</ng-template >
+</ng-template>
