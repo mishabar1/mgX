@@ -1,5 +1,9 @@
-<div>MG X</div>
-<input [(ngModel)]="usernameModel">
+<div class="home-view">
 
+  <div class="title">MG X</div>
 
-<p-button (onClick)="login()">Login</p-button>
+  <input [(ngModel)]="usernameModel" class="username-input">
+
+  <p-button (onClick)="login()"  styleClass="p-button-lg" icon="pi pi-user" label="LOGIN"></p-button>
+
+</div>
