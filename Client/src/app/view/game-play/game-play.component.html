@@ -14,14 +14,15 @@
 </div>
 
 <div *ngIf="scene && showDebugWindow"
-     style="position: absolute;top: 0px;right: 0px;width: 500px;height: 400px;background: red;overflow: auto;">
+     style="position: absolute;top: 0px;right: 0px;width: 500px;height: 600px;background: red;overflow: auto;padding: 10px">
   <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: camera}"></ng-container>
   <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: scene}"></ng-container>
 </div>
 
 <ng-template #tmpl let-obj>
 
-  <div style="padding: 5px 0px 5px 0px;border-top: 1px solid blue;border-bottom: 1px solid blue;border-left: 1px solid blue;">
+  <div
+    style="padding: 5px 0px 5px 0px;border-top: 1px solid blue;border-bottom: 1px solid blue;border-left: 1px solid blue;">
     <div class="mg-row-center"
          style="border-bottom: 1px solid blue;">
 
@@ -50,32 +51,92 @@
       <i class="fa-solid fa-trash-can debug-icon" (click)="onRemoveClick(obj)"></i>
 
     </div>
-    <div *ngIf="obj.showDebugPosition">Position: {{obj.position | json}}
-      <p-inputNumber [(ngModel)]="obj.position.x" [showButtons]="true" buttonLayout="horizontal" inputId="horizontal" spinnerMode="horizontal" [step]="0.25"
-                     decrementButtonClass="p-button-danger" incrementButtonClass="p-button-success" incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus" mode="currency" currency="EUR">
+    <div *ngIf="obj.showDebugPosition" class="mg-row-center">
+      <div style="margin-right: 20px">Position</div>
+      <p-inputNumber [(ngModel)]="obj.position.x"
+                     [showButtons]="true"
+                     mode="decimal"
+                     buttonLayout="vertical"
+                     spinnerMode="vertical"
+                     inputStyleClass="xxx"
+                     [step]="0.1">
       </p-inputNumber>
-      <p-inputNumber [(ngModel)]="obj.position.y" [showButtons]="true" buttonLayout="horizontal" inputId="horizontal" spinnerMode="horizontal" [step]="0.25"
-                     decrementButtonClass="p-button-danger" incrementButtonClass="p-button-success" incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus" mode="currency" currency="EUR">
+      <p-inputNumber [(ngModel)]="obj.position.y"
+                     [showButtons]="true"
+                     mode="decimal"
+                     buttonLayout="vertical"
+                     spinnerMode="vertical"
+                     inputStyleClass="xxx"
+                     [step]="0.1">
       </p-inputNumber>
-      <p-inputNumber [(ngModel)]="obj.position.z" [showButtons]="true" buttonLayout="horizontal" inputId="horizontal" spinnerMode="horizontal" [step]="0.25"
-                     decrementButtonClass="p-button-danger" incrementButtonClass="p-button-success" incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus" mode="currency" currency="EUR">
+      <p-inputNumber [(ngModel)]="obj.position.z"
+                     [showButtons]="true"
+                     mode="decimal"
+                     buttonLayout="vertical"
+                     spinnerMode="vertical"
+                     inputStyleClass="xxx"
+                     [step]="0.1">
       </p-inputNumber>
 
     </div>
-    <div *ngIf="obj.showDebugRotation" class="mg-row-center" style="width: 100px">Rot: {{obj.rotation | json}}
+    <div *ngIf="obj.showDebugRotation" class="mg-row-center">
+      <div style="margin-right: 20px">Rotation:</div>
 
-      <p-inputNumber [(ngModel)]="obj.rotation.x" [showButtons]="true" buttonLayout="vertical" spinnerMode="vertical"
-                     decrementButtonClass="p-button-secondary" incrementButtonClass="p-button-secondary" incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus">
+      <p-inputNumber [(ngModel)]="obj.rotation.x"
+                     [showButtons]="true"
+                     mode="decimal"
+                     buttonLayout="vertical"
+                     spinnerMode="vertical"
+                     inputStyleClass="xxx"
+                     [step]="0.1">
       </p-inputNumber>
-      <p-inputNumber [(ngModel)]="obj.rotation.y" [showButtons]="true" buttonLayout="vertical" spinnerMode="vertical"
-                     decrementButtonClass="p-button-secondary" incrementButtonClass="p-button-secondary" incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus">
+      <p-inputNumber [(ngModel)]="obj.rotation.y"
+                     [showButtons]="true"
+                     mode="decimal"
+                     buttonLayout="vertical"
+                     spinnerMode="vertical"
+                     inputStyleClass="xxx"
+                     [step]="0.1">
       </p-inputNumber>
-      <p-inputNumber [(ngModel)]="obj.rotation.z" [showButtons]="true" buttonLayout="vertical" spinnerMode="vertical"
-                     decrementButtonClass="p-button-secondary" incrementButtonClass="p-button-secondary" incrementButtonIcon="pi pi-plus" decrementButtonIcon="pi pi-minus">
+      <p-inputNumber [(ngModel)]="obj.rotation.z"
+                     [showButtons]="true"
+                     mode="decimal"
+                     buttonLayout="vertical"
+                     spinnerMode="vertical"
+                     inputStyleClass="xxx"
+                     [step]="0.1">
       </p-inputNumber>
 
     </div>
-    <div *ngIf="obj.showDebugScale">Scal: {{obj.scale | json}}</div>
+    <div *ngIf="obj.showDebugScale "class="mg-row-center">
+      <div style="margin-right: 20px">Scale:</div>
+
+      <p-inputNumber [(ngModel)]="obj.scale.x"
+                     [showButtons]="true"
+                     mode="decimal"
+                     buttonLayout="vertical"
+                     spinnerMode="vertical"
+                     inputStyleClass="xxx"
+                     [step]="0.1">
+      </p-inputNumber>
+      <p-inputNumber [(ngModel)]="obj.scale.y"
+                     [showButtons]="true"
+                     mode="decimal"
+                     buttonLayout="vertical"
+                     spinnerMode="vertical"
+                     inputStyleClass="xxx"
+                     [step]="0.1">
+      </p-inputNumber>
+      <p-inputNumber [(ngModel)]="obj.scale.z"
+                     [showButtons]="true"
+                     mode="decimal"
+                     buttonLayout="vertical"
+                     spinnerMode="vertical"
+                     inputStyleClass="xxx"
+                     [step]="0.1">
+      </p-inputNumber>
+
+    </div>
 
     <div *ngFor="let chobj of obj.children;" style="padding-left: 20px;">
       <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: chobj}"></ng-container>

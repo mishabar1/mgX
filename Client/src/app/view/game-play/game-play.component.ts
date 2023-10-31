@@ -58,45 +58,45 @@ import {InteractionManager} from '../../services/mg.interaction.manager';
   styleUrls: ['./game-play.component.scss'],
   providers: [UnsubscriberService]
 })
-export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnChanges {
+export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit, OnChanges {
 
   gameData!: GameData;
   playerData!: PlayerData;
 
   @ViewChild('rendererContainer', {static: true}) rendererContainer!: ElementRef;
   scene!: THREE.Scene;
-  cameraGroup!:Group;
+  cameraGroup!: Group;
   camera!: THREE.PerspectiveCamera;
   audioListener!: THREE.AudioListener;
   renderer!: THREE.WebGLRenderer;
   orbitControls!: OrbitControls;
   gltfLoader!: GLTFLoader;
-  stlLoader!: STLLoader  ;
-  objLoader!: OBJLoader  ;
+  stlLoader!: STLLoader;
+  objLoader!: OBJLoader;
   textureLoader!: TextureLoader;
   fontLoader!: FontLoader;
   interactionManager!: InteractionManager;
 
-  controllers:any;
-  selectedObject:any;
-  interactionObjects:any=[];
-  selectedObjectDistance:any;
-  objectUnselectedColor="red";
-  objectSelectedColor="blue";
+  controllers: any;
+  selectedObject: any;
+  interactionObjects: any = [];
+  selectedObjectDistance: any;
+  objectUnselectedColor = "red";
+  objectSelectedColor = "blue";
 
 
-  controller:any;
-  reticle:any;
-  box:any;
-  hitTestSourceRequested:any;
-  hitTestSource:any;
+  controller: any;
+  reticle: any;
+  box: any;
+  hitTestSourceRequested: any;
+  hitTestSource: any;
 
   allItems: { [key: string]: ItemData } = {};
   // animationsObjects:any=[];
 
-  gameId:string|null = "";
+  gameId: string | null = "";
 
-  debugObjects:any[]=[];
+  debugObjects: any[] = [];
 
   constructor(public signalRService: SignalrService,
               private router: Router,
@@ -126,8 +126,8 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   }
 
   ngAfterViewInit(): void {
-    this.dalService.getGameById(this.gameId!).subscribe(game=>{
-      if(!game){
+    this.dalService.getGameById(this.gameId!).subscribe(game => {
+      if (!game) {
         this.router.navigate([RouteNames.GamesList]);
         return;
       }
@@ -138,24 +138,25 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     });
   }
 
-  getPlayerByUserId(userId:string):PlayerData | null | undefined {
-    return find(this.gameData.players,p=> p.user?.id==userId);
+  getPlayerByUserId(userId: string): PlayerData | null | undefined {
+    return find(this.gameData.players, p => p.user?.id == userId);
   }
+
   updateGame(new_game: GameData) {
     //console.log("updateGame",new_game);
 
     //mark all items to delete - and each item that updated - will be mrked "not"
     forEach(this.allItems, (item, key) => {
-      item.markForDelete=true;
+      item.markForDelete = true;
     });
 
-    this.updateItem(new_game.table,null);
+    this.updateItem(new_game.table, null);
 
     forEach(this.allItems, (item, key) => {
-      if(item.markForDelete){
+      if (item.markForDelete) {
         this.removeAction(item);
 
-        if(item.playType){
+        if (item.playType) {
           (item.mesh!.children[0] as THREE.PositionalAudio).stop()
         }
         item.mesh?.parent?.remove(item.mesh);
@@ -167,16 +168,16 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
   }
 
-  updateItem(new_item: ItemData, parentMesh:any) {
+  updateItem(new_item: ItemData, parentMesh: any) {
     //console.log("updateItem",new_item, parentMesh);
 
     let old_item = this.allItems[new_item.id];
-    if(!old_item){
+    if (!old_item) {
       this.createItem(new_item, parentMesh);
       return;
     }
 
-    old_item.markForDelete=false;
+    old_item.markForDelete = false;
 
     //update props
     old_item.clickActions = new_item.clickActions;
@@ -202,55 +203,58 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   }
 
 
-
-  updateItemPosition(item: ItemData, position:V3){
+  updateItemPosition(item: ItemData, position: V3) {
     //console.log("updateItemPosition", item, position);
 
     item.position = position;
     // item.mesh!.position.set(position.x, position.y, position.z);
     // this.createMoveAnimation(item.mesh,item.mesh!.position,position)
-    if(!this.generalService.deepEqual(position,item.mesh!.position) ) {
-      new TWEEN.Tween(item.mesh!.position).to(position,300).start();
+    if (!this.generalService.deepEqual(position, item.mesh!.position)) {
+      new TWEEN.Tween(item.mesh!.position).to(position, 300).start();
     }
 
   }
 
-  updateItemScale(item: ItemData, scale:V3){
+  updateItemScale(item: ItemData, scale: V3) {
     //console.log("updateItemScale", item, scale);
 
     item.scale = scale;
     // item.mesh!.position.set(position.x, position.y, position.z);
     // this.createMoveAnimation(item.mesh,item.mesh!.position,position)
-    if(!this.generalService.deepEqual(scale,item.mesh!.scale) ) {
-      new TWEEN.Tween(item.mesh!.scale).to(scale,300).start();
+    if (!this.generalService.deepEqual(scale, item.mesh!.scale)) {
+      new TWEEN.Tween(item.mesh!.scale).to(scale, 300).start();
     }
 
   }
 
-  updateItemRotation(item: ItemData, rot:V3){
+  updateItemRotation(item: ItemData, rot: V3) {
     //console.log("updateItemRotation", item, rot);
 
     item.rotation = rot;
 
     rot = {
-      x:MathUtils.degToRad( rot.x),
-      y:MathUtils.degToRad(rot.y),
-      z:MathUtils.degToRad(rot.z)
+      x: MathUtils.degToRad(rot.x),
+      y: MathUtils.degToRad(rot.y),
+      z: MathUtils.degToRad(rot.z)
     }
 
     // item.mesh!.position.set(position.x, position.y, position.z);
     // this.createMoveAnimation(item.mesh,item.mesh!.position,position)
     // let meshRot =new THREE.Vector3();
     // meshRot = meshRot.applyEuler(item.mesh!.rotation);
-    if(!this.generalService.deepEqual(rot, {x:item.mesh!.rotation.x,y:item.mesh!.rotation.y,z:item.mesh!.rotation.z} ) ) {
+    if (!this.generalService.deepEqual(rot, {
+      x: item.mesh!.rotation.x,
+      y: item.mesh!.rotation.y,
+      z: item.mesh!.rotation.z
+    })) {
       // const u = new THREE.Euler( rot.x, rot.y, rot.z, 'XYZ' )
-      new TWEEN.Tween(item.mesh!.rotation).to(rot,300).start();
+      new TWEEN.Tween(item.mesh!.rotation).to(rot, 300).start();
     }
 
   }
 
-  updateItemText(item: ItemData, text?:string){
-    if(item.asset=="TEXTBLOCK"){
+  updateItemText(item: ItemData, text?: string) {
+    if (item.asset == "TEXTBLOCK") {
       item.text = text;
       (item.mesh! as any).childrenTexts[0].set({content: text});
     }
@@ -293,7 +297,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
     // create an AudioListener and add it to the camera
     this.audioListener = new THREE.AudioListener();
-    this.camera.add( this.audioListener );
+    this.camera.add(this.audioListener);
 
     // Initialize renderer
     this.renderer = new THREE.WebGLRenderer({antialias: true});
@@ -304,8 +308,8 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.renderer.xr.addEventListener("sessionstart", () => {
 
 
-      this.renderer.xr.getCamera().position.copy( this.camera.position);
-      this.renderer.xr.getCamera().lookAt( this.orbitControls.target );
+      this.renderer.xr.getCamera().position.copy(this.camera.position);
+      this.renderer.xr.getCamera().lookAt(this.orbitControls.target);
 
       // const xrManager = this.renderer.xr,
       //   camera = this.camera,
@@ -366,14 +370,11 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     });
 
 
-
-
-
     // Add ambient light
     // const ambientLight = new THREE.AmbientLight(0xffffff,2);
     // this.scene.add(ambientLight);
-    const pmremGenerator = new THREE.PMREMGenerator( this.renderer );
-    this.scene.environment = pmremGenerator.fromScene( new RoomEnvironment(), 0 ).texture;
+    const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0).texture;
 
     // this.labelRenderer = new CSS2DRenderer();
     // this.labelRenderer.setSize( window.innerWidth, window.innerHeight );
@@ -395,7 +396,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.interactionManager = new InteractionManager(this.renderer, this.camera, this.renderer.domElement);
 
     // Start the animation loop
-    this.renderer.setAnimationLoop(  ()=> {
+    this.renderer.setAnimationLoop(() => {
 
       // Don't forget, ThreeMeshUI must be updated manually.
       // This has been introduced in version 3.0.0 in order
@@ -420,11 +421,11 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
       // });
       //console.log("running");
 
-    } );
+    });
 
     // Instantiate a loader
     this.gltfLoader = new GLTFLoader();
-    this.stlLoader  = new STLLoader();
+    this.stlLoader = new STLLoader();
     this.objLoader = new OBJLoader();
     this.textureLoader = new TextureLoader();
     this.fontLoader = new FontLoader();
@@ -437,15 +438,15 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   }
 
 
-
-  onSelectStart(x:any){
-    console.log("onSelectStart",x);
+  onSelectStart(x: any) {
+    console.log("onSelectStart", x);
     // this refers to the controller
     // this.children[0].scale.z = 10;
     // this.userData.selectPressed = true;
   }
-  onSelectEnd(x:any) {
-    console.log("onSelectEnd",x);
+
+  onSelectEnd(x: any) {
+    console.log("onSelectEnd", x);
     // this refers to the controller
     // this.children[0].scale.z = 0;
     // this.userData.selectPressed = false;
@@ -465,7 +466,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     const controllers = [];
 
     for (let i = 0; i < 2; i++) {
-      const controller:XRTargetRaySpace = this.renderer.xr.getController(i);
+      const controller: XRTargetRaySpace = this.renderer.xr.getController(i);
       controller.add(line.clone());
       controller.userData["selectPressed"] = false;
       controller.userData["selectPressedPrev"] = false;
@@ -480,7 +481,7 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     return controllers;
   }
 
-  handleController(controller:XRTargetRaySpace) {
+  handleController(controller: XRTargetRaySpace) {
     if (controller.userData["selectPressed"]) {
       if (!controller.userData["selectPressedPrev"]) {
         // Select pressed
@@ -517,12 +518,12 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   createItem(itemData: ItemData, parentMesh: THREE.Object3D | null) {
     //console.log("createItem",itemData,parentMesh);
 
-    if(itemData.asset) {
+    if (itemData.asset) {
       const frontURL = '\\assets\\games\\' + this.gameData.assets[itemData.asset].frontURL;
       const backURL = '\\assets\\games\\' + (this.gameData.assets[itemData.asset].backURL || this.gameData.assets[itemData.asset].frontURL);
       const assetType = this.gameData.assets[itemData.asset].type;
 
-      if(assetType=="OBJECT") {
+      if (assetType == "OBJECT") {
         if (frontURL.toLowerCase().endsWith("glb") || frontURL.toLowerCase().endsWith("gltf")) {
           this.gltfLoader.load(frontURL, (gltf) => {
             const mesh: THREE.Group = gltf.scene;
@@ -550,14 +551,14 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
         }
       }
 
-      if(assetType=="TOKEN") {
+      if (assetType == "TOKEN") {
 
-        this.textureLoader.load(frontURL,frontTexture=>{
+        this.textureLoader.load(frontURL, frontTexture => {
           // console.log( frontTexture.image.width, frontTexture.image.height );
           let aspect = frontTexture.image.width / frontTexture.image.height;
           let x = 1;
           let z = 1 / aspect;
-          if(aspect < 1){
+          if (aspect < 1) {
             z = 1;
             x = aspect;
           }
@@ -574,11 +575,11 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
             }),
             new THREE.MeshBasicMaterial({
               // top
-              map: frontTexture, transparent:true
+              map: frontTexture, transparent: true
             }),
             new THREE.MeshBasicMaterial({
               // bottom
-              map: this.textureLoader.load(backURL),transparent:true
+              map: this.textureLoader.load(backURL), transparent: true
             }),
             new THREE.MeshBasicMaterial({
               // front
@@ -590,17 +591,17 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
             })
           ];
 
-          let  mesh = new THREE.Mesh(new THREE.BoxGeometry(x,x/100,z), cubeMaterial);
+          let mesh = new THREE.Mesh(new THREE.BoxGeometry(x, x / 100, z), cubeMaterial);
           this.processItem(itemData, mesh, parentMesh);
 
         });
 
       }
 
-      if(assetType=="TEXT3D") {
-        this.fontLoader.load( 'https://threejs.org/examples/fonts/helvetiker_regular.typeface.json',  ( font )=> {
+      if (assetType == "TEXT3D") {
+        this.fontLoader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', (font) => {
 
-          const geometry = new TextGeometry( itemData.text!, {
+          const geometry = new TextGeometry(itemData.text!, {
             font: font,
             size: 0.5,
             height: 0.2,
@@ -610,56 +611,56 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
             bevelSize: 0.02,
             bevelOffset: 0,
             bevelSegments: 5,
-          } );
+          });
           var textMaterial = new THREE.MeshPhongMaterial(
-            { color: 0xff0000, specular: 0xffffff }
+            {color: 0xff0000, specular: 0xffffff}
           );
-          let  mesh = new THREE.Mesh(geometry,textMaterial);
+          let mesh = new THREE.Mesh(geometry, textMaterial);
           this.processItem(itemData, mesh, parentMesh);
-        } );
+        });
 
       }
-      if(assetType=="TEXTBLOCK") {
+      if (assetType == "TEXTBLOCK") {
 
         // DOCS ! - RTFM !
         // https://github.com/felixmariotto/three-mesh-ui/wiki/API-documentation
         //
-        const container:any = new ThreeMeshUI.Block( {
+        const container: any = new ThreeMeshUI.Block({
 
-          bestFit:'auto',
+          bestFit: 'auto',
           width: 100,
           height: 100,
           justifyContent: 'center',
           textAlign: 'center',
           fontFamily: 'assets/fonts/Roboto-msdf.json',
           fontTexture: 'assets/fonts/Roboto-msdf.png',
-          fontColor:  new THREE.Color( 0x000000 ),
+          fontColor: new THREE.Color(0x000000),
           // borderRadius: 0.05,
-          backgroundOpacity:0
-        } );
+          backgroundOpacity: 0
+        });
 
         // container.position.set( 0, 0, 0 );
         // container.rotation.x = -0.55;
         // this.scene.add( container );
 
-        const t1:any = new ThreeMeshUI.Text( {content: itemData.text } );
+        const t1: any = new ThreeMeshUI.Text({content: itemData.text});
         container.add(t1);
 
         this.processItem(itemData, container, parentMesh);
 
       }
-      if(assetType=="SOUND") {
+      if (assetType == "SOUND") {
 
         // console.log(itemData,frontURL,backURL,assetType);
 
         // create the PositionalAudio object (passing in the listener)
-        const sound = new THREE.PositionalAudio( this.audioListener );
+        const sound = new THREE.PositionalAudio(this.audioListener);
 
         // load a sound and set it as the Audio object's buffer
         const audioLoader = new THREE.AudioLoader();
-        audioLoader.load( frontURL, function( buffer ) {
-          sound.setBuffer( buffer );
-          sound.setLoop(itemData.playType=="LOOP");
+        audioLoader.load(frontURL, function (buffer) {
+          sound.setBuffer(buffer);
+          sound.setLoop(itemData.playType == "LOOP");
           sound.setVolume(1);
           sound.play();
           // sound.stop()
@@ -673,23 +674,25 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
       }
 
 
-
-    }else{
+    } else {
       const mesh: THREE.Group = new THREE.Group()
       this.processItem(itemData, mesh, parentMesh);
     }
 
 
   }
-  processItem(itemData: ItemData, mesh:THREE.Object3D, parentMesh: THREE.Object3D | null){
+
+  processItem(itemData: ItemData, mesh: THREE.Object3D, parentMesh: THREE.Object3D | null) {
     //console.log("processItem",itemData,mesh,parentMesh);
+
+    mesh.name = itemData.asset;
 
     // position
     mesh.position.set(itemData.position.x, itemData.position.y, itemData.position.z);
 
     // rotation
     mesh.rotation.set(
-      MathUtils.degToRad( itemData.rotation.x),
+      MathUtils.degToRad(itemData.rotation.x),
       MathUtils.degToRad(itemData.rotation.y),
       MathUtils.degToRad(itemData.rotation.z));
 
@@ -719,41 +722,41 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     this.allItems[itemData.id] = itemData;
   }
 
-  handleItemClickActions(itemData:ItemData){
+  handleItemClickActions(itemData: ItemData) {
     //console.log("handleItemClickActions",itemData);
     let action = null;
-    if(this.playerData){
+    if (this.playerData) {
       action = itemData.clickActions[this.playerData.id] || itemData.clickActions[''];
     }
     if (action) {
       this.addClickAction(itemData, action);
-    }else{
+    } else {
       this.removeAction(itemData);
     }
 
   }
 
-  handleItemVisibility(itemData:ItemData){
+  handleItemVisibility(itemData: ItemData) {
     //console.log("handleItemVisibility",itemData);
-    let isVisible:boolean = keys(itemData.visible).length==0;
-    if(this.playerData){
-      isVisible = isVisible || itemData.visible[this.playerData.id]==true;
+    let isVisible: boolean = keys(itemData.visible).length == 0;
+    if (this.playerData) {
+      isVisible = isVisible || itemData.visible[this.playerData.id] == true;
     }
     //console.log("handleItemVisibility","isVisible",isVisible);
     itemData.mesh!.visible = isVisible;
 
-    if(!isVisible){
+    if (!isVisible) {
       this.removeAction(itemData);
     }
   }
 
-  MeshClickFunc(event:any){
+  MeshClickFunc(event: any) {
     // console.log(event.point);
     // const direction = new THREE.Vector3();
     // direction.subVectors( event.target.position, event.point ) ;
     // console.log(direction);
 
-    if(this.playerData){
+    if (this.playerData) {
 
       let action = event.target.userData.ItemData.clickActions[this.playerData.id] || event.target.userData.ItemData.clickActions[''];
       this.signalRService.executeAction(
@@ -765,13 +768,15 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
         event.point);
     }
   }
-  MeshMouseOverFunc(event:any){
+
+  MeshMouseOverFunc(event: any) {
     // event.target.userData['c'] = event.target.material.clone().color;
     // event.target.material.color.set(0xff0000);
     document.body.style.cursor = 'pointer';
     this.orbitControls.enabled = false;
   }
-  MeshMouseOutFunc(event:any){
+
+  MeshMouseOutFunc(event: any) {
     // let c: any = event.target.userData['c'];
     // event.target.material.color.set(c.r, c.g, c.b);
     document.body.style.cursor = 'default';
@@ -781,12 +786,13 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   onMeshClickFunc = this.MeshClickFunc.bind(this);
   onMeshMouseOverFunc = this.MeshMouseOverFunc.bind(this);
   onMeshMouseOutFunc = this.MeshMouseOutFunc.bind(this);
+
   addClickAction(itemData: ItemData, action: string) {
     //console.log("addClickAction", itemData ,action);
 
     this.removeAction(itemData);
 
-    itemData.mesh!.addEventListener('click', this.onMeshClickFunc );
+    itemData.mesh!.addEventListener('click', this.onMeshClickFunc);
 
     itemData.mesh!.addEventListener('mouseover', this.onMeshMouseOverFunc);
 
@@ -794,10 +800,11 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
 
     this.interactionManager.add(itemData.mesh!);
   }
+
   removeAction(itemData: ItemData) {
     //console.log("removeAction",itemData);
-    itemData.mesh!.removeEventListener('click',this.onMeshClickFunc);
-    itemData.mesh!.removeEventListener('click',this.onMeshMouseOverFunc);
+    itemData.mesh!.removeEventListener('click', this.onMeshClickFunc);
+    itemData.mesh!.removeEventListener('click', this.onMeshMouseOverFunc);
     this.interactionManager.remove(itemData.mesh!);
   }
 
@@ -806,10 +813,10 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
     // console.log(gameData, dayjs().startOf('month').add(1, 'day').set('year', 2018).format('YYYY-MM-DD HH:mm:ss'));
     this.createItem(this.gameData.table, null);
 
-    if(this.playerData){
-      this.camera.position.set(this.playerData.camera.position.x,this.playerData.camera.position.y,this.playerData.camera.position.z);
-    }else{
-      this.camera.position.set(this.gameData.observer.position.x,this.gameData.observer.position.y,this.gameData.observer.position.z);
+    if (this.playerData) {
+      this.camera.position.set(this.playerData.camera.position.x, this.playerData.camera.position.y, this.playerData.camera.position.z);
+    } else {
+      this.camera.position.set(this.gameData.observer.position.x, this.gameData.observer.position.y, this.gameData.observer.position.z);
     }
 
   }
@@ -818,52 +825,54 @@ export class GamePlayComponent implements  OnInit, OnDestroy, AfterViewInit, OnC
   }
 
 
-  currentSession:any = null;
+  currentSession: any = null;
+
   onVrClick() {
 
     this.controllers = this.buildControllers();
-    this.controllers.forEach((controller:any) => {
+    this.controllers.forEach((controller: any) => {
       controller.addEventListener('selectstart', this.onSelectStart);
       controller.addEventListener('selectend', this.onSelectEnd);
     });
 
-    const sessionInit = { optionalFeatures: [ 'local-floor', 'bounded-floor', 'hand-tracking', 'layers' ] };
+    const sessionInit = {optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']};
     // @ts-ignore
-    window.navigator.xr.requestSession( 'immersive-vr', sessionInit ).then( async session=>{
+    window.navigator.xr.requestSession('immersive-vr', sessionInit).then(async session => {
       //session.addEventListener( 'end', this.onSessionEnded );
-      await this.renderer.xr.setSession( session );
+      await this.renderer.xr.setSession(session);
       this.currentSession = session;
-    } );
+    });
 
 
   }
 
 
   loadDebugObjects() {
-    this.debugObjects=[];
-    this.scene.traverse( ( object:any ) =>{
+    this.debugObjects = [];
+    this.scene.traverse((object: any) => {
 
       // if ( object.isMesh ) {
-        this.debugObjects.push(object);
-        console.log( object )
+      this.debugObjects.push(object);
+      console.log(object)
       // };
 
-    } );
+    });
   }
 
-  showDebugWindow= true;
-  getAnyClass(obj:any) {
+  showDebugWindow = false;
+
+  getAnyClass(obj: any) {
     if (typeof obj === "undefined") return "undefined";
     if (obj === null) return "null";
     return obj.type
-      //.constructor.name
-     }
+    //.constructor.name
+  }
 
   onRemoveClick(obj: any) {
     obj.removeFromParent();
   }
 
   showDebug() {
-    this.showDebugWindow=true;
+    this.showDebugWindow = true;
   }
 }

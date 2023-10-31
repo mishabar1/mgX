@@ -19,6 +19,14 @@
   }
 }
 
- .p-inputtext.p-component.p-element.p-inputnumber-input.p-filled{
-  width: 50px;
+::ng-deep .p-inputtext.p-component.p-element.p-inputnumber-input{
+  width: 100px;
+  //background: magenta;
+  padding: 0;
+  margin: 0;
+}
+
+::ng-deep .p-element.p-button-icon-only.p-inputnumber-button.p-button.p-component{
+  padding: 0;
+  margin: 0;
 }
