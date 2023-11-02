@@ -859,7 +859,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit, OnCh
     });
   }
 
-  showDebugWindow = true;
+  showDebugWindow = false;
   debugSearchModel="";
 
   getAnyClass(obj: any) {
