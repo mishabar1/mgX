@@ -101,9 +101,7 @@ namespace MG.Server.Database
             catch (Exception ex)
             {
                 Console.WriteLine(ex);
-                //throw;
             }
-
 
 
         }

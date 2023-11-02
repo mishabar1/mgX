@@ -23,8 +23,7 @@ namespace MG.Server.Entities
         public List<ItemData> Items { get; set; }
 
 
-        public string? ParentItemId { get { return ParentItem?.Id; } }
-        [JsonIgnore] public ItemData? ParentItem { get; set; }
+        public string? ParentItemId { get; set; }
 
 
         public static ItemData Table()
@@ -41,11 +40,11 @@ namespace MG.Server.Entities
         public ItemData(string asset, ItemData parentItem) : base()
         {
             Asset = asset;
-
-            ParentItem = parentItem;
-            if (ParentItem != null)
+            
+            if (parentItem != null)            
             {
-                ParentItem.Items.Add(this);
+                ParentItemId = parentItem.Id;
+                parentItem.Items.Add(this);
             }
 
             Items = new List<ItemData>();
