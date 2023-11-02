@@ -11,30 +11,34 @@ namespace MG.Server.GameFlows
             gameData.GameType = GameTypeEnum.CHESS;
         }
 
+        protected override async Task Create()
+        {
 
-        public override async Task Setup()
+        }
+
+        protected override async Task Setup()
         {
             //Console.WriteLine("ChessGameFlow Setup " + this.GameData);
             throw new NotImplementedException();
         }
-        public override Task StartGame()
+        protected override Task StartGame()
         {
             //Console.WriteLine("ChessGameFlow StartGame " + this.GameData);
             throw new NotImplementedException();
         }
 
-        public override Task EndGame()
+        protected override Task EndGame()
         {
             //Console.WriteLine("ChessGameFlow EndGame " + this.GameData);
             throw new NotImplementedException();
         }
 
-        public override Task<bool> IsEndGame()
+        protected override Task<bool> IsEndGame()
         {
             throw new NotImplementedException();
         }
 
-        public override List<PlayerData> GetGameWinners()
+        protected override List<PlayerData> GetGameWinners()
         {
             throw new NotImplementedException();
         }

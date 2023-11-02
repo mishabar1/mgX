@@ -31,6 +31,12 @@ namespace MG.Server.Entities
         {
             return new ItemData("", null) { Name = "TABLE" };
         }
+
+        public ItemData()
+        {
+
+        }
+
         public ItemData(string asset) : this(asset, null) { }
         public ItemData(string asset, ItemData parentItem) : base()
         {

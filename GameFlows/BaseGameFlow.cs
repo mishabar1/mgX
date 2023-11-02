@@ -33,15 +33,10 @@ namespace MG.Server.GameFlows
                     break;
             }
 
-            //switch (gameType)
-            //{
-            //    case GameTypeEnum.TIK_TAK_TOE.Name:
-            //        break;
-
-            //}
-
             game.GameStatus = GameStatusEnum.CREATED;
             game.CreatorId = userId;
+
+            game.GameFlow.RunCreateFlow();
 
             return game;
         }
@@ -49,13 +44,22 @@ namespace MG.Server.GameFlows
         {
             GameData = gameData;
             GameData.GameFlow = this;
+
+            HistoryGameData = new List<GameData>();
         }
+
+        public async Task RunCreateFlow()
+        {
+            this.GameData.Players = new List<PlayerData>();
+            await Create();
+
+        }
+        protected abstract Task Create();
 
         public async Task RunSetupFlow()
         {
             // reset all            
-            this.GameData.Table = ItemData.Table();
-            this.GameData.Players = new List<PlayerData>();
+            this.GameData.Table = ItemData.Table();            
             this.GameData.Winners = null;
             this.GameData.CurrentTurnId = null;
             this.GameData.GameStatus = GameStatusEnum.SETUP;
@@ -68,7 +72,7 @@ namespace MG.Server.GameFlows
             await DataRepository.Singleton.HubGameUpdated(GameData);
             await DataRepository.Singleton.HubGamesUpdated(GameData);
         }
-        public abstract Task Setup();
+        protected abstract Task Setup();
 
         public async Task RunStartFlow()
         {
@@ -92,11 +96,24 @@ namespace MG.Server.GameFlows
             await DataRepository.Singleton.HubGamesUpdated(GameData);
 
         }
-        public abstract Task StartGame();
-        public abstract Task EndGame();
+        protected abstract Task StartGame();
+        protected abstract Task EndGame();
 
-        public abstract Task<bool> IsEndGame();
-        public abstract List<PlayerData> GetGameWinners();
+        
+        public async Task RunEndGameFlow()
+        {
+            try
+            {
+                await EndGame();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("fail to run end game");
+            }
+        }
+
+        protected abstract Task<bool> IsEndGame();
+        protected abstract List<PlayerData> GetGameWinners();
 
         public async Task ExecuteAction(ExecuteActionData data)
         {
@@ -121,7 +138,9 @@ namespace MG.Server.GameFlows
                 this.GameData.Winners = GetGameWinners();
                 Console.WriteLine("TikTakToeGameFlow GAME ENDED !!!!!! winners count: " + this.GameData.Winners.Count());
 
-                await EndGame();
+                RunEndGameFlow();
+                
+                
 
             }
 

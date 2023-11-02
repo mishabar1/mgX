@@ -27,6 +27,8 @@ namespace MG.Server.BL
                 _dataRepository.Users.Add(user);
             }
 
+            _dataRepository.Save();
+
             return user;
 
         }

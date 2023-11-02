@@ -25,6 +25,13 @@ namespace MG.Server.GameFlows
         {
             gameData.GameType = GameTypeEnum.TIK_TAK_TOE;
 
+
+
+        }
+        protected override async Task Create()
+        {
+            Console.WriteLine("TikTakToeGameFlow Create ");
+
             addAsset(Assets.BOARD);
             addAsset(Assets.HOVER);
             addAsset(Assets.X);
@@ -35,29 +42,26 @@ namespace MG.Server.GameFlows
             addAsset(Assets.TEST_TEXTBLOCK);
             addAsset(Assets.TEST_SOUND);
 
-        }
-
-
-        public override async Task Setup()
-        {
-            Console.WriteLine("TikTakToeGameFlow Setup ");
-
             GameData.Observer.Position.Set(0, 4, 0);
 
             // set players
             // X
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
             .AddAttribute("type", "x")
-            .SetCameraPosition(0,2,3);
-            
+            .SetCameraPosition(0, 2, 3);
+
             //O
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
             .AddAttribute("type", "o")
             .SetCameraPosition(0, 2, 3);
-
         }
 
-        public async override Task StartGame()
+        protected override async Task Setup()
+        {
+            Console.WriteLine("TikTakToeGameFlow Setup ");
+        }
+
+        protected async override Task StartGame()
         {
             Console.WriteLine("TikTakToeGameFlow StartGame ");
 
@@ -158,10 +162,10 @@ namespace MG.Server.GameFlows
                 data.Item.Scale.X = 0.5;
             }
         }
-                
 
 
-        public async override Task EndGame()
+
+        protected async override Task EndGame()
         {
             // TODO !!!
             Console.WriteLine("TikTakToeGameFlow EndGame ");
@@ -188,7 +192,7 @@ namespace MG.Server.GameFlows
 
         }
 
-        public override async Task<bool> IsEndGame()
+        protected override async Task<bool> IsEndGame()
         {
 
             var board = getGameAsBoard();
@@ -204,7 +208,7 @@ namespace MG.Server.GameFlows
 
             return false;
         }
-        public override List<PlayerData> GetGameWinners()
+        protected override List<PlayerData> GetGameWinners()
         {
             var board = getGameAsBoard();
             if (isAWon(board, "x"))
@@ -263,7 +267,6 @@ namespace MG.Server.GameFlows
             return false;
         }
 
-       
 
     }
 

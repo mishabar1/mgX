@@ -18,6 +18,7 @@ namespace MG.Server.Entities
 
         [JsonIgnore] public AIAgent AIAgent { get; set; }
 
+        public PlayerData() { }
         public PlayerData(GameData game):base()
         {
             Type = PlayerTypeEnum.EMPTY_SEAT;

@@ -1,8 +1,14 @@
 ﻿using System.ComponentModel;
 using System.Reflection;
+using System.Text.Json.Serialization;
 
 namespace MG.Server.Entities
 {
+    [JsonDerivedType(typeof(TokenAssetData), typeDiscriminator: AssetTypeEnum.TOKEN)]
+    [JsonDerivedType(typeof(ObjectAssetData), typeDiscriminator: AssetTypeEnum.OBJECT)]
+    [JsonDerivedType(typeof(SoundAssetData), typeDiscriminator: AssetTypeEnum.SOUND)]
+    [JsonDerivedType(typeof(Text3dAssetData), typeDiscriminator: AssetTypeEnum.TEXT3D)]
+    [JsonDerivedType(typeof(TextBlockAssetData), typeDiscriminator: AssetTypeEnum.TEXTBLOCK)]
     public class AssetData : BaseData<AssetData>
     {
         public string? FrontURL { get; set; }
@@ -10,10 +16,13 @@ namespace MG.Server.Entities
         public string? Text { get; set; }
         public string Type { get; set; }
 
-        public AssetData(string name, string frontURL, string backUrl, string assetType) :base()
+        public AssetData()
         {
-            this.Name = name;
-            FrontURL = frontURL;    
+        }
+        public AssetData(string name, string frontURL, string backUrl, string assetType) : base()
+        {
+            Name = name;
+            FrontURL = frontURL;
             BackURL = backUrl;
             Type = assetType;
         }
@@ -21,24 +30,28 @@ namespace MG.Server.Entities
 
     public class TokenAssetData : AssetData
     {
+        public TokenAssetData() { }
         public TokenAssetData(string name, string frontURL, string backUrl = "") : base(name, frontURL, backUrl, AssetTypeEnum.TOKEN)
         {
         }
     }
     public class ObjectAssetData : AssetData
     {
+        public ObjectAssetData() { }
         public ObjectAssetData(string name, string url) : base(name, url, "", AssetTypeEnum.OBJECT)
         {
         }
     }
     public class SoundAssetData : AssetData
     {
+        public SoundAssetData() { }
         public SoundAssetData(string name, string url) : base(name, url, "", AssetTypeEnum.SOUND)
         {
         }
     }
     public class Text3dAssetData : AssetData
     {
+        public Text3dAssetData() { }
         public Text3dAssetData(string name, string text) : base(name, "", "", AssetTypeEnum.TEXT3D)
         {
             this.Text = text;
@@ -46,6 +59,7 @@ namespace MG.Server.Entities
     }
     public class TextBlockAssetData : AssetData
     {
+        public TextBlockAssetData() { }
         public TextBlockAssetData(string name, string text) : base(name, "", "", AssetTypeEnum.TEXTBLOCK)
         {
             this.Text = text;
@@ -62,19 +76,5 @@ namespace MG.Server.Entities
 
     }
 
-    //[DefaultProperty("Name")]
-    //public class GameTypeEnum 
-    //{
-    //    public static GameTypeEnum TIK_TAK_TOE => new GameTypeEnum( "TIK_TAK_TOE");
-    //    public static GameTypeEnum CHESS => new GameTypeEnum( "CHESS");
-    //    public static GameTypeEnum DND => new GameTypeEnum( "DND");
 
-
-    //    public GameTypeEnum( string name)
-    //    {
-    //    }
-    //}
-
-    
-  
 }

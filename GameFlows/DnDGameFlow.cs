@@ -10,7 +10,12 @@ namespace MG.Server.GameFlows
             gameData.GameType = GameTypeEnum.DND;
         }
 
-        public override async Task Setup()
+        protected override async Task Create()
+        {
+
+        }
+
+        protected override async Task Setup()
         {
             Console.WriteLine("DnDGameFlow Setup ");
 
@@ -29,7 +34,7 @@ namespace MG.Server.GameFlows
             .AddAttribute("type", "DungeonMaster")
             .SetCameraPosition(0, 20, 10);
         }
-        public override async Task StartGame()
+        protected override async Task StartGame()
         {
             Console.WriteLine("DnDGameFlow StartGame " + this.GameData);
 
@@ -47,17 +52,17 @@ namespace MG.Server.GameFlows
 
         }
 
-        public override async Task EndGame()
+        protected override async Task EndGame()
         {
             Console.WriteLine("DnDGameFlow EndGame " + this.GameData);
             
         }
-        public override async Task<bool> IsEndGame()
+        protected override async Task<bool> IsEndGame()
         {
             return false;
         }
 
-        public override List<PlayerData> GetGameWinners()
+        protected override List<PlayerData> GetGameWinners()
         {
             return new List<PlayerData>();
         }

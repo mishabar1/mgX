@@ -23,4 +23,8 @@
     <PackageReference Include="TensorFlow.NET" Version="0.110.4" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="NewFolder\" />
+  </ItemGroup>
+
 </Project>
