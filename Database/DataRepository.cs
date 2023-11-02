@@ -55,15 +55,15 @@ namespace MG.Server.Database
         {
             try
             {
-                using StreamReader usersReader = new(@".\Database\users.json");
+                using StreamReader usersReader = new(@".\users.json");
                 var json = usersReader.ReadToEnd();
                 Users = JsonSerializer.Deserialize<List<UserData>>(json);
-                Console.WriteLine(Users);
+                //Console.WriteLine(Users);
 
-                using StreamReader gamesReader = new(@".\Database\games.json");
+                using StreamReader gamesReader = new(@".\games.json");
                 json = gamesReader.ReadToEnd();
                 Games = JsonSerializer.Deserialize<List<GameData>>(json);
-                Console.WriteLine(Games);
+                //Console.WriteLine(Games);
 
                 Games.ForEach(game =>
                 {
@@ -101,6 +101,7 @@ namespace MG.Server.Database
             catch (Exception ex)
             {
                 Console.WriteLine(ex);
+                Save();
             }
 
 
@@ -109,10 +110,10 @@ namespace MG.Server.Database
         public async Task Save()
         {
             string json = JsonSerializer.Serialize(Users);
-            File.WriteAllText(@".\Database\users.json", json);
+            File.WriteAllText(@".\users.json", json);
 
             json = JsonSerializer.Serialize(Games);
-            File.WriteAllText(@".\Database\games.json", json);
+            File.WriteAllText(@".\games.json", json);
 
         }
     }
