@@ -859,7 +859,8 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit, OnCh
     });
   }
 
-  showDebugWindow = false;
+  showDebugWindow = true;
+  debugSearchModel="";
 
   getAnyClass(obj: any) {
     if (typeof obj === "undefined") return "undefined";
