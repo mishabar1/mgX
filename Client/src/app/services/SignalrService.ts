@@ -9,7 +9,9 @@ import {V3} from '../entities/V3';
 export class SignalrService {
   hubConnection!: signalR.HubConnection
 
+  static singletone:SignalrService;
   constructor() {
+    SignalrService.singletone = this;
   }
   startConnection (userId:string) {
     this.hubConnection = new signalR.HubConnectionBuilder()

@@ -53,67 +53,71 @@ namespace MG.Server.Database
 
         public async Task Load()
         {
-            try
-            {
-                using StreamReader usersReader = new(@".\users.json");
-                var json = usersReader.ReadToEnd();
-                Users = JsonSerializer.Deserialize<List<UserData>>(json);
-                //Console.WriteLine(Users);
+             //TODO !!!!!
+             // NEED TO THINK OF NOT FILES - it cannot be deploed in docker - the files are overitten each time
+             // posible solution - add independed volium - but it more money - so maybe later - for real production
 
-                using StreamReader gamesReader = new(@".\games.json");
-                json = gamesReader.ReadToEnd();
-                Games = JsonSerializer.Deserialize<List<GameData>>(json);
-                //Console.WriteLine(Games);
+            //try
+            //{
+            //    using StreamReader usersReader = new(@".\users.json");
+            //    var json = usersReader.ReadToEnd();
+            //    Users = JsonSerializer.Deserialize<List<UserData>>(json);
+            //    //Console.WriteLine(Users);
 
-                Games.ForEach(game =>
-                {
-                    switch (game.GameType)
-                    {
-                        case GameTypeEnum.TIK_TAK_TOE:
-                            game.GameFlow = new TikTakToeGameFlow(game);
-                            break;
-                        case GameTypeEnum.CHESS:
-                            game.GameFlow = new ChessGameFlow(game);
-                            break;
-                        case GameTypeEnum.DND:
-                            game.GameFlow = new DnDGameFlow(game);
-                            break;
-                        default:
-                            break;
-                    }
+            //    using StreamReader gamesReader = new(@".\games.json");
+            //    json = gamesReader.ReadToEnd();
+            //    Games = JsonSerializer.Deserialize<List<GameData>>(json);
+            //    //Console.WriteLine(Games);
+
+            //    Games.ForEach(game =>
+            //    {
+            //        switch (game.GameType)
+            //        {
+            //            case GameTypeEnum.TIK_TAK_TOE:
+            //                game.GameFlow = new TikTakToeGameFlow(game);
+            //                break;
+            //            case GameTypeEnum.CHESS:
+            //                game.GameFlow = new ChessGameFlow(game);
+            //                break;
+            //            case GameTypeEnum.DND:
+            //                game.GameFlow = new DnDGameFlow(game);
+            //                break;
+            //            default:
+            //                break;
+            //        }
 
 
-                    if (game.GameStatus == GameStatusEnum.PLAY)
-                    {
-                        // create AI agents
-                        foreach (var player in game.Players)
-                        {
-                            if (player.Type == PlayerTypeEnum.AI)
-                            {
-                                player.AIAgent = new AIAgent(game, player);
-                            }
-                        }
-                    }
+            //        if (game.GameStatus == GameStatusEnum.PLAY)
+            //        {
+            //            // create AI agents
+            //            foreach (var player in game.Players)
+            //            {
+            //                if (player.Type == PlayerTypeEnum.AI)
+            //                {
+            //                    player.AIAgent = new AIAgent(game, player);
+            //                }
+            //            }
+            //        }
 
-                });
+            //    });
 
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex);
-                Save();
-            }
+            //}
+            //catch (Exception ex)
+            //{
+            //    Console.WriteLine(ex);
+            //    Save();
+            //}
 
 
         }
 
         public async Task Save()
         {
-            string json = JsonSerializer.Serialize(Users);
-            File.WriteAllText(@".\users.json", json);
+            //string json = JsonSerializer.Serialize(Users);
+            //File.WriteAllText(@".\users.json", json);
 
-            json = JsonSerializer.Serialize(Games);
-            File.WriteAllText(@".\games.json", json);
+            //json = JsonSerializer.Serialize(Games);
+            //File.WriteAllText(@".\games.json", json);
 
         }
     }

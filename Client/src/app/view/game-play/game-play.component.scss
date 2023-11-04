@@ -6,27 +6,3 @@
   background: yellow;
 }
 
-.debug-icon {
-  color: black;
-  cursor: pointer;
-  background: white;
-  margin: 1px;
-  padding: 5px;
-  border-radius: 7px;
-  &:hover{
-    color: white;
-    background: gray;
-  }
-}
-
-::ng-deep .p-inputtext.p-component.p-element.p-inputnumber-input{
-  width: 100px;
-  //background: magenta;
-  padding: 0;
-  margin: 0;
-}
-
-::ng-deep .p-element.p-button-icon-only.p-inputnumber-button.p-button.p-component{
-  padding: 0;
-  margin: 0;
-}

@@ -27,7 +27,7 @@ export class GeneralService{
     return Math.random() * (max - min + 1) + min
   }
 
-  deepEqual(object1:any, object2:any) {
+  static deepEqual(object1:any, object2:any) {
     const keys1 = Object.keys(object1);
     const keys2 = Object.keys(object2);
 
@@ -49,7 +49,7 @@ export class GeneralService{
 
     return true;
   }
-  isObject(object:any) {
+  static  isObject(object:any) {
     return object != null && typeof object === 'object';
   }
 }

@@ -1,0 +1,149 @@
+<div *ngIf="scene" style="position: absolute;top: 0px;right: 0px;">
+  <button (click)="showDebug()" style="width: 100px;height: 30px">DEBUG</button>
+</div>
+
+<div *ngIf="showDebugWindow && scene && camera"
+  style="position: absolute;top: 0px;right: 0px;width: 500px;height: 600px;background: red;overflow: auto;padding: 10px">
+
+  <input [(ngModel)]="debugSearchModel">
+  <button>Export</button>
+  <button (click)="showAssets=true;">Assets</button>
+  <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: camera}"></ng-container>
+  <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: scene}"></ng-container>
+</div>
+
+<div *ngIf="gameData && showAssets" style="position: absolute;top: 0px;right: 0px;width: 500px;height: 600px;background: red;overflow: auto;padding: 10px">
+  <div class="mg-col">
+    <div>ASSETS</div>
+    <div *ngFor="let item of gameData.assets | keyvalue">
+      <button (click)="addAsset(item.value)">{{item.key}}</button>
+    </div>
+  </div>
+
+</div>
+<ng-template #tmpl let-obj>
+
+  <div
+    style="padding: 5px 0px 5px 0px;border-top: 1px solid blue;border-bottom: 1px solid blue;border-left: 1px solid blue;">
+    <div *ngIf="obj.name.toUpperCase().indexOf(debugSearchModel.toUpperCase()) > -1">
+      <div class="mg-row-center"
+           style="border-bottom: 1px solid blue;">
+
+        <div style="flex-grow: 1;"> {{getAnyClass(obj)}} {{obj.name}}</div>
+
+        <i class="fa-solid fa-crosshairs debug-icon"
+           [style.background-color]="obj.showDebugPosition ? 'gray' : ''"
+           [pTooltip]="'Position:' + (obj.position | json)"
+           (click)="obj.showDebugPosition=!obj.showDebugPosition"></i>
+
+        <i class="fa-solid fa-rotate debug-icon"
+           pTooltip="Rotation"
+           (click)="obj.showDebugRotation=!obj.showDebugRotation"
+           [style.background-color]="obj.showDebugRotation ? 'gray' : ''"></i>
+
+        <i class="fa-solid fa-up-right-and-down-left-from-center debug-icon"
+           [style.background-color]="obj.showDebugScale ? 'gray' : ''"
+           pTooltip="Scale"
+           (click)="obj.showDebugScale=!obj.showDebugScale"></i>
+
+        <i class="fa-solid fa-eye debug-icon"
+           [style.background-color]="obj.visible ? '' : 'gray'"
+           pTooltip="Visible"
+           (click)="obj.visible=!obj.visible"></i>
+
+        <i class="fa-solid fa-trash-can debug-icon" (click)="onRemoveClick(obj)"></i>
+
+      </div>
+      <div *ngIf="obj.showDebugPosition" class="mg-row-center">
+        <div style="margin-right: 20px">Position</div>
+        <p-inputNumber [(ngModel)]="obj.position.x"
+                       [showButtons]="true"
+                       mode="decimal"
+                       buttonLayout="vertical"
+                       spinnerMode="vertical"
+                       inputStyleClass="xxx"
+                       [step]="0.1">
+        </p-inputNumber>
+        <p-inputNumber [(ngModel)]="obj.position.y"
+                       [showButtons]="true"
+                       mode="decimal"
+                       buttonLayout="vertical"
+                       spinnerMode="vertical"
+                       inputStyleClass="xxx"
+                       [step]="0.1">
+        </p-inputNumber>
+        <p-inputNumber [(ngModel)]="obj.position.z"
+                       [showButtons]="true"
+                       mode="decimal"
+                       buttonLayout="vertical"
+                       spinnerMode="vertical"
+                       inputStyleClass="xxx"
+                       [step]="0.1">
+        </p-inputNumber>
+
+      </div>
+      <div *ngIf="obj.showDebugRotation" class="mg-row-center">
+        <div style="margin-right: 20px">Rotation:</div>
+
+        <p-inputNumber [(ngModel)]="obj.rotation.x"
+                       [showButtons]="true"
+                       mode="decimal"
+                       buttonLayout="vertical"
+                       spinnerMode="vertical"
+                       inputStyleClass="xxx"
+                       [step]="0.1">
+        </p-inputNumber>
+        <p-inputNumber [(ngModel)]="obj.rotation.y"
+                       [showButtons]="true"
+                       mode="decimal"
+                       buttonLayout="vertical"
+                       spinnerMode="vertical"
+                       inputStyleClass="xxx"
+                       [step]="0.1">
+        </p-inputNumber>
+        <p-inputNumber [(ngModel)]="obj.rotation.z"
+                       [showButtons]="true"
+                       mode="decimal"
+                       buttonLayout="vertical"
+                       spinnerMode="vertical"
+                       inputStyleClass="xxx"
+                       [step]="0.1">
+        </p-inputNumber>
+
+      </div>
+      <div *ngIf="obj.showDebugScale "class="mg-row-center">
+        <div style="margin-right: 20px">Scale:</div>
+
+        <p-inputNumber [(ngModel)]="obj.scale.x"
+                       [showButtons]="true"
+                       mode="decimal"
+                       buttonLayout="vertical"
+                       spinnerMode="vertical"
+                       inputStyleClass="xxx"
+                       [step]="0.1">
+        </p-inputNumber>
+        <p-inputNumber [(ngModel)]="obj.scale.y"
+                       [showButtons]="true"
+                       mode="decimal"
+                       buttonLayout="vertical"
+                       spinnerMode="vertical"
+                       inputStyleClass="xxx"
+                       [step]="0.1">
+        </p-inputNumber>
+        <p-inputNumber [(ngModel)]="obj.scale.z"
+                       [showButtons]="true"
+                       mode="decimal"
+                       buttonLayout="vertical"
+                       spinnerMode="vertical"
+                       inputStyleClass="xxx"
+                       [step]="0.1">
+        </p-inputNumber>
+
+      </div>
+    </div>
+
+    <div *ngFor="let chobj of obj.children;" style="padding-left: 20px;">
+      <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: chobj}"></ng-container>
+    </div>
+  </div>
+</ng-template>

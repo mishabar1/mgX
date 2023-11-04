@@ -16,6 +16,7 @@ import { EditorComponent } from './view/editor/editor.component';
 import { FontAwesomeModule } from '@fortawesome/angular-fontawesome'
 import {TooltipModule} from "primeng/tooltip";
 import {InputNumberModule} from "primeng/inputnumber";
+import { DebugViewComponent } from './view/debug-view/debug-view.component';
 
 @NgModule({
   declarations: [
@@ -24,7 +25,8 @@ import {InputNumberModule} from "primeng/inputnumber";
     GamesListComponent,
     GameSetupComponent,
     GamePlayComponent,
-    EditorComponent
+    EditorComponent,
+    DebugViewComponent
   ],
   imports: [
     BrowserModule,
