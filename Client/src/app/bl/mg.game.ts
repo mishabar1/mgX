@@ -12,6 +12,7 @@ import * as TWEEN from '@tweenjs/tween.js';
 import {MathUtils} from 'three';
 import {GeneralService} from './general.service';
 import {SignalrService} from '../services/SignalrService';
+import {Vector3} from "three/src/math/Vector3";
 
 export class MgGame{
 
@@ -33,6 +34,7 @@ export class MgGame{
     // console.log(gameData, dayjs().startOf('month').add(1, 'day').set('year', 2018).format('YYYY-MM-DD HH:mm:ss'));
     this.createItem(this.gameData.table, null);
 
+    this.addPlayers();
     if (this.playerData) {
       this.mgThree.camera.position.set(this.playerData.camera.position.x, this.playerData.camera.position.y, this.playerData.camera.position.z);
     } else {
@@ -41,6 +43,46 @@ export class MgGame{
 
   }
 
+  addPlayers(){
+
+    forEach(this.gameData.players,(playerData:PlayerData)=>{
+
+      this.mgThree.gltfLoader.load('\\assets\\heads\\suzanne.glb', (gltf) => {
+        const mesh: THREE.Group = gltf.scene;
+
+        // let texture = this.mgThree.textureLoader.load("\\assets\\heads\\base-color.png");
+        this.mgThree.textureLoader.load("\\assets\\heads\\metallic.png",texture=>{
+          texture.flipY = false;
+          mesh.traverse( function( object:any ) {
+            if ( object.isMesh ) {
+              object.material.map = texture;
+              object.material.side = THREE.DoubleSide;
+              object.material.needsUpdate = true;
+            }
+          } );
+        });
+
+
+
+
+        playerData.avatar.mesh = mesh;
+        mesh.lookAt(0,0,0);
+        if(this.playerData && this.playerData.id == playerData.id){
+          // this is me, no need to add head
+          // mesh.position.set(playerData.avatar.position.x,playerData.avatar.position.y,playerData.avatar.position.z);
+          // this.mgThree.camera.add(mesh);
+        }else{
+          mesh.position.set(playerData.avatar.position.x,playerData.avatar.position.y,playerData.avatar.position.z);
+          mesh.lookAt(0,0,0);
+          this.mgThree.scene.add(mesh);
+        }
+
+      });
+
+
+
+    });
+  }
 
   createItem(itemData: ItemData, parentMesh: THREE.Object3D | null) {
     //console.log("createItem",itemData,parentMesh);
@@ -300,7 +342,7 @@ export class MgGame{
 
     item.rotation = rot;
 
-    rot = {
+    let r = {
       x: MathUtils.degToRad(rot.x),
       y: MathUtils.degToRad(rot.y),
       z: MathUtils.degToRad(rot.z)
@@ -310,13 +352,13 @@ export class MgGame{
     // this.createMoveAnimation(item.mesh,item.mesh!.position,position)
     // let meshRot =new THREE.Vector3();
     // meshRot = meshRot.applyEuler(item.mesh!.rotation);
-    if (!GeneralService.deepEqual(rot, {
+    if (!GeneralService.deepEqual(r, {
       x: item.mesh!.rotation.x,
       y: item.mesh!.rotation.y,
       z: item.mesh!.rotation.z
     })) {
       // const u = new THREE.Euler( rot.x, rot.y, rot.z, 'XYZ' )
-      new TWEEN.Tween(item.mesh!.rotation).to(rot, 300).start();
+      new TWEEN.Tween(item.mesh!.rotation).to(r, 300).start();
     }
 
   }
@@ -332,7 +374,7 @@ export class MgGame{
   processItem(itemData: ItemData, mesh: THREE.Object3D, parentMesh: THREE.Object3D | null) {
     //console.log("processItem",itemData,mesh,parentMesh);
 
-    mesh.name = itemData.asset;
+    mesh.name = itemData.asset || itemData.name || "";
 
     // position
     mesh.position.set(itemData.position.x, itemData.position.y, itemData.position.z);

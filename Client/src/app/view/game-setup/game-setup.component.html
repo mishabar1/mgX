@@ -1,5 +1,8 @@
 <div *ngIf="gameData" style="overflow: auto;width: 100%;height: 100%;padding: 20px;">
-  <div style="font-size: 20px;">Settings</div>
+  <div class="mg-row-center">
+    <p-button (onClick)="backClick()" icon="fa-solid fa-chevron-left" severity="secondary" ></p-button>
+    <div style="font-size: 40px;margin-left: 20px;">{{gameData.gameType}} - <b>{{gameData.gameStatus}}</b> - {{gameData.name}}</div>
+  </div>
 
   <div class="mg-row-center" style="margin-top: 20px;">
     <p-button (onClick)="setup()" severity="secondary">SETUP</p-button>

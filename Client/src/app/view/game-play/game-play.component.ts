@@ -43,15 +43,6 @@ import {environment} from '../../../environments/environment';
 import {Group} from 'three/src/objects/Group';
 import {GeneralService} from '../../bl/general.service';
 import {UnsubscriberService} from '../../services/unsubscriber.service';
-import {RoomEnvironment} from 'three/examples/jsm/environments/RoomEnvironment';
-import {STLLoader} from 'three/examples/jsm/loaders/STLLoader';
-import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader';
-import {FontLoader} from 'three/examples/jsm/loaders/FontLoader';
-import {TextGeometry} from 'three/examples/jsm/geometries/TextGeometry';
-import * as ThreeMeshUI from 'three-mesh-ui'
-import {VRButton} from 'three/examples/jsm/webxr/VRButton';
-import {InteractionManager} from '../../services/mg.interaction.manager';
-import {GameFlowService} from '../../bl/game-flow.service';
 import {MgThree} from '../../bl/mg.three';
 import {MgGame} from '../../bl/mg.game';
 
@@ -61,20 +52,14 @@ import {MgGame} from '../../bl/mg.game';
   styleUrls: ['./game-play.component.scss'],
   providers: [UnsubscriberService]
 })
-export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit, OnChanges {
-
-  gameData!: GameData;
-  playerData!: PlayerData;
+export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
 
   @ViewChild('rendererContainer', {static: true}) rendererContainer!: ElementRef;
-
-
-
-  // animationsObjects:any=[];
 
   gameId: string | null = "";
 
   mgThree!:MgThree;
+
   mgGame!:MgGame;
 
   constructor(public signalRService: SignalrService,
@@ -82,16 +67,14 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit, OnCh
               private generalService: GeneralService,
               private activatedRoute: ActivatedRoute,
               private unsubscriberService: UnsubscriberService,
-              private gameFlowService:GameFlowService,
               private dalService: DALService) {
   }
 
   ngOnInit() {
 
     this.gameId = this.activatedRoute.snapshot.paramMap.get('id');
-    console.log(this.gameId);
+    console.log("ngOnInit", this.gameId);
 
-    // this.signalRService.addTransferChartDataListener();
     this.signalRService.hubConnection.off('GameUpdated');
     this.signalRService.hubConnection.on('GameUpdated', data => {
       console.log('GameUpdated', data);
@@ -115,9 +98,6 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit, OnCh
       this.mgGame = new MgGame();
       this.mgGame.gameData = game;
 
-      this.gameData = game;
-      // this.playerData = this.getPlayerByUserId(this.generalService.User!.id)!;
-
       this.mgThree=new MgThree();
       this.mgThree.initThree(this.rendererContainer.nativeElement,()=>{
         this.mgGame.loadGame(this.mgThree,this.generalService.User!);
@@ -125,24 +105,8 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit, OnCh
     });
   }
 
-
-
-  loadGame() {
-
-
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
-  }
-
-
-
   onVrClick() {
-
     this.mgThree.startVr();
-
-
-
   }
 
 

@@ -1,5 +1,9 @@
 <div>
-  <div style="font-size: 20px;">Hello <b>{{user.name}}</b></div>
+  <div class="mg-row-center">
+    <p-button (onClick)="backClick()" icon="fa-solid fa-chevron-left" severity="secondary" ></p-button>
+    <div style="font-size: 40px;margin-left: 20px;">Hello <b>{{user.name}}</b></div>
+  </div>
+
 
   <div *ngFor="let game of games;" class="mg-row-center" style="margin:10px;column-gap: 10px;border: 1px solid black;">
     <div>{{game.name}} </div>

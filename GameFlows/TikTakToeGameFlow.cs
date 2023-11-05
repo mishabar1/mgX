@@ -48,12 +48,16 @@ namespace MG.Server.GameFlows
             // X
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
             .AddAttribute("type", "x")
-            .SetCameraPosition(0, 2, 3);
+            .SetCameraPosition(0, 2, 3)
+            .SetAvatarPosition(0, 2, 3)
+            ;
 
             //O
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
             .AddAttribute("type", "o")
-            .SetCameraPosition(0, 2, 3);
+            .SetCameraPosition(0, 2, -3)
+            .SetAvatarPosition(0, 2, -3)
+            ;
         }
 
         protected override async Task Setup()

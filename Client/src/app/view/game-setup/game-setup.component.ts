@@ -127,4 +127,8 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
   open() {
     this.router.navigate([RouteNames.GamePlay,this.gameId]);
   }
+
+  backClick() {
+    this.router.navigate([RouteNames.GamesList]);
+  }
 }

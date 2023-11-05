@@ -28,7 +28,7 @@ namespace MG.Server.Entities
 
         public static ItemData Table()
         {
-            return new ItemData("", null) { Name = "TABLE" };
+            return new ItemData("", null) { Name = "GAME TABLE" };
         }
 
         public ItemData()

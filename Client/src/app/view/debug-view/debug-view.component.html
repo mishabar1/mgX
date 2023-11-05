@@ -1,21 +1,21 @@
-<div *ngIf="scene" style="position: absolute;top: 0px;right: 0px;">
+<div *ngIf="mgThree.scene" style="position: absolute;top: 0px;right: 0px;">
   <button (click)="showDebug()" style="width: 100px;height: 30px">DEBUG</button>
 </div>
 
-<div *ngIf="showDebugWindow && scene && camera"
+<div *ngIf="showDebugWindow && mgThree.scene && mgThree.camera"
   style="position: absolute;top: 0px;right: 0px;width: 500px;height: 600px;background: red;overflow: auto;padding: 10px">
-
+  <button style="position: absolute;top: 0px;right: 0px;" (click)="showDebugWindow=false">X</button>
   <input [(ngModel)]="debugSearchModel">
   <button>Export</button>
   <button (click)="showAssets=true;">Assets</button>
-  <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: camera}"></ng-container>
-  <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: scene}"></ng-container>
+  <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: mgThree.camera}"></ng-container>
+  <ng-container *ngTemplateOutlet="tmpl; context: {$implicit: mgThree.scene}"></ng-container>
 </div>
 
-<div *ngIf="gameData && showAssets" style="position: absolute;top: 0px;right: 0px;width: 500px;height: 600px;background: red;overflow: auto;padding: 10px">
+<div *ngIf="mgGame.gameData && showAssets" style="position: absolute;top: 0px;right: 0px;width: 500px;height: 600px;background: red;overflow: auto;padding: 10px">
   <div class="mg-col">
     <div>ASSETS</div>
-    <div *ngFor="let item of gameData.assets | keyvalue">
+    <div *ngFor="let item of mgGame.gameData.assets | keyvalue">
       <button (click)="addAsset(item.value)">{{item.key}}</button>
     </div>
   </div>
@@ -147,3 +147,4 @@
     </div>
   </div>
 </ng-template>
+

@@ -7,23 +7,28 @@ import {DALService} from '../../dal/dal.service';
 import * as THREE from 'three';
 import {GameData} from '../../entities/game.data';
 import {AssetData} from '../../entities/asset.data';
+import {MgGame} from "../../bl/mg.game";
+import {MgThree} from "../../bl/mg.three";
+import {ItemData} from "../../entities/item.data";
+import {V3} from "../../entities/V3";
 
 @Component({
   selector: 'app-debug-view',
   templateUrl: './debug-view.component.html',
   styleUrls: ['./debug-view.component.scss']
 })
-export class DebugViewComponent  implements OnInit, OnDestroy, AfterViewInit, OnChanges{
+export class DebugViewComponent implements OnInit, OnDestroy, AfterViewInit, OnChanges {
 
-  @Input() camera!: THREE.PerspectiveCamera;
-  @Input() scene!: THREE.Scene;
-  @Input() gameData!: GameData;
+  @Input() mgThree!: MgThree;
+  @Input() mgGame!: MgGame;
 
   showDebugWindow = false;
-  debugSearchModel="";
-  showAssets=false;
+  debugSearchModel = "";
+  showAssets = false;
+
   constructor() {
   }
+
   ngAfterViewInit(): void {
   }
 
@@ -35,8 +40,6 @@ export class DebugViewComponent  implements OnInit, OnDestroy, AfterViewInit, On
 
   ngOnInit(): void {
   }
-
-
 
 
   getAnyClass(obj: any) {
@@ -55,9 +58,21 @@ export class DebugViewComponent  implements OnInit, OnDestroy, AfterViewInit, On
   }
 
   addAsset(assetData: AssetData) {
-    this.showAssets=false;
+    this.showAssets = false;
+    debugger
 
+    let itemData = new ItemData();
+    itemData.id = GeneralService.GenerateGuid();
+    itemData.asset = assetData.name!;
+    itemData.items=[];
+    itemData.position = new V3(0,0,0);
+    itemData.rotation = new V3(0,0,0);
+    itemData.scale = new V3(1,1,1);
+    itemData.visible = {};
+    itemData.clickActions = {};
+    itemData.hoverActions = {};
 
+    this.mgGame.createItem(itemData, this.mgGame.gameData.table.mesh!);
 
   }
 }

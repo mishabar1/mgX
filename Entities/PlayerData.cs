@@ -24,8 +24,8 @@ namespace MG.Server.Entities
             Type = PlayerTypeEnum.EMPTY_SEAT;
             Avatar = new LocationData();
             Camera = new LocationData();
-            Table = new ItemData("", null) { Name = "PLAYER_TABLE" };
-            Hand = new ItemData("", null) { Name = "PLAYER_HAND" };
+            Table = new ItemData("", null) { Name = "PLAYER TABLE" };
+            Hand = new ItemData("", null) { Name = "PLAYER HAND" };
             if (game != null)
             {
                 game.Players.Add(this);
@@ -37,6 +37,15 @@ namespace MG.Server.Entities
             this.Camera.Position.X = x;
             this.Camera.Position.Y = y;
             this.Camera.Position.Z = z;
+
+            return this;
+        }
+
+        internal PlayerData SetAvatarPosition(int x, int y, int z)
+        {
+            this.Avatar.Position.X = x;
+            this.Avatar.Position.Y = y;
+            this.Avatar.Position.Z = z;
 
             return this;
         }

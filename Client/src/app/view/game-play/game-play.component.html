@@ -9,9 +9,8 @@
   <button (click)="onVrClick()" style="width: 100px;height: 30px">VR</button>
 </div>
 
-<app-debug-view *ngIf="mgThree"
-                [camera]="mgThree.camera"
-                [scene]="mgThree.scene"
-                [gameData]="gameData"></app-debug-view>
+<app-debug-view *ngIf="mgThree && mgGame && mgGame.gameData"
+                [mgThree]="mgThree"
+                [mgGame]="mgGame"></app-debug-view>
 
 

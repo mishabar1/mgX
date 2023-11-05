@@ -67,4 +67,8 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
   delete(game: GameData) {
     this.dalService.deleteGame(game.id).subscribe();
   }
+
+  backClick() {
+    this.router.navigate([RouteNames.Home]);
+  }
 }
