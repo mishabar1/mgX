@@ -13,6 +13,7 @@
 </div>
 
 <div *ngIf="mgGame.gameData && showAssets" style="position: absolute;top: 0px;right: 0px;width: 500px;height: 600px;background: red;overflow: auto;padding: 10px">
+  <button style="position: absolute;top: 0px;right: 0px;" (click)="showAssets=false">X</button>
   <div class="mg-col">
     <div>ASSETS</div>
     <div *ngFor="let item of mgGame.gameData.assets | keyvalue">

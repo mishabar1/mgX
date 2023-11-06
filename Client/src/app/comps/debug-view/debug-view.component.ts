@@ -1,11 +1,5 @@
 import {AfterViewInit, Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges} from '@angular/core';
-import {SignalrService} from '../../services/SignalrService';
-import {ActivatedRoute, Router} from '@angular/router';
 import {GeneralService} from '../../bl/general.service';
-import {UnsubscriberService} from '../../services/unsubscriber.service';
-import {DALService} from '../../dal/dal.service';
-import * as THREE from 'three';
-import {GameData} from '../../entities/game.data';
 import {AssetData} from '../../entities/asset.data';
 import {MgGame} from "../../bl/mg.game";
 import {MgThree} from "../../bl/mg.three";

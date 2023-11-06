@@ -16,7 +16,7 @@ import { EditorComponent } from './view/editor/editor.component';
 import { FontAwesomeModule } from '@fortawesome/angular-fontawesome'
 import {TooltipModule} from "primeng/tooltip";
 import {InputNumberModule} from "primeng/inputnumber";
-import { DebugViewComponent } from './view/debug-view/debug-view.component';
+import {DebugViewComponent} from "./comps/debug-view/debug-view.component";
 
 @NgModule({
   declarations: [

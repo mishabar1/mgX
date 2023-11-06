@@ -2,6 +2,7 @@
 using MG.Server.Controllers;
 using MG.Server.Database;
 using MG.Server.Entities;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using System.Reflection;
 using static MG.Server.GameFlows.TikTakToeGameFlow;
 
@@ -59,10 +60,16 @@ namespace MG.Server.GameFlows
         public async Task RunSetupFlow()
         {
             // reset all            
-            this.GameData.Table = ItemData.Table();            
+            this.GameData.Table = ItemData.Table();
             this.GameData.Winners = null;
             this.GameData.CurrentTurnId = null;
             this.GameData.GameStatus = GameStatusEnum.SETUP;
+
+            foreach (var player in GameData.Players)
+            {
+                player.Hand = new ItemData("", null) { Name = "PLAYER TABLE" };
+                player.Table = new ItemData("", null) { Name = "PLAYER TABLE" };
+            }
 
             await Setup();
 
@@ -99,7 +106,7 @@ namespace MG.Server.GameFlows
         protected abstract Task StartGame();
         protected abstract Task EndGame();
 
-        
+
         public async Task RunEndGameFlow()
         {
             try
@@ -139,8 +146,8 @@ namespace MG.Server.GameFlows
                 Console.WriteLine("TikTakToeGameFlow GAME ENDED !!!!!! winners count: " + this.GameData.Winners.Count());
 
                 RunEndGameFlow();
-                
-                
+
+
 
             }
 
@@ -156,7 +163,7 @@ namespace MG.Server.GameFlows
             this.GameData.Assets.Add(asset.Name, asset);
             return asset;
         }
-        
+
         internal ItemData addItem(AssetData asset)
         {
             var item = new ItemData(asset.Name, this.GameData.Table);
@@ -178,14 +185,36 @@ namespace MG.Server.GameFlows
             return item;
         }
 
-        internal ItemData playSound(AssetData asset, string playType="ONCE") // "ONCE" OR "LOOP"
+        internal ItemData playSound(AssetData asset, string playType = "ONCE") // "ONCE" OR "LOOP"
         {
             var item = new ItemData(asset.Name, this.GameData.Table);
             item.PlayType = playType;
             return item;
         }
-        
 
+        internal PlayerData getPlayerByAttribute(string key, string val)
+        {
+            foreach (var p in GameData.Players)
+            {
+                if (p.HaveAttribute(key, val))
+                {
+                    return p;
+                }
+            }
+            return null;
+        }
+
+        internal ItemData addItemToPlayerTable(PlayerData player, AssetData asset)
+        {
+            var item = new ItemData(asset.Name, player.Table);
+            return item;
+        }
+                
+        internal ItemData addItemToPlayerHand(PlayerData player, AssetData asset)
+        {
+            var item = new ItemData(asset.Name, player.Hand);
+            return item;
+        }
 
         internal void removeItem(string itemId)
         {
@@ -222,7 +251,8 @@ namespace MG.Server.GameFlows
             ItemData.GetItemsByAsset(GameData.Table, asset).ForEach(x => { removeItem(x.Id); });
         }
 
-        internal List<ItemData> getItemsByAttribute(string key) {
+        internal List<ItemData> getItemsByAttribute(string key)
+        {
             return ItemData.GetItemsByAttribute(this.GameData.Table, key);
         }
 

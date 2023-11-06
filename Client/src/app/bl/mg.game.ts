@@ -9,10 +9,11 @@ import {PlayerData} from '../entities/player.data';
 import {find, forEach, keys} from 'lodash';
 import {V3} from '../entities/V3';
 import * as TWEEN from '@tweenjs/tween.js';
-import {MathUtils} from 'three';
+import {BoxGeometry, MathUtils, Mesh, MeshBasicMaterial} from 'three';
 import {GeneralService} from './general.service';
 import {SignalrService} from '../services/SignalrService';
 import {Vector3} from "three/src/math/Vector3";
+import {Box3} from "three/src/math/Box3";
 
 export class MgGame{
 
@@ -47,13 +48,21 @@ export class MgGame{
 
     forEach(this.gameData.players,(playerData:PlayerData)=>{
 
+      let group = new THREE.Group();
+      group.name = "PLAYER";
+      playerData.avatar.mesh = group;
+      group.position.set(playerData.avatar.position.x,playerData.avatar.position.y,playerData.avatar.position.z);
+      group.lookAt(0,0,0);
+      this.mgThree.scene.add(group);
+
+      // head
       this.mgThree.gltfLoader.load('\\assets\\heads\\suzanne.glb', (gltf) => {
-        const mesh: THREE.Group = gltf.scene;
+        const head: THREE.Group = gltf.scene;
 
         // let texture = this.mgThree.textureLoader.load("\\assets\\heads\\base-color.png");
         this.mgThree.textureLoader.load("\\assets\\heads\\metallic.png",texture=>{
           texture.flipY = false;
-          mesh.traverse( function( object:any ) {
+          head.traverse( function( object:any ) {
             if ( object.isMesh ) {
               object.material.map = texture;
               object.material.side = THREE.DoubleSide;
@@ -62,22 +71,34 @@ export class MgGame{
           } );
         });
 
-
-
-
-        playerData.avatar.mesh = mesh;
-        mesh.lookAt(0,0,0);
+        // playerData.avatar.mesh = mesh;
+        // mesh.lookAt(0,0,0);
         if(this.playerData && this.playerData.id == playerData.id){
           // this is me, no need to add head
           // mesh.position.set(playerData.avatar.position.x,playerData.avatar.position.y,playerData.avatar.position.z);
           // this.mgThree.camera.add(mesh);
         }else{
-          mesh.position.set(playerData.avatar.position.x,playerData.avatar.position.y,playerData.avatar.position.z);
-          mesh.lookAt(0,0,0);
-          this.mgThree.scene.add(mesh);
+          playerData.avatar.mesh!.add(head)
         }
 
       });
+
+      //table
+      const playerTable = new Mesh(new BoxGeometry(0.1, 0.01, 0.1), new MeshBasicMaterial({color: 0x00ff00}));
+      playerTable.name = "PLAYER TABLE";
+      playerData.avatar.mesh?.add(playerTable);
+      playerTable.position.set(0,-1.5,1.5);
+
+      this.createItem(playerData.table,playerTable);
+
+      //hand
+      const playerHand = new Mesh(new BoxGeometry(0.1, 0.01, 0.1), new MeshBasicMaterial({color: 0x00ffff}));
+      playerHand.name = "PLAYER HAND";
+      playerData.avatar.mesh?.add(playerHand);
+      playerHand.rotation.x = -Math.PI / 2;
+      playerHand.position.set(0,0,1.5);
+
+      this.createItem(playerData.hand, playerHand);
 
 
 
@@ -103,7 +124,22 @@ export class MgGame{
         if (frontURL.toLowerCase().endsWith("stl")) {
           this.mgThree.stlLoader.load(frontURL, (geometry) => {
             const mesh = new THREE.Mesh(geometry);
-            this.processItem(itemData, mesh, parentMesh);
+            // NOT SURE WHY NEED TO ROTATE.... BUT NEED...  :-(
+            mesh.rotation.x = -Math.PI / 2;
+
+            //scale to 1
+            mesh.geometry.computeBoundingBox();
+            let box = mesh.geometry.boundingBox;
+            console.log(box);
+            let x= Math.abs(box!.min.x) + Math.abs(box!.max.x);
+            let z= Math.abs(box!.min.z) + Math.abs(box!.max.z);
+            let scale =  1 / Math.max(x,z);
+            mesh.scale.set(scale,scale,scale);
+
+            let group = new THREE.Group();
+            group.add(mesh);
+
+            this.processItem(itemData, group, parentMesh);
           });
         }
 
