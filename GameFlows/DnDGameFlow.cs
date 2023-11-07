@@ -6,17 +6,20 @@ namespace MG.Server.GameFlows
     public class DnDGameFlow : BaseGameFlow
     {
         internal class Assets
-        {            
-            internal static AssetData MAP_1_0 = new TokenAssetData("MAP_1_0", "dnd/map_1_0.png");
-            internal static AssetData MAP_1_1 = new TokenAssetData("MAP_1_1", "dnd/map_1_1.png");
-            internal static AssetData SKELETON = new ObjectAssetData("SKELETON", "dnd/skeleton.stl");
-            internal static AssetData angel = new ObjectAssetData("angel", "dnd/angel.stl");
+        {
+            internal static AssetData MAP_1_0 = new TokenAssetData("dnd/map_1_0.png");
+            internal static AssetData MAP_1_1 = new TokenAssetData("dnd/map_1_1.png");
+            internal static AssetData SKELETON = new ObjectAssetData("dnd/skeleton.stl");
+            internal static AssetData angel = new ObjectAssetData("dnd/angel.stl");
 
-            internal static AssetData Card1 = new TokenAssetData("Card1", "dnd/card1.png","dnd/cardBack.png");
-            internal static AssetData Card2 = new TokenAssetData("Card2", "dnd/card2.png","dnd/cardBack.png");
-            internal static AssetData Card3 = new TokenAssetData("Card3", "dnd/card3.png","dnd/cardBack.png");
-            internal static AssetData Card4 = new TokenAssetData("Card4", "dnd/card4.png", "dnd/cardBack.png");
-            internal static AssetData Card5 = new TokenAssetData("Card5", "dnd/card5.png", "dnd/cardBack.png");
+            internal static AssetData flytrap = new ObjectAssetData("dnd/flytrap.glb");
+            internal static AssetData rover = new ObjectAssetData("dnd/rover.glb");
+
+            internal static AssetData Card1 = new TokenAssetData("dnd/card1.png", "dnd/cardBack.png");
+            internal static AssetData Card2 = new TokenAssetData("dnd/card2.png", "dnd/cardBack.png");
+            internal static AssetData Card3 = new TokenAssetData("dnd/card3.png", "dnd/cardBack.png");
+            internal static AssetData Card4 = new TokenAssetData("dnd/card4.png", "dnd/cardBack.png");
+            internal static AssetData Card5 = new TokenAssetData("dnd/card5.png", "dnd/cardBack.png");
         }
 
         public DnDGameFlow(GameData gameData) : base(gameData)
@@ -32,6 +35,10 @@ namespace MG.Server.GameFlows
             addAsset(Assets.MAP_1_1);
             addAsset(Assets.SKELETON);
             addAsset(Assets.angel);
+
+            addAsset(Assets.flytrap);
+            addAsset(Assets.rover);
+
 
             addAsset(Assets.Card1);
             addAsset(Assets.Card2);
@@ -68,6 +75,9 @@ namespace MG.Server.GameFlows
             addItem(Assets.MAP_1_0).SetPosition(0, 0, 0).SetScale(10);
             addItem(Assets.SKELETON).SetPosition(0, 0, 0);
             addItem(Assets.angel).SetPosition(1, 0, 1);
+
+            addItem(Assets.flytrap).SetPosition(3, 0, 3);
+            addItem(Assets.rover).SetPosition(3, 0, -3);
 
             // give players cards
             var p = getPlayerByAttribute("type", "DungeonMaster");

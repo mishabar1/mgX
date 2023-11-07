@@ -11,14 +11,14 @@ namespace MG.Server.GameFlows
         internal class Assets
         {
             //internal static AssetData BOARD = new TokenAssetData("BOARD", "ticktacktoe/board.png");
-            internal static AssetData BOARD = new ObjectAssetData("BOARD", "ticktacktoe/board.glb");
-            internal static AssetData HOVER = new ObjectAssetData("HOVER", "ticktacktoe/hover.gltf");
-            internal static AssetData X = new ObjectAssetData("X", "ticktacktoe/x.glb");
-            internal static AssetData O = new ObjectAssetData("O", "ticktacktoe/o.glb");
+            internal static AssetData BOARD = new ObjectAssetData("ticktacktoe/board.glb") { Scale = new V3(3) };
+            internal static AssetData HOVER = new ObjectAssetData("ticktacktoe/hover.gltf") { Scale = new V3(0.8) };
+            internal static AssetData X = new ObjectAssetData( "ticktacktoe/x.glb");
+            internal static AssetData O = new ObjectAssetData( "ticktacktoe/o.glb");
 
-            internal static AssetData TEST_TEXT3D = new Text3dAssetData("TEST_TEXT3D", "this is test text");
-            internal static AssetData TEST_TEXTBLOCK = new TextBlockAssetData("TEST_TEXTBLOCK", "xxx");
-            internal static AssetData TEST_SOUND = new SoundAssetData("TEST_SOUND", "ticktacktoe/beep.mp3");
+            internal static AssetData TEST_TEXT3D = new Text3dAssetData( "this is test text");
+            internal static AssetData TEST_TEXTBLOCK = new TextBlockAssetData( "xxx");
+            internal static AssetData TEST_SOUND = new SoundAssetData( "ticktacktoe/beep.mp3");
         }
 
         public TikTakToeGameFlow(GameData gameData) : base(gameData)

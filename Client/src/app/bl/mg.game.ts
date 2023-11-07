@@ -14,6 +14,7 @@ import {GeneralService} from './general.service';
 import {SignalrService} from '../services/SignalrService';
 import {Vector3} from "three/src/math/Vector3";
 import {Box3} from "three/src/math/Box3";
+import {Group} from "three/src/objects/Group";
 
 export class MgGame{
 
@@ -111,13 +112,33 @@ export class MgGame{
     if (itemData.asset) {
       const frontURL = '\\assets\\games\\' + this.gameData.assets[itemData.asset].frontURL;
       const backURL = '\\assets\\games\\' + (this.gameData.assets[itemData.asset].backURL || this.gameData.assets[itemData.asset].frontURL);
-      const assetType = this.gameData.assets[itemData.asset].type;
+      const asset = this.gameData.assets[itemData.asset];
+      const assetType = asset.type;
 
       if (assetType == "OBJECT") {
         if (frontURL.toLowerCase().endsWith("glb") || frontURL.toLowerCase().endsWith("gltf")) {
           this.mgThree.gltfLoader.load(frontURL, (gltf) => {
-            const mesh: THREE.Group = gltf.scene;
-            this.processItem(itemData, mesh, parentMesh);
+            const group:Group = gltf.scene;
+
+
+            // scale to 1
+            const box = new THREE.Box3();
+            box.setFromObject(group);
+            // mesh.geometry.computeBoundingBox();
+            // let box = mesh.geometry.boundingBox;
+            // console.log(box);
+            let x= Math.abs(box!.min.x) + Math.abs(box!.max.x);
+            let z= Math.abs(box!.min.z) + Math.abs(box!.max.z);
+            let scaleX =  asset.scale.x / Math.max(x,z);
+            let scaleY =  asset.scale.y / Math.max(x,z);
+            let scaleZ =  asset.scale.z / Math.max(x,z);
+
+            group.scale.set(scaleX,scaleY,scaleZ);
+            let g = new Group();
+            g.add(group);
+
+
+            this.processItem(itemData, g, parentMesh);
           });
         }
 
@@ -126,18 +147,22 @@ export class MgGame{
             const mesh = new THREE.Mesh(geometry);
             // NOT SURE WHY NEED TO ROTATE.... BUT NEED...  :-(
             mesh.rotation.x = -Math.PI / 2;
+            let group = new THREE.Group();
+            group.add(mesh);
 
-            //scale to 1
-            mesh.geometry.computeBoundingBox();
-            let box = mesh.geometry.boundingBox;
-            console.log(box);
+
+            // scale to 1
+            const box = new THREE.Box3();
+            box.setFromObject(mesh);
+            // mesh.geometry.computeBoundingBox();
+            // let box = mesh.geometry.boundingBox;
+            // console.log(box);
             let x= Math.abs(box!.min.x) + Math.abs(box!.max.x);
             let z= Math.abs(box!.min.z) + Math.abs(box!.max.z);
             let scale =  1 / Math.max(x,z);
             mesh.scale.set(scale,scale,scale);
-
-            let group = new THREE.Group();
-            group.add(mesh);
+            // let g = new Group();
+            // g.add(group);
 
             this.processItem(itemData, group, parentMesh);
           });
@@ -151,7 +176,21 @@ export class MgGame{
             //     //         (child as THREE.Mesh).material = material
             //     //     }
             //     // })
-            this.processItem(itemData, group, parentMesh);
+
+            // scale to 1
+            const box = new THREE.Box3();
+            box.setFromObject(group);
+            // mesh.geometry.computeBoundingBox();
+            // let box = mesh.geometry.boundingBox;
+            // console.log(box);
+            let x= Math.abs(box!.min.x) + Math.abs(box!.max.x);
+            let z= Math.abs(box!.min.z) + Math.abs(box!.max.z);
+            let scale =  1 / Math.max(x,z);
+            group.scale.set(scale,scale,scale);
+            let g = new Group();
+            g.add(group);
+
+            this.processItem(itemData, g, parentMesh);
           });
         }
       }
@@ -410,6 +449,13 @@ export class MgGame{
   processItem(itemData: ItemData, mesh: THREE.Object3D, parentMesh: THREE.Object3D | null) {
     //console.log("processItem",itemData,mesh,parentMesh);
 
+    // // Add skeleton.
+    // let skeletonHelper = new THREE.SkeletonHelper( mesh );
+    // this.mgThree.scene.add( skeletonHelper );
+
+    // let group = new THREE.Group();
+    // group.add(mesh);
+
     mesh.name = itemData.asset || itemData.name || "";
 
     // position
@@ -430,6 +476,11 @@ export class MgGame{
     } else {
       this.mgThree.scene.add(mesh);
     }
+
+    // Add a box helper
+    let boxHelper = new THREE.BoxHelper(mesh, new THREE.Color(0xFF0000));
+    this.mgThree.scene.add(boxHelper);
+
 
     mesh.userData['ItemData'] = itemData;
     itemData.mesh = mesh

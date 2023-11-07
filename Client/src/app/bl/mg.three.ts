@@ -211,6 +211,8 @@ export class MgThree{
     // const x = VRButton.createButton( this.renderer )
     // document.body.appendChild( x );
 
+    const gridHelper = new THREE.GridHelper( 100, 100 ,0xff0000);
+    this.scene.add( gridHelper );
 
     onFinish();
 

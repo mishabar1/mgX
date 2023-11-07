@@ -15,44 +15,47 @@ namespace MG.Server.Entities
         public string? BackURL { get; set; }
         public string? Text { get; set; }
         public string Type { get; set; }
+        public V3 Scale { get; set; }
 
         public AssetData()
         {
         }
-        public AssetData(string name, string frontURL, string backUrl, string assetType) : base()
+        public AssetData(string assetType) : base()
         {
-            Name = name;
-            FrontURL = frontURL;
-            BackURL = backUrl;
             Type = assetType;
+            Scale = new V3(1);
         }
     }
 
     public class TokenAssetData : AssetData
     {
         public TokenAssetData() { }
-        public TokenAssetData(string name, string frontURL, string backUrl = "") : base(name, frontURL, backUrl, AssetTypeEnum.TOKEN)
+        public TokenAssetData( string frontURL, string backUrl = "") : base( AssetTypeEnum.TOKEN)
         {
+            FrontURL = frontURL;
+            BackURL = backUrl;
         }
     }
     public class ObjectAssetData : AssetData
     {
         public ObjectAssetData() { }
-        public ObjectAssetData(string name, string url) : base(name, url, "", AssetTypeEnum.OBJECT)
+        public ObjectAssetData( string url) : base(  AssetTypeEnum.OBJECT)
         {
+            FrontURL = url;
         }
     }
     public class SoundAssetData : AssetData
     {
         public SoundAssetData() { }
-        public SoundAssetData(string name, string url) : base(name, url, "", AssetTypeEnum.SOUND)
+        public SoundAssetData( string url) : base( AssetTypeEnum.SOUND)
         {
+            FrontURL = url;
         }
     }
     public class Text3dAssetData : AssetData
     {
         public Text3dAssetData() { }
-        public Text3dAssetData(string name, string text) : base(name, "", "", AssetTypeEnum.TEXT3D)
+        public Text3dAssetData( string text) : base( AssetTypeEnum.TEXT3D)
         {
             this.Text = text;
         }
@@ -60,7 +63,7 @@ namespace MG.Server.Entities
     public class TextBlockAssetData : AssetData
     {
         public TextBlockAssetData() { }
-        public TextBlockAssetData(string name, string text) : base(name, "", "", AssetTypeEnum.TEXTBLOCK)
+        public TextBlockAssetData( string text) : base(  AssetTypeEnum.TEXTBLOCK)
         {
             this.Text = text;
         }
