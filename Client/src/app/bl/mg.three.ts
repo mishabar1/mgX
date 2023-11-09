@@ -181,37 +181,7 @@ export class MgThree{
     // Start the animation loop
     this.renderer.setAnimationLoop(() => {
 
-      if (this.animationMixers.length ){
-        let delta = this.clock.getDelta();
-        forEach(this.animationMixers,mixer=>{
-          // mixer.update(this.clock.getDelta());
-          if ( mixer ) mixer.update( delta );
-        })
-      }
-
-      // Don't forget, ThreeMeshUI must be updated manually.
-      // This has been introduced in version 3.0.0 in order
-      // to improve performance
-      ThreeMeshUI.update()
-
-      if (this.controllers) {
-        this.controllers.forEach((controller: any) => {
-          this.handleController(controller);
-        })
-      }
-
-      this.orbitControls.update();
-      this.interactionManager.update();
-      this.renderer.render(this.scene, this.camera);
-
-      TWEEN.update();
-      // this.animationsObjects.forEach((mesh:any) => {
-      //   if (mesh.userData.clock && mesh.userData.mixer) {
-      //     mesh.userData.mixer.update(mesh.userData.clock.getDelta());
-      //   }
-      // });
-      //console.log("running");
-
+      this.animationLoop();
 
 
     });
@@ -231,6 +201,29 @@ export class MgThree{
 
     onFinish();
 
+  }
+
+  animationLoop(){
+    if (this.animationMixers.length ){
+      let delta = this.clock.getDelta();
+      forEach(this.animationMixers,mixer=>{
+        if ( mixer ) mixer.update( delta );
+      })
+    }
+
+    ThreeMeshUI.update()
+
+    if (this.controllers) {
+      this.controllers.forEach((controller: any) => {
+        this.handleController(controller);
+      })
+    }
+
+    this.orbitControls.update();
+    this.interactionManager.update();
+    this.renderer.render(this.scene, this.camera);
+
+    TWEEN.update();
   }
 
   handleController(controller: XRTargetRaySpace) {

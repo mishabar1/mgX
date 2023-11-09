@@ -122,9 +122,9 @@ export class MgGame{
             // console.log(gltf.animations.length);
             // debugger;
 
-            if(gltf.animations && gltf.animations.length) {
+            if(gltf.animations && gltf.animations.length && itemData.animationIdx!=null) {
               let mixer = new THREE.AnimationMixer(group);
-              mixer.clipAction(gltf.animations[1]).play();
+              mixer.clipAction(gltf.animations[itemData.animationIdx]).play();
               this.mgThree.animationMixers.push(mixer);
             }
 

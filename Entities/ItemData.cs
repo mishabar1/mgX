@@ -17,6 +17,7 @@ namespace MG.Server.Entities
         public Dictionary<string, string> HoverActions { get; set; } // player id - action name
 
         public string Text { get; set; }
+        public int AnimationIdx { get; set; }
         public string PlayType { get; set; }
         
 
@@ -105,6 +106,13 @@ namespace MG.Server.Entities
             ClickActions.Add(playerId, actionFunc.Method.Name);
             return this;
         }
+        internal ItemData SetAnimation(int idx)
+        {
+            AnimationIdx=idx;
+            return this;
+        }
+        
+
         internal ItemData SetPosition(double x, double z)
         {
             return SetPosition(x, 0, z);

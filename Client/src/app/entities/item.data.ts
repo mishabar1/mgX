@@ -13,6 +13,7 @@ export class ItemData {
 
   text?:string;
   playType?:string;
+  animationIdx?:number;
 
   visible! : any;
   clickActions! : any;

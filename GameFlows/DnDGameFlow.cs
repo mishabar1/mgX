@@ -76,8 +76,8 @@ namespace MG.Server.GameFlows
             addItem(Assets.SKELETON).SetPosition(0, 0, 0);
             addItem(Assets.angel).SetPosition(1, 0, 1);
 
-            addItem(Assets.rover).SetPosition(3, 0, -3);
-            addItem(Assets.rover).SetPosition(4, 0, -3);
+            addItem(Assets.rover).SetPosition(3, 0, -3).SetAnimation(2);
+            addItem(Assets.rover).SetPosition(4, 0, -3).SetAnimation(3);
             addItem(Assets.flytrap).SetPosition(3, 0, 3);
             addItem(Assets.flytrap).SetPosition(4, 0, 3);
 
