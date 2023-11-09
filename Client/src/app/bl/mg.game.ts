@@ -119,7 +119,14 @@ export class MgGame{
         if (frontURL.toLowerCase().endsWith("glb") || frontURL.toLowerCase().endsWith("gltf")) {
           this.mgThree.gltfLoader.load(frontURL, (gltf) => {
             const group:Group = gltf.scene;
+            // console.log(gltf.animations.length);
+            // debugger;
 
+            if(gltf.animations && gltf.animations.length) {
+              let mixer = new THREE.AnimationMixer(group);
+              mixer.clipAction(gltf.animations[1]).play();
+              this.mgThree.animationMixers.push(mixer);
+            }
 
             // scale to 1
             const box = new THREE.Box3();

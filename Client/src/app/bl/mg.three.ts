@@ -4,7 +4,7 @@ import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader';
 import {STLLoader} from 'three/examples/jsm/loaders/STLLoader';
 import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader';
-import {BufferGeometry, Line, Matrix4, Raycaster, TextureLoader, Vector3} from 'three';
+import {AnimationMixer, BufferGeometry, Line, Matrix4, Raycaster, TextureLoader, Vector3} from 'three';
 import {FontLoader} from 'three/examples/jsm/loaders/FontLoader';
 import {InteractionManager} from '../services/mg.interaction.manager';
 import {RoomEnvironment} from 'three/examples/jsm/environments/RoomEnvironment';
@@ -13,6 +13,7 @@ import * as TWEEN from '@tweenjs/tween.js';
 import {XRTargetRaySpace} from 'three/src/renderers/webxr/WebXRController';
 import {XRControllerModelFactory} from 'three/examples/jsm/webxr/XRControllerModelFactory';
 import {ThreeHelper} from './three.helper';
+import {forEach} from 'lodash';
 
 export class MgThree{
 
@@ -43,7 +44,9 @@ export class MgThree{
   hitTestSourceRequested: any;
   hitTestSource: any;
 
+  clock = new THREE.Clock();
   rendererContainerElement!:HTMLDivElement;
+  animationMixers:AnimationMixer[]=[];
 
   constructor() {
 
@@ -173,8 +176,18 @@ export class MgThree{
 
     this.interactionManager = new InteractionManager(this.renderer, this.camera, this.renderer.domElement);
 
+    this.clock = new THREE.Clock();
+
     // Start the animation loop
     this.renderer.setAnimationLoop(() => {
+
+      if (this.animationMixers.length ){
+        let delta = this.clock.getDelta();
+        forEach(this.animationMixers,mixer=>{
+          // mixer.update(this.clock.getDelta());
+          if ( mixer ) mixer.update( delta );
+        })
+      }
 
       // Don't forget, ThreeMeshUI must be updated manually.
       // This has been introduced in version 3.0.0 in order
@@ -198,6 +211,8 @@ export class MgThree{
       //   }
       // });
       //console.log("running");
+
+
 
     });
 
