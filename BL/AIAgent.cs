@@ -1,14 +1,13 @@
 ﻿using MG.Server.Controllers;
-using MG.Server.Database;
 using MG.Server.Entities;
-using MG.Server.Services;
-using System.Collections.Generic;
+using System.Diagnostics;
+using System.Timers;
 
 namespace MG.Server.BL
 {
     public class AIAgent
     {
-        private Timer timer;
+        private System.Timers.Timer timer;
         private GameData gameData;
         private PlayerData player;
 
@@ -20,30 +19,42 @@ namespace MG.Server.BL
         {
             this.gameData = _gameData;
             this.player = _player;
-            timer = new Timer(onTimerTick, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            
+            timer = new System.Timers.Timer(1);
+            timer.Elapsed += Timer_Elapsed; ;
+            timer.AutoReset = true;
+            timer.Start();
 
-            //t = new PeriodicTimer(TimeSpan.FromSeconds(1));
-            //t.WaitForNextTickAsync
+            Debug.WriteLine(DateTime.Now.Ticks + "Create Agent " + player.Name);
+
+            
         }
-
-        private async void onTimerTick(object? state)
+                        
+        private async void Timer_Elapsed(object? sender, ElapsedEventArgs e)
         {
-            Console.WriteLine("AIAgent onTimerTick " + player.Name);                       
+            //Stop The Timer
+            timer.Stop();
+
+            //Debug.WriteLine(DateTime.Now.Ticks + " AIAgent onTimerTick " + player.Name);
+            //await Task.Delay(3000);
+            //Debug.WriteLine(DateTime.Now.Ticks + " 3000 " + player.Name);
+
+            
+            //Debug.WriteLine("STOP timer" + player.Name);
 
             if (this.gameData.GameStatus != GameStatusEnum.PLAY)
             {
-                timer.Change(Timeout.Infinite, Timeout.Infinite);
-                timer.Dispose();
+                //Debug.WriteLine(DateTime.Now.Ticks + " GameStatus = " + this.gameData.GameStatus);                
                 return;
             }
 
             if (gameData.CurrentTurnId != player.Id)
             {                
+                //Debug.WriteLine(DateTime.Now.Ticks + " " + player.Name + " - NOT MY TURN");
+                timer.Start();
                 return;
             }
-
-            //Stop The Timer
-            timer.Change(Timeout.Infinite, Timeout.Infinite);
+            
 
             var allGameItems = gameData.GetAllGameItems();
 
@@ -64,8 +75,25 @@ namespace MG.Server.BL
                 // play random
                 var idx = rnd.Next(0, allGameItems.Count);
                 var item = allGameItems[idx];
-                
 
+
+                ////*********************
+                ////test ML - START
+                ////Load model and predict output
+                //var result = MLModel.Predict(new MLModel.ModelInput()
+                //{
+                //    Col0 = @"Crust is not good.",
+                //});
+                //Console.WriteLine(result.Col1);
+                //result = MLModel.Predict(new MLModel.ModelInput()
+                //{
+                //    Col0 = @"Very good product, recomend to buy",
+                //});
+                //Console.WriteLine(result.Col1);
+                ////test ML - FINISH
+                ////*********************
+
+                
                 ExecuteActionData action = new ExecuteActionData()
                 {
                     actionId = item.ClickActions.GetValueOrDefault("", item.ClickActions.GetValueOrDefault(player.Id)),
@@ -73,13 +101,14 @@ namespace MG.Server.BL
                     playerId = this.player.Id,
                     itemId = item.Id
                 };
-                await gameData.GameFlow.ExecuteAction(action);
-                await DataRepository.Singleton.HubGameUpdated(gameData);
+                //Debug.WriteLine(DateTime.Now.Ticks + " execute action " + action.actionId + "TIMER:"+player.Name);
+                await gameData.GameFlow.ExecuteAction(action);                
                                 
             }
 
             //continue the timer
-            timer.Change(TimeSpan.FromSeconds(rnd.Next(1,5)), TimeSpan.FromSeconds(1));
+            timer.Start();
+            //Debug.WriteLine(DateTime.Now.Ticks + " continue timer " + player.Name);
 
 
         }

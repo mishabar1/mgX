@@ -103,14 +103,14 @@ namespace MG.Server.GameFlows
         {
             List<ItemData> hovers = ItemData.GetItemsByAttribute(this.GameData.Table, "hover");
 
-            hovers.ForEach(x =>
+            foreach (var x in hovers)
             {
                 x.ClickActions = new Dictionary<string, string>();
                 x.Visible = new Dictionary<string, bool>();
 
                 x.AddAction(this.GameData.CurrentTurnId, HoverClick);
                 x.Visible.Add(this.GameData.CurrentTurnId, true);
-            });
+            }
 
             ItemData text1 = ItemData.GetItemsByAttribute(this.GameData.Table, "text1").First();
             PlayerData player = GameData.Players.Where(x => x.Id == GameData.CurrentTurnId).First();

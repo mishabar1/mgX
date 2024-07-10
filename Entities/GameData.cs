@@ -37,29 +37,42 @@ namespace MG.Server.Entities
 
         public ItemData? FindItem(string itemId)
         {
-            return Table.FindItem(itemId);
+
+                return Table.FindItem(itemId);
+
+            
         }
         public void RemoveItem(string itemId)
-        {
-            Table.RemoveItem(itemId);
+        {            
+
+
+                Table.RemoveItem(itemId);
+
+
         }
         public PlayerData? FindPlayer(string playerId)
-        {
-            return Players.Find(p => p.Id == playerId);
+        {            
+
+                return Players.Find(p => p.Id == playerId);
+
         }
 
         public List<ItemData> GetAllGameItems()
         {
-            var list = new List<ItemData>();
 
-            list.AddRange(GetAllItems(Table));
-            foreach (var player in Players)
-            {
-                list.AddRange(GetAllItems(player.Table));
-                list.AddRange(GetAllItems(player.Hand));
-            }
+                var list = new List<ItemData>();
 
-            return list;
+                list.AddRange(GetAllItems(Table));
+                foreach (var player in Players)
+                {
+                    list.AddRange(GetAllItems(player.Table));
+                    list.AddRange(GetAllItems(player.Hand));
+                }
+
+                return list;
+            
+
+            
         }
 
         public List<ItemData> GetAllItems(ItemData item)

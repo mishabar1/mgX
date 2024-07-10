@@ -89,10 +89,12 @@ namespace MG.Server.Entities
             {
                 Items.Remove(i);
             }
-            Items.ForEach(item =>
+            foreach (var item in Items)
+            //Items.ForEach(item =>
             {
                 item.RemoveItem(itemId);
-            });
+            }
+            //);
         }
 
 
