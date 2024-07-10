@@ -1,0 +1,43 @@
+one aproach :
+PLAYER_X = 'X'
+PLAYER_O = 'O'
+EMPTY = ' '
+PLAYER_X_VAL = -1
+PLAYER_O_VAL = 1
+EMPTY_VAL = 0
+HORIZONTAL_SEPARATOR = ' | '
+VERTICAL_SEPARATOR = '---------------'
+GAME_STATE_X = -1
+GAME_STATE_O = 1
+GAME_STATE_DRAW = 0
+GAME_STATE_NOT_ENDED = 2
+
+one move
+first column - with player won
+[(-1, [[0, 0, 0], [0, 0, 0], [0, -1, 0]])]
+
+whole game
+[
+(-1, [[0, 0,  0], [0,  0, 0], [ 0, 1,  0]]), 
+(-1, [[0, 0,  0], [0, -1, 0], [ 0, 1,  0]]), 
+(-1, [[0, 0,  0], [1, -1, 0], [ 0, 1,  0]]), 
+(-1, [[0, 0, -1], [1, -1, 0], [ 0, 1,  0]]), 
+(-1, [[1, 0, -1], [1, -1, 0], [ 0, 1,  0]]), 
+(-1, [[1, 0, -1], [1, -1, 0], [-1, 1,  0]]), 
+(-1, [[1, 0, -1], [1, -1, 1], [-1, 1,  0]]), 
+(-1, [[1, 0, -1], [1, -1, 1], [-1, 1, -1]]), 
+(-1, [[1, 1, -1], [1, -1, 1], [-1, 1, -1]])
+]
+
+
+MY aproach :
+data:
+cur_pos				 -> cur_turn						-> action(the id of the action)		-> final_result(who win at the end) 1 or -1 on 0-tie
+0,0,0, 0,0,0, 0,0,0  -> 1								-> 0,0,0, 0,1,0, 0,0,0 (4)			-> 1
+the actual data row: 0,0,0, 0,0,0, 0,0,0,	1,	4,	1
+
+0,0,0, 0,1,0, 0,0,0	 -> -1								-> 0,0,0, -1,1,0, 0,0,0 (3)			-> 1
+the actual data row: 0,0,0, 0,1,0, 0,0,0,	-1,	3,	1
+
+0,0,0, -1,1,0, 0,0,0 -> 1								-> 0,1,0, -1,1,0, 0,0,0 (1)			-> 1
+the actual data row: 0,0,0, -1,1,0, 0,0,0,	1,	1,	1
