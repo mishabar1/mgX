@@ -17,7 +17,7 @@ USER $APP_UID
 # ---------------------------------------------------------------------------
 FROM node:22 AS clientbuild
 WORKDIR /client
-COPY Client/package.json Client/package-lock.json ./
+COPY Client/package*.json ./
 RUN npm install --legacy-peer-deps
 COPY Client/ ./
 RUN npm run build
