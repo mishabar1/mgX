@@ -10,7 +10,6 @@ namespace MG.Server.Controllers
     [Route("api/[controller]")]
     [ApiController]
     [Produces("application/json")]
-    [Consumes("application/json")]
     [Authorize]
     public class GameController : ControllerBase
     {
