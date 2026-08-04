@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- POC: keep nullable ANNOTATIONS (so `?`/`!` are valid) but disable the nullable
+         WARNINGS — the original domain model predates nullable and would need 60+
+         annotations otherwise. Switch back to `enable` if you want to harden null-safety. -->
+    <Nullable>annotations</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>befa8c39-72de-4e09-9e8b-db7b22dda28e</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <DockerfileContext>.</DockerfileContext>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- ML.NET (used by MLModel.*.cs). Kept and bumped to the current major. -->
+    <PackageReference Include="Microsoft.ML" Version="5.0.0" />
+    <PackageReference Include="Microsoft.ML.FastTree" Version="5.0.0" />
+    <!-- Swagger/OpenAPI UI. v10.x is the first release supporting .NET 10. -->
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+    <!-- VS container tooling target. -->
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.2" />
+    <!-- Auth (C2): self-issued JWT bearer authentication. -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+    <!-- Persistence (C4): EF Core + SQLite. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
+    <!-- Ensure native SQLite provider is pinned to a non-vulnerable build. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12-pre20260709125052" />
+  </ItemGroup>
+  <ItemGroup Label="MLModel">
+    <None Include="MLModel.mlnet">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <!--
+    ==================================================================================
+    UPGRADE NOTES (.NET 7 -> .NET 10)  — packages intentionally REMOVED:
+
+    * Microsoft.AspNet.SignalR.Client 2.4.3   - LEGACY ASP.NET (not Core) SignalR, unused.
+    * Microsoft.AspNet.SignalR.Core   2.4.3   - LEGACY ASP.NET (not Core) SignalR, unused.
+    * Microsoft.AspNetCore.SignalR.Client.Core - SignalR *client*; this is a server. Server-side
+                                                 SignalR ships in the ASP.NET Core shared framework,
+                                                 so no package is needed for AddSignalR()/MapHub().
+    * Microsoft.AspNetCore.SpaServices        3.1.32 - obsolete (ASP.NET Core 3.1).
+    * Microsoft.AspNetCore.SpaServices.Extensions - UseSpa() replaced by the native
+                                                    app.MapFallbackToFile("index.html") in Program.cs.
+    * Microsoft.AspNetCore.OpenApi            - redundant with Swashbuckle; mixing the two causes
+                                                 conflicts on .NET 10. (Consider migrating to the
+                                                 native OpenAPI stack later and dropping Swashbuckle.)
+    * SciSharp.TensorFlow.Redist / TensorFlow.NET / TensorFlow.Keras
+                                              - large native dependency used ONLY by the experimental
+                                                UserBL.TensofFlowTest debug endpoint. Removed to get a
+                                                clean build and a small container image for DigitalOcean.
+                                                The experiment code is preserved (commented) in UserBL.cs.
+                                                To restore it, re-add these packages at .NET 10-compatible
+                                                versions and un-comment the method body.
+    ==================================================================================
+  -->
+</Project>
