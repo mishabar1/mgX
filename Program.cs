@@ -30,15 +30,10 @@ var jwtSettings = new JwtSettings();
 builder.Configuration.GetSection("Jwt").Bind(jwtSettings);
 if (string.IsNullOrWhiteSpace(jwtSettings.Key))
 {
-    if (builder.Environment.IsDevelopment())
-    {
-        jwtSettings.Key = "dev-only-insecure-signing-key-change-me-0123456789ABCDEF";
-    }
-    else
-    {
-        throw new InvalidOperationException(
-            "Jwt:Key is not configured. Set the 'Jwt__Key' environment variable in production.");
-    }
+    // POC: auth is NOT enforced (controllers/hub have no [Authorize]) and no external key is
+    // required, so the app always starts — no env var needed on DigitalOcean.
+    // For real production: set Jwt__Key via environment and re-add [Authorize] (see git history).
+    jwtSettings.Key = "poc-only-insecure-signing-key-change-me-0123456789ABCDEF";
 }
 builder.Services.AddSingleton(jwtSettings);
 builder.Services.AddSingleton<TokenService>();

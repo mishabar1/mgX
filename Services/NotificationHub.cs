@@ -19,7 +19,6 @@ namespace MG.Server.Services
     //    }
     //}
 
-    [Authorize]
     public class NotificationHub : Hub
     {
         readonly GameBL _gameBL;

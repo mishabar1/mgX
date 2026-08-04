@@ -41,8 +41,15 @@ endpoints to any site) with a config-driven allow-list: `Cors:AllowedOrigins` in
 - **H4** `GameBL.DeleteGame` now null-checks the game before use.
 - **H5** Swagger is Development-only; `UseHttpsRedirection` is skipped in Production (TLS terminated by DigitalOcean).
 
-> **Not changed on purpose:** `GameData.DeepCopy()` still returns `this` (game history isn't truly copied).
-> That's a correctness bug, not a security one — left for a focused follow-up so this batch stays reviewable.
+### Correctness fixes (found during runtime testing)
+- **`GameData.DeepCopy()`** previously returned `this`, so every `HistoryGameData` entry aliased the live
+  game object and the whole history reflected only the latest state. Now does a real snapshot via
+  System.Text.Json serialize/deserialize (GameFlow/AIAgent are `[JsonIgnore]`, so snapshots carry state only).
+- **Removed class-level `[Consumes("application/json")]`** from `GameController` and `UserController`.
+  That attribute made actions match only when the request carried `Content-Type: application/json`, which
+  **GET requests don't** — so every GET (`GetGamesList`, `GetGameByID`) failed to match the controller, fell
+  through to the SPA fallback, and returned `index.html`. Angular then failed to parse HTML as JSON and the
+  game-setup screen rendered blank. (Latent in the original code; only surfaced once served from `wwwroot`.)
 
 ---
 

@@ -23,3 +23,8 @@
 **/values.dev.yaml
 LICENSE
 README.md
+# SQLite database — never bake into the image (EF recreates it at runtime)
+**/Database/*.db
+**/*.db
+**/*.db-shm
+**/*.db-wal

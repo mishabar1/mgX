@@ -1,6 +1,5 @@
 ﻿using MG.Server.GameFlows;
-//using Microsoft.Owin.BuilderProperties;
-//using Newtonsoft.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace MG.Server.Entities
@@ -28,10 +27,21 @@ namespace MG.Server.Entities
             Observer = new LocationData();
         }
 
+        // Options for producing an independent snapshot. GameFlow/AIAgent are [JsonIgnore]
+        // so they aren't copied (a history snapshot only needs state, not behaviour objects).
+        private static readonly JsonSerializerOptions _copyOptions = new()
+        {
+            ReferenceHandler = ReferenceHandler.IgnoreCycles,
+            MaxDepth = 64
+        };
+
         public GameData DeepCopy()
         {
-            //var serialized = JsonConvert.SerializeObject(this);
-            return this; //JsonConvert.DeserializeObject<GameData>(serialized);
+            // Was `return this;` — every history entry aliased the live object, so the
+            // recorded history all reflected the latest state. Serialize/deserialize to
+            // get a real, independent snapshot.
+            var serialized = JsonSerializer.Serialize(this, _copyOptions);
+            return JsonSerializer.Deserialize<GameData>(serialized, _copyOptions)!;
         }
 
 

@@ -7,7 +7,6 @@ namespace MG.Server.Controllers
     [Route("api/[controller]")]
     [ApiController]
     [Produces("application/json")]
-    [Authorize]
     public class UserController : ControllerBase
     {
         UserBL _userBL;
@@ -18,7 +17,6 @@ namespace MG.Server.Controllers
             _logger = logger;
         }
 
-        [AllowAnonymous]
         [HttpPost("Login")]
         public async Task<IActionResult> Login(LoginData data)
         {

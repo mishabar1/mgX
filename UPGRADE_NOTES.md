@@ -1,14 +1,11 @@
 # Upgrade Notes — .NET 7 → .NET 10 (LTS) & Angular 16 → 22
 
-_Date: 2026-08-03. Targets chosen: **.NET 10 LTS** (supported to Nov 2028) and **Angular 22** (latest)._
+_Date: 2026-08-03 (completed 2026-08-04). Targets: **.NET 10 LTS** (supported to Nov 2028) and **Angular 22** (latest)._
 
-> **Why some of this is a runbook, not finished code:** the automated environment used to
-> apply these changes has no outbound access to Microsoft's .NET download servers or to
-> NuGet, and cannot complete a long `npm install` (hard time limit). So the **backend was
-> migrated at the source level** (done — see below) and the **frontend upgrade is scripted
-> for you to run** on your machine or in CI, where `ng update` can do its schematic
-> migrations properly. Build the solution in Visual Studio / `dotnet` and the Angular app
-> with `ng` locally to verify.
+> **Status: COMPLETE.** Backend builds on .NET 10 (`dotnet run` serving on :5112) and the Angular 22
+> frontend builds clean and runs — login → create game → game-setup verified end to end in the browser.
+> Both halves were done as source edits; the Angular majors were stepped through with `ng update` on the
+> dev machine (the original automation environment had no NuGet/.NET access and couldn't finish `npm install`).
 
 ---
 
@@ -61,48 +58,51 @@ dotnet run                     # then open http://localhost:5112/swagger
 
 ---
 
-## Part B — Frontend (Angular 16 → 22) — RUN THIS LOCALLY / IN CI
+## Part B — Frontend (Angular 16 → 22) — DONE (builds clean, runs)
 
-Angular must be upgraded **one major at a time** with `ng update` so its code-migration schematics run.
-Do it on a clean tree (commit first). Node 20.19+/22.12+ is required for Angular 22 — you have a modern Node.
+Upgraded one major at a time with `ng update` (16→17→18→19→20→21→22), then bumped the third-party
+packages `ng update` doesn't manage. `ng build` is green and the app runs (login → create game → setup verified).
 
-```bash
-cd Client
-# start clean if the sandbox left a partial folder:
-rm -rf node_modules            # (on Windows: delete Client\node_modules)
-npm install --legacy-peer-deps
+### Final installed versions
+| Package | Was | Now |
+|---|---|---|
+| @angular/* + CLI + build | 16.2 | **22.1** |
+| typescript | ~5.1 | **~6.0** |
+| @angular/cdk | — | **^22.1** (new peer required by PrimeNG 22) |
+| primeng | ^16.5 | **^22.0** |
+| @primeuix/themes | — | **^3.0** (PrimeNG 22 theming preset — `Aura`) |
+| primeicons | ^6.0 | **^8.0** |
+| @fortawesome/angular-fontawesome | ^0.13 | **^5.1** |
+| @microsoft/signalr | ^7.0 | **^10.0** |
+| three + @types/three | ^0.157 | **^0.185** |
+| @tweenjs/tween.js | ^21 | **^25** |
+| quill | ^1.3 | **^2.0** |
+| @types/node | (floating) | **^22** (pinned) |
 
-# then step through the majors — commit after each step:
-npx ng update @angular/core@17 @angular/cli@17
-npx ng update @angular/core@18 @angular/cli@18
-npx ng update @angular/core@19 @angular/cli@19
-npx ng update @angular/core@20 @angular/cli@20
-npx ng update @angular/core@21 @angular/cli@21
-npx ng update @angular/core@22 @angular/cli@22
+### Issues hit during the upgrade and how they were fixed (for future reference)
+- **esbuild builder (from v17) requires explicit `.js`** on deep three imports (`three/examples/jsm/...`,
+  `three/src/...`). Added `.js` to all of them.
+- **`moduleResolution: bundler` (from v20)** then type-checks those deep imports against three's `exports`
+  map, so even type-only ones needed `.js`; also re-added `import * as THREE from 'three'` where code uses
+  the `THREE.*` namespace (the global namespace was dropped in the new types).
+- **New build system moved output** to `wwwroot/browser`; set `outputPath.browser: ""` in `angular.json`
+  to keep serving from `wwwroot` (the .NET server expects `index.html` there).
+- **three 0.185:** `TextGeometry` param `height`→`depth`; `scene.add(transformControls)` →
+  `scene.add(transformControls.getHelper())`; custom mesh events (`click`/`mouseover`/`mouseout`) cast
+  through `any` (three locks its event map); `THREE.Renderer` → `THREE.WebGLRenderer`.
+- **PrimeNG 22:** InputNumber selector `p-inputNumber` → `p-inputnumber` and the `step` input was removed;
+  Button `severity="warning"` → `"warn"`; removed the old `primeng/resources/*` CSS from `styles.scss` and
+  `angular.json` (theming is now the `@primeuix/themes` preset via `providePrimeNG`).
+- **@types/node** must match the TS version (too-new broke TS 5.1; after the upgrade, pinned to `^22`).
 
-ng build                       # fix errors, then:
-ng build --configuration production
-```
-
-### Third-party packages `ng update` will NOT manage — bump & test manually
-| Package | Current | Target | Risk |
-|---|---|---|---|
-| **primeng** | ^16.5.0 | ^22 (match Angular) + add `@primeng/themes` | **HIGH** — v17+ completely reworked theming (styled/unstyled, then the `@primeng/themes` token system in v18/19). Expect template/style changes across every PrimeNG component. Budget the most time here. |
-| **primeicons** | ^6.0.1 | ^7 | Low |
-| **@fortawesome/angular-fontawesome** | ^0.13.0 | ^1/2 (per ng22 peer range) | Med — 0.13 only supports Angular 16; must bump or install fails. |
-| **@microsoft/signalr** | ^7.0.12 | ^8 | Low — API stable. |
-| **three** + **@types/three** | ^0.157.0 | latest 0.17x | Med — three has frequent breaking changes (moved examples, removed deprecations). Test the 3D board. |
-| **three-mesh-ui** | ^6.5.4 | check | Med — verify it still supports the new `three`; may be unmaintained. |
-| **@tweenjs/tween.js** | ^21 | latest | Low |
-| **quill** | ^1.3.7 | ^2 | Med — Quill 2 has breaking API/format changes. |
-| **ngx-json-viewer** | ^3.2.1 | latest | Low-Med — confirm Angular 22 peer support. |
-| lodash / lodash-es / dayjs | — | fine | — |
-
-### Frontend gotchas
-- Set `"skipLibCheck": true` (usually already on) if `@types/three` throws during build.
-- Angular 22 defaults to standalone/new control flow, but your **NgModule** app keeps working — you don't
-  have to convert. Do it later as a separate refactor if desired.
-- Remove the stray empty file `Client/a.txt`.
+### Frontend gotchas / follow-ups
+- Angular 22 defaults to standalone/new control flow, but the **NgModule** app still works — converting is
+  optional (a later refactor). The v21 control-flow migration skipped `debug-view.component.html`
+  ("invalid HTML"); it still uses `*ngIf/*ngFor`, which is fine.
+- `HttpClientModule` is deprecated — the app now uses `provideHttpClient(withInterceptorsFromDi())`, and the
+  `AuthInterceptor` rides on that.
+- Stray empty file `Client/a.txt` can be deleted.
+- PrimeNG shows an "Invalid PrimeUI License" badge without a license key — cosmetic only.
 
 ---
 
