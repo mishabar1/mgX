@@ -30,10 +30,14 @@ namespace MG.Server.Services
         }
 
         // (H1) async Task, not async void — exceptions are now observable instead of crashing the process.
-        public async Task SetConnectionIDUser(string userId)
+        public async Task SetConnectionIDUser(string? userId)
         {
             Console.WriteLine("NotificationHub SetConnectionIDUser");
-            await Groups.AddToGroupAsync(Context.ConnectionId, userId.ToString());
+            // Guard: the client can connect before a user id is available; without this,
+            // userId.ToString() threw a NullReferenceException that SignalR logged as a
+            // failed hub invocation.
+            if (string.IsNullOrEmpty(userId)) return;
+            await Groups.AddToGroupAsync(Context.ConnectionId, userId);
         }
 
 
