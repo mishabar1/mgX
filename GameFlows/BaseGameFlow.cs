@@ -37,7 +37,7 @@ namespace MG.Server.GameFlows
             game.GameStatus = GameStatusEnum.CREATED;
             game.CreatorId = userId;
 
-            game.GameFlow.RunCreateFlow();
+            _ = game.GameFlow.RunCreateFlow();
 
             return game;
         }
@@ -113,7 +113,7 @@ namespace MG.Server.GameFlows
             {
                 await EndGame();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 Console.WriteLine("fail to run end game");
             }

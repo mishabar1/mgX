@@ -17,8 +17,16 @@ var builder = WebApplication.CreateBuilder(args);
 // file is wiped on every deploy/restart. Attach a persistent volume (Droplet) or
 // switch the provider to Managed Postgres for durable production data.
 // ---------------------------------------------------------------------------
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Data Source=Database/app.db";
+// The SQLite file must live in a WRITABLE location. In the container the app runs as a
+// non-root user (can't write under /app) and the "Database/" folder isn't published — which
+// caused "SQLite Error 14: unable to open database file" on startup. Use the OS temp dir,
+// which is writable on both Linux containers and Windows dev. Data is ephemeral — fine for POC.
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    var dbPath = Path.Combine(Path.GetTempPath(), "mgx-app.db");
+    connectionString = $"Data Source={dbPath}";
+}
 builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite(connectionString));
 
 // ---------------------------------------------------------------------------

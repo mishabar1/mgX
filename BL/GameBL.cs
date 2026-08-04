@@ -40,7 +40,7 @@ namespace MG.Server.BL
             await DataRepository.Singleton.HubGamesUpdated(game);
 
             //save db
-            _dataRepository.Save();
+            await _dataRepository.Save();
 
             return game;
         }
@@ -73,7 +73,7 @@ namespace MG.Server.BL
             }
 
             //save db
-            _dataRepository.Save();
+            await _dataRepository.Save();
 
 
             return new { x = "TODO !!! SetupGame" };
@@ -90,7 +90,7 @@ namespace MG.Server.BL
             }
 
             //save db
-            _dataRepository.Save();
+            await _dataRepository.Save();
 
 
             return new { x = "TODO !!! StartGame" };
@@ -111,7 +111,7 @@ namespace MG.Server.BL
             await DataRepository.Singleton.HubGameDeleted(data.gameId);
 
             //save db
-            _dataRepository.Save();
+            await _dataRepository.Save();
 
 
             return new { x = "TODO !!! DeleteGame" };
@@ -136,7 +136,7 @@ namespace MG.Server.BL
             }
 
             //save db
-            _dataRepository.Save();
+            await _dataRepository.Save();
 
             return new { x = "TODO !!! JoinGame" };
         }
