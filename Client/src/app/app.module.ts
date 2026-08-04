@@ -6,7 +6,8 @@ import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import {ButtonModule} from 'primeng/button';
 import {CheckboxModule} from 'primeng/checkbox';
-import {HttpClientModule} from '@angular/common/http';
+import { HTTP_INTERCEPTORS, provideHttpClient, withInterceptorsFromDi, withXhr } from '@angular/common/http';
+import {AuthInterceptor} from './bl/auth.interceptor';
 import {GamePlayComponent} from './view/game-play/game-play.component';
 import {HomeViewComponent} from './view/home-view/home-view.component';
 import { GamesListComponent } from './view/games-list/games-list.component';
@@ -17,31 +18,30 @@ import { FontAwesomeModule } from '@fortawesome/angular-fontawesome'
 import {TooltipModule} from "primeng/tooltip";
 import {InputNumberModule} from "primeng/inputnumber";
 import {DebugViewComponent} from "./comps/debug-view/debug-view.component";
+import { providePrimeNG } from 'primeng/config';
+import Aura from '@primeuix/themes/aura';
 
-@NgModule({
-  declarations: [
-    AppComponent,
-    HomeViewComponent,
-    GamesListComponent,
-    GameSetupComponent,
-    GamePlayComponent,
-    EditorComponent,
-    DebugViewComponent
-  ],
-  imports: [
-    BrowserModule,
-    BrowserAnimationsModule,
-    FormsModule,
-    AppRoutingModule,
-    ButtonModule,
-    CheckboxModule,
-    HttpClientModule,
-    NgxJsonViewerModule,
-    TooltipModule,
-    FontAwesomeModule,
-    InputNumberModule
-  ],
-  providers: [],
-  bootstrap: [AppComponent]
-})
+@NgModule({ declarations: [
+        AppComponent,
+        HomeViewComponent,
+        GamesListComponent,
+        GameSetupComponent,
+        GamePlayComponent,
+        EditorComponent,
+        DebugViewComponent
+    ],
+    bootstrap: [AppComponent], imports: [BrowserModule,
+        BrowserAnimationsModule,
+        FormsModule,
+        AppRoutingModule,
+        ButtonModule,
+        CheckboxModule,
+        NgxJsonViewerModule,
+        TooltipModule,
+        FontAwesomeModule,
+        InputNumberModule], providers: [
+        { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
+        provideHttpClient(withXhr(), withInterceptorsFromDi()),
+        providePrimeNG({ theme: { preset: Aura } })
+    ] })
 export class AppModule { }

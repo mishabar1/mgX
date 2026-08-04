@@ -2,6 +2,7 @@
 using MG.Server.Controllers;
 using MG.Server.Database;
 using MG.Server.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using static System.Net.Mime.MediaTypeNames;
 
@@ -18,6 +19,7 @@ namespace MG.Server.Services
     //    }
     //}
 
+    [Authorize]
     public class NotificationHub : Hub
     {
         readonly GameBL _gameBL;
@@ -25,17 +27,18 @@ namespace MG.Server.Services
         public NotificationHub(GameBL gameBL, DataRepository dataRepository, ILogger<NotificationHub> logger) :base()
         {
             _gameBL = gameBL;
-            _logger = logger;            
+            _logger = logger;
         }
 
-        public async void SetConnectionIDUser(string userId)
+        // (H1) async Task, not async void — exceptions are now observable instead of crashing the process.
+        public async Task SetConnectionIDUser(string userId)
         {
             Console.WriteLine("NotificationHub SetConnectionIDUser");
             await Groups.AddToGroupAsync(Context.ConnectionId, userId.ToString());
         }
 
 
-        public async void ExecuteAction(ExecuteActionData s)
+        public async Task ExecuteAction(ExecuteActionData s)
         {
             Console.WriteLine("NotificationHub ExecuteAction");
             await _gameBL.ExecuteAction(s);

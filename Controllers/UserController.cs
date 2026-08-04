@@ -1,4 +1,5 @@
 ﻿using MG.Server.BL;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MG.Server.Controllers
@@ -7,7 +8,8 @@ namespace MG.Server.Controllers
     [ApiController]
     [Produces("application/json")]
     [Consumes("application/json")]
-    public class UserController : ControllerBase    
+    [Authorize]
+    public class UserController : ControllerBase
     {
         UserBL _userBL;
         private readonly ILogger<UserController> _logger;
@@ -17,6 +19,7 @@ namespace MG.Server.Controllers
             _logger = logger;
         }
 
+        [AllowAnonymous]
         [HttpPost("Login")]
         public async Task<IActionResult> Login(LoginData data)
         {

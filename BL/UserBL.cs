@@ -1,40 +1,58 @@
 ﻿using MG.Server.Controllers;
 using MG.Server.Database;
 using MG.Server.Entities;
+using MG.Server.Services;
 
-using static Tensorflow.Binding;
-using static Tensorflow.KerasApi;
-using Tensorflow;
-using Tensorflow.NumPy;
+// NOTE (.NET 10 upgrade): TensorFlow.NET/Keras packages were removed (large native dependency,
+// used only by the experimental TensofFlowTest below). The usings and method body are preserved
+// as comments. To restore, re-add the SciSharp TensorFlow packages in MG.Server.csproj and
+// un-comment both this block and the method body.
+// using static Tensorflow.Binding;
+// using static Tensorflow.KerasApi;
+// using Tensorflow;
+// using Tensorflow.NumPy;
 
 namespace MG.Server.BL
 {
+    public class LoginResult
+    {
+        public string Token { get; set; } = string.Empty;
+        public UserData User { get; set; } = null!;
+    }
+
     public class UserBL
     {
         DataRepository _dataRepository;
-        public UserBL(DataRepository dataRepository)
+        TokenService _tokenService;
+        public UserBL(DataRepository dataRepository, TokenService tokenService)
         {
             _dataRepository = dataRepository;
+            _tokenService = tokenService;
         }
 
-        internal async Task<UserData> Login(LoginData data)
+        internal async Task<LoginResult> Login(LoginData data)
         {
-
-           var user = _dataRepository.Users.FindLast(x => x.Name == data.name);
+            var user = _dataRepository.Users.FindLast(x => x.Name == data.name);
             if (user == null)
             {
                 user = new UserData() { Name = data.name };
                 _dataRepository.Users.Add(user);
             }
 
-            _dataRepository.Save();
+            await _dataRepository.Save();
 
-            return user;
+            // (C2) issue a signed JWT the client sends on subsequent API/SignalR calls.
+            var token = _tokenService.CreateToken(user);
 
+            return new LoginResult { Token = token, User = user };
         }
 
-        internal async Task TensofFlowTest()
+        internal Task TensofFlowTest()
         {
+            // DISABLED during .NET 10 upgrade — TensorFlow.NET packages removed. See note at top of file.
+            // Original experimental body preserved below; re-add packages to restore.
+            return Task.CompletedTask;
+            /*
             var layers = keras.layers;
             // input layer
             var inputs = keras.Input(shape: (32, 32, 3), name: "img");
@@ -115,7 +133,7 @@ namespace MG.Server.BL
             //        print($"step: {step}, loss: {loss.numpy()}, W: {W.numpy()}, b: {b.numpy()}");
             //    }
             //}
-
+            */
         }
     }
 }

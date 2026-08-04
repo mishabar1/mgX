@@ -1,12 +1,14 @@
-import {AfterViewInit, Component, OnChanges, OnDestroy, OnInit, SimpleChanges} from '@angular/core';
+import {AfterViewInit, Component, OnChanges, OnDestroy, OnInit, SimpleChanges, ChangeDetectionStrategy} from '@angular/core';
 import * as THREE from 'three';
-import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls';
-import {TransformControls} from 'three/examples/jsm/controls/TransformControls';
+import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
+import {TransformControls} from 'three/examples/jsm/controls/TransformControls.js';
 
 @Component({
-  selector: 'app-editor',
-  templateUrl: './editor.component.html',
-  styleUrls: ['./editor.component.scss']
+    selector: 'app-editor',
+    templateUrl: './editor.component.html',
+    styleUrls: ['./editor.component.scss'],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    standalone: false
 })
 export class EditorComponent implements   OnInit, OnDestroy, AfterViewInit, OnChanges{
   ngAfterViewInit(): void {
@@ -41,7 +43,7 @@ export class EditorComponent implements   OnInit, OnDestroy, AfterViewInit, OnCh
     const transformControls = new TransformControls(camera, renderer.domElement)
     transformControls.attach(cube)
     transformControls.setMode('rotate')
-    scene.add(transformControls)
+    scene.add(transformControls.getHelper())
 
     transformControls.addEventListener('dragging-changed', function (event) {
       orbitControls.enabled = !event.value

@@ -405,3 +405,9 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
+
+# SQLite database (should not be committed) — added during hardening
+Database/app.db
+*.db
+*.db-shm
+*.db-wal

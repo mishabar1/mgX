@@ -20,8 +20,10 @@ namespace MG.Server.BL
             this.gameData = _gameData;
             this.player = _player;
             
-            timer = new System.Timers.Timer(1);
-            timer.Elapsed += Timer_Elapsed; ;
+            // (H2) was 1ms — an effective busy-loop per AI player. 800ms is far lighter
+            // on CPU and reads as a natural "thinking" pause.
+            timer = new System.Timers.Timer(800);
+            timer.Elapsed += Timer_Elapsed;
             timer.AutoReset = true;
             timer.Start();
 
@@ -102,8 +104,17 @@ namespace MG.Server.BL
                     itemId = item.Id
                 };
                 //Debug.WriteLine(DateTime.Now.Ticks + " execute action " + action.actionId + "TIMER:"+player.Name);
-                await gameData.GameFlow.ExecuteAction(action);                
-                                
+                // (H1) this runs from an async-void timer handler; a thrown exception here would
+                // otherwise crash the process. Contain and log it.
+                try
+                {
+                    await gameData.GameFlow.ExecuteAction(action);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("AIAgent action failed: " + ex);
+                }
+
             }
 
             //continue the timer

@@ -107,6 +107,7 @@ namespace MG.Server.GameFlows
 
         }
 
+        [GameAction]
         public async Task MapClick(ExecuteActionData data)
         {
             Console.WriteLine(data.point);

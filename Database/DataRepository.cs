@@ -1,8 +1,9 @@
-﻿using MG.Server.BL;
+using MG.Server.BL;
 using MG.Server.Entities;
 using MG.Server.GameFlows;
 using MG.Server.Services;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -11,114 +12,155 @@ namespace MG.Server.Database
     public class DataRepository
     {
         public IHubContext<NotificationHub> Hub;
-        public List<UserData> Users;// = new List<UserData>();
-        public List<GameData> Games;// = new List<GameData>();
+        public List<UserData> Users;
+        public List<GameData> Games;
 
         public static DataRepository Singleton;
 
-        public DataRepository(IHubContext<NotificationHub> hub)
+        private readonly IDbContextFactory<AppDbContext> _dbFactory;
+
+        // (C4/H3) Guards the in-memory collections and the persistence round-trips so that
+        // concurrent SignalR callbacks and AI timer ticks can't corrupt state mid-serialize.
+        private readonly object _sync = new();
+
+        private static readonly JsonSerializerOptions JsonOpts = new()
         {
+            ReferenceHandler = ReferenceHandler.IgnoreCycles,
+            MaxDepth = 64
+        };
+
+        public DataRepository(IHubContext<NotificationHub> hub, IDbContextFactory<AppDbContext> dbFactory)
+        {
+            _dbFactory = dbFactory;
             Users = new List<UserData>();
             Games = new List<GameData>();
             Hub = hub;
-            //await Hub.Clients.Group(user_id).SendAsync("test", "some data");
 
-            //AIAgent._dataRepository = this;
             DataRepository.Singleton = this;
 
-            Load();
+            using (var db = _dbFactory.CreateDbContext())
+            {
+                db.Database.EnsureCreated();
+            }
+
+            LoadInternal();
         }
 
         internal async Task HubGameUpdated(GameData game)
         {
-            //save db
-            Save();
-
-            await Hub.Clients.All.SendAsync("GameUpdated", game);            
+            await Save();
+            await Hub.Clients.All.SendAsync("GameUpdated", game);
         }
+
         internal async Task HubGamesUpdated(GameData game)
         {
-            //save db
-            Save();
-
+            await Save();
             await Hub.Clients.All.SendAsync("GamesUpdated", game.Id);
         }
+
         internal async Task HubGameDeleted(string gameId)
         {
-            //save db
-            Save();
-
+            await Save();
             await Hub.Clients.All.SendAsync("GameDeleted", gameId);
         }
 
-        public async Task Load()
+        private void LoadInternal()
         {
-             //TODO !!!!!
-             // NEED TO THINK OF NOT FILES - it cannot be deploed in docker - the files are overitten each time
-             // posible solution - add independed volium - but it more money - so maybe later - for real production
+            lock (_sync)
+            {
+                try
+                {
+                    using var db = _dbFactory.CreateDbContext();
+                    var usersRow = db.Store.AsNoTracking().FirstOrDefault(x => x.Key == "users");
+                    var gamesRow = db.Store.AsNoTracking().FirstOrDefault(x => x.Key == "games");
 
-            //try
-            //{
-            //    using StreamReader usersReader = new(@".\users.json");
-            //    var json = usersReader.ReadToEnd();
-            //    Users = JsonSerializer.Deserialize<List<UserData>>(json);
-            //    //Console.WriteLine(Users);
+                    Users = usersRow == null
+                        ? new List<UserData>()
+                        : JsonSerializer.Deserialize<List<UserData>>(usersRow.Json, JsonOpts) ?? new List<UserData>();
 
-            //    using StreamReader gamesReader = new(@".\games.json");
-            //    json = gamesReader.ReadToEnd();
-            //    Games = JsonSerializer.Deserialize<List<GameData>>(json);
-            //    //Console.WriteLine(Games);
+                    Games = gamesRow == null
+                        ? new List<GameData>()
+                        : JsonSerializer.Deserialize<List<GameData>>(gamesRow.Json, JsonOpts) ?? new List<GameData>();
 
-            //    Games.ForEach(game =>
-            //    {
-            //        switch (game.GameType)
-            //        {
-            //            case GameTypeEnum.TIK_TAK_TOE:
-            //                game.GameFlow = new TikTakToeGameFlow(game);
-            //                break;
-            //            case GameTypeEnum.CHESS:
-            //                game.GameFlow = new ChessGameFlow(game);
-            //                break;
-            //            case GameTypeEnum.DND:
-            //                game.GameFlow = new DnDGameFlow(game);
-            //                break;
-            //            default:
-            //                break;
-            //        }
+                    // Rebuild runtime-only state that is [JsonIgnore]'d: the GameFlow behaviour
+                    // object and the AI agent timers for games that are mid-play.
+                    foreach (var game in Games)
+                    {
+                        AttachGameFlow(game);
 
-
-            //        if (game.GameStatus == GameStatusEnum.PLAY)
-            //        {
-            //            // create AI agents
-            //            foreach (var player in game.Players)
-            //            {
-            //                if (player.Type == PlayerTypeEnum.AI)
-            //                {
-            //                    player.AIAgent = new AIAgent(game, player);
-            //                }
-            //            }
-            //        }
-
-            //    });
-
-            //}
-            //catch (Exception ex)
-            //{
-            //    Console.WriteLine(ex);
-            //    Save();
-            //}
-
-
+                        if (game.GameStatus == GameStatusEnum.PLAY)
+                        {
+                            foreach (var player in game.Players)
+                            {
+                                if (player.Type == PlayerTypeEnum.AI)
+                                {
+                                    player.AIAgent = new AIAgent(game, player);
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("DataRepository.Load failed, starting empty: " + ex);
+                    Users = new List<UserData>();
+                    Games = new List<GameData>();
+                }
+            }
         }
 
-        public async Task Save()
+        private static void AttachGameFlow(GameData game)
         {
-            //string json = JsonSerializer.Serialize(Users);
-            //File.WriteAllText(@".\users.json", json);
+            switch (game.GameType)
+            {
+                case GameTypeEnum.TIK_TAK_TOE:
+                    game.GameFlow = new TikTakToeGameFlow(game);
+                    break;
+                case GameTypeEnum.CHESS:
+                    game.GameFlow = new ChessGameFlow(game);
+                    break;
+                case GameTypeEnum.DND:
+                    game.GameFlow = new DnDGameFlow(game);
+                    break;
+            }
+        }
 
-            //json = JsonSerializer.Serialize(Games);
-            //File.WriteAllText(@".\games.json", json);
+        public Task Save()
+        {
+            lock (_sync)
+            {
+                try
+                {
+                    // Serialize a snapshot under the lock so a concurrent mutation
+                    // can't throw "collection was modified" mid-write.
+                    var usersJson = JsonSerializer.Serialize(Users, JsonOpts);
+                    var gamesJson = JsonSerializer.Serialize(Games, JsonOpts);
 
+                    using var db = _dbFactory.CreateDbContext();
+                    UpsertRow(db, "users", usersJson);
+                    UpsertRow(db, "games", gamesJson);
+                    db.SaveChanges();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("DataRepository.Save failed: " + ex);
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private static void UpsertRow(AppDbContext db, string key, string json)
+        {
+            var row = db.Store.FirstOrDefault(x => x.Key == key);
+            if (row == null)
+            {
+                db.Store.Add(new StoreRecord { Key = key, Json = json });
+            }
+            else
+            {
+                row.Json = json;
+            }
         }
     }
 }

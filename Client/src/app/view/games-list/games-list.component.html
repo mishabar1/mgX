@@ -5,17 +5,19 @@
   </div>
 
 
-  <div *ngFor="let game of games;" class="mg-row-center" style="margin:10px;column-gap: 10px;border: 1px solid black;">
-    <div>{{game.name}} </div>
-    <div>{{game.gameStatus}} </div>
-    <div>{{game.gameType}} </div>
-    <p-button (onClick)="setup(game)" severity="warning">settings</p-button>
-    <p-button (onClick)="delete(game)"  severity="danger">DELETE</p-button>
-  </div>
+  @for (game of games; track game) {
+    <div class="mg-row-center" style="margin:10px;column-gap: 10px;border: 1px solid black;">
+      <div>{{game.name}} </div>
+      <div>{{game.gameStatus}} </div>
+      <div>{{game.gameType}} </div>
+      <p-button (onClick)="setup(game)" severity="warn">settings</p-button>
+      <p-button (onClick)="delete(game)"  severity="danger">DELETE</p-button>
+    </div>
+  }
 
   <div class="mg-row-center" style="column-gap: 10px;">
-  <p-button (onClick)="createGame('TIK_TAK_TOE')" severity="secondary">create game TIK_TAK_TOE</p-button>
-  <p-button (onClick)="createGame('CHESS')" severity="secondary">create game CHESS</p-button>
-  <p-button (onClick)="createGame('DND')" severity="secondary">create game DnD</p-button>
+    <p-button (onClick)="createGame('TIK_TAK_TOE')" severity="secondary">create game TIK_TAK_TOE</p-button>
+    <p-button (onClick)="createGame('CHESS')" severity="secondary">create game CHESS</p-button>
+    <p-button (onClick)="createGame('DND')" severity="secondary">create game DnD</p-button>
   </div>
 </div>

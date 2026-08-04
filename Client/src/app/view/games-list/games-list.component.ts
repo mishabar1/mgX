@@ -1,4 +1,4 @@
-import {AfterViewInit, Component, OnChanges, OnDestroy, OnInit, SimpleChanges} from '@angular/core';
+import {AfterViewInit, Component, OnChanges, OnDestroy, OnInit, SimpleChanges, ChangeDetectionStrategy} from '@angular/core';
 import {SignalrService} from '../../services/SignalrService';
 import {DALService} from '../../dal/dal.service';
 import {GameData} from '../../entities/game.data';
@@ -8,9 +8,11 @@ import {UserData} from '../../entities/user.data';
 import {GeneralService} from '../../bl/general.service';
 
 @Component({
-  selector: 'app-games-list',
-  templateUrl: './games-list.component.html',
-  styleUrls: ['./games-list.component.scss']
+    selector: 'app-games-list',
+    templateUrl: './games-list.component.html',
+    styleUrls: ['./games-list.component.scss'],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    standalone: false
 })
 export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, OnChanges {
 

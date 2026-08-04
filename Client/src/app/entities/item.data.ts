@@ -1,6 +1,7 @@
 import { V3 } from "./V3";
-import {Group} from 'three/src/objects/Group';
-import {Object3D} from 'three/src/core/Object3D';
+import * as THREE from 'three';
+import {Group} from 'three/src/objects/Group.js';
+import {Object3D} from 'three/src/core/Object3D.js';
 
 export class ItemData {
   id!: string;

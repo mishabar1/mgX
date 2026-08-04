@@ -1,4 +1,4 @@
-import {AfterViewInit, Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges} from '@angular/core';
+import {AfterViewInit, Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, ChangeDetectionStrategy} from '@angular/core';
 import {GeneralService} from '../../bl/general.service';
 import {AssetData} from '../../entities/asset.data';
 import {MgGame} from "../../bl/mg.game";
@@ -7,9 +7,11 @@ import {ItemData} from "../../entities/item.data";
 import {V3} from "../../entities/V3";
 
 @Component({
-  selector: 'app-debug-view',
-  templateUrl: './debug-view.component.html',
-  styleUrls: ['./debug-view.component.scss']
+    selector: 'app-debug-view',
+    templateUrl: './debug-view.component.html',
+    styleUrls: ['./debug-view.component.scss'],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    standalone: false
 })
 export class DebugViewComponent implements OnInit, OnDestroy, AfterViewInit, OnChanges {
 

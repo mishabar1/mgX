@@ -1,5 +1,6 @@
 ﻿using MG.Server.BL;
 using MG.Server.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using System.Text.Json.Serialization;
@@ -10,6 +11,7 @@ namespace MG.Server.Controllers
     [ApiController]
     [Produces("application/json")]
     [Consumes("application/json")]
+    [Authorize]
     public class GameController : ControllerBase
     {
         readonly GameBL _gameBL;

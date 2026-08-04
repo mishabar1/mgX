@@ -7,6 +7,28 @@ import {UserData} from '../entities/user.data';
 export class GeneralService{
 
   public User? : UserData;
+  public Token? : string;
+
+  constructor() {
+    // restore token on app start so the HTTP interceptor and SignalR have it
+    const t = localStorage.getItem('token');
+    if (t) { this.Token = t; }
+  }
+
+  // called after a successful login
+  setAuth(token: string, user: UserData) {
+    this.Token = token;
+    this.User = user;
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+  }
+
+  clearAuth() {
+    this.Token = undefined;
+    this.User = undefined;
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  }
 
   // public SetUser(name:string){
   //   this.User = new UserData();

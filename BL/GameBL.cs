@@ -100,6 +100,10 @@ namespace MG.Server.BL
         {
             // find game in db
             var game = _dataRepository.Games.Where(x => x.Id == data.gameId).FirstOrDefault();
+            if (game == null)
+            {
+                return new { error = "game not found", gameId = data.gameId };
+            }
             game.GameStatus = GameStatusEnum.ENDED;
             await game.GameFlow.RunEndGameFlow();
 

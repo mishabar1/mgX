@@ -1,4 +1,4 @@
-import {AfterViewInit, Component, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild} from '@angular/core';
+import {AfterViewInit, Component, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild, ChangeDetectionStrategy} from '@angular/core';
 import {GameData} from '../../entities/game.data';
 import {RouteNames} from '../../app-routing.module';
 import {SignalrService} from '../../services/SignalrService';
@@ -11,10 +11,12 @@ import {PlayerData} from '../../entities/player.data';
 import {UnsubscriberService} from '../../services/unsubscriber.service';
 
 @Component({
-  selector: 'app-game-setup',
-  templateUrl: './game-setup.component.html',
-  styleUrls: ['./game-setup.component.scss'],
-  providers: [UnsubscriberService]
+    selector: 'app-game-setup',
+    templateUrl: './game-setup.component.html',
+    styleUrls: ['./game-setup.component.scss'],
+    providers: [UnsubscriberService],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    standalone: false
 })
 export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, OnChanges {
 

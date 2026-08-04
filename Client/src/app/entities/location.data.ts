@@ -1,5 +1,6 @@
 import { V3 } from "./V3";
-import { Group } from 'three/src/objects/Group';
+import * as THREE from 'three';
+import { Group } from 'three/src/objects/Group.js';
 
 export class LocationData {
 

@@ -6,14 +6,15 @@ import {
   OnDestroy,
   OnInit,
   SimpleChanges,
-  ViewChild
+  ViewChild,
+  ChangeDetectionStrategy
 } from '@angular/core';
 import * as THREE from 'three';
-import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls';
-import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader';
+import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
+import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
 // import {InteractionManager} from 'three.interactive';
 import {SignalrService} from '../../services/SignalrService';
-import {HttpClient} from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import {DALService} from '../../dal/dal.service';
 import {GameData} from '../../entities/game.data';
 import {ItemData} from '../../entities/item.data';
@@ -34,23 +35,25 @@ import {
   VectorKeyframeTrack
 } from 'three';
 import * as TWEEN from "@tweenjs/tween.js";
-import {XRControllerModelFactory} from 'three/examples/jsm/webxr/XRControllerModelFactory';
-import {XRTargetRaySpace} from 'three/src/renderers/webxr/WebXRController';
+import {XRControllerModelFactory} from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
+import {XRTargetRaySpace} from 'three/src/renderers/webxr/WebXRController.js';
 import {ActivatedRoute, Router} from '@angular/router';
-import {color} from 'three/examples/jsm/nodes/shadernode/ShaderNodeBaseElements';
+// removed: unused TSL import 'color' (path not present in three r157+)
 import {RouteNames} from '../../app-routing.module';
 import {environment} from '../../../environments/environment';
-import {Group} from 'three/src/objects/Group';
+import {Group} from 'three/src/objects/Group.js';
 import {GeneralService} from '../../bl/general.service';
 import {UnsubscriberService} from '../../services/unsubscriber.service';
 import {MgThree} from '../../bl/mg.three';
 import {MgGame} from '../../bl/mg.game';
 
 @Component({
-  selector: 'app-game-play',
-  templateUrl: './game-play.component.html',
-  styleUrls: ['./game-play.component.scss'],
-  providers: [UnsubscriberService]
+    selector: 'app-game-play',
+    templateUrl: './game-play.component.html',
+    styleUrls: ['./game-play.component.scss'],
+    providers: [UnsubscriberService],
+    changeDetection: ChangeDetectionStrategy.Eager,
+    standalone: false
 })
 export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
 

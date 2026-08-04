@@ -118,6 +118,7 @@ namespace MG.Server.GameFlows
         }
 
 
+        [GameAction]
         public async Task HoverClick(ExecuteActionData data)
         {
             Console.WriteLine("TikTakToeGameFlow HoverClick ");
@@ -155,6 +156,7 @@ namespace MG.Server.GameFlows
             setActionsByCurrentTurn();
         }
 
+        [GameAction]
         public async Task RotateMe(ExecuteActionData data)
         {
             Console.WriteLine("TikTakToeGameFlow RotateMe ");

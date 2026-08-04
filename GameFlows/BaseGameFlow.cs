@@ -131,9 +131,21 @@ namespace MG.Server.GameFlows
             if (data.Item != null && data.Player != null)
             {
 
+                // SECURITY (C1): dispatch by client-supplied action name, but ONLY to methods
+                // explicitly marked [GameAction]. Previously this invoked ANY method named by the
+                // client (arbitrary-method-invocation / RCE vector).
                 Type thisType = GetType();
-                MethodInfo theMethod = thisType.GetMethod(data.actionId);
-                await (Task)theMethod.Invoke(this, new object[] { data });
+                MethodInfo? theMethod = thisType.GetMethod(
+                    data.actionId ?? string.Empty,
+                    BindingFlags.Public | BindingFlags.Instance);
+
+                if (theMethod == null || theMethod.GetCustomAttribute<GameActionAttribute>() == null)
+                {
+                    Console.WriteLine($"Rejected action '{data.actionId}' — not a registered [GameAction].");
+                    return;
+                }
+
+                await (Task)theMethod.Invoke(this, new object[] { data })!;
             }
 
             // check if game ended - 
@@ -145,7 +157,7 @@ namespace MG.Server.GameFlows
                 this.GameData.Winners = GetGameWinners();
                 Console.WriteLine("TikTakToeGameFlow GAME ENDED !!!!!! winners count: " + this.GameData.Winners.Count());
 
-                RunEndGameFlow();
+                await RunEndGameFlow();
 
 
 

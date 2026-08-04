@@ -3,7 +3,7 @@ import {MgThree} from './mg.three';
 import {UserData} from '../entities/user.data';
 import {ItemData} from '../entities/item.data';
 import * as THREE from 'three';
-import {TextGeometry} from 'three/examples/jsm/geometries/TextGeometry';
+import {TextGeometry} from 'three/examples/jsm/geometries/TextGeometry.js';
 import * as ThreeMeshUI from 'three-mesh-ui';
 import {PlayerData} from '../entities/player.data';
 import {find, forEach, keys} from 'lodash';
@@ -12,9 +12,9 @@ import * as TWEEN from '@tweenjs/tween.js';
 import {BoxGeometry, MathUtils, Mesh, MeshBasicMaterial} from 'three';
 import {GeneralService} from './general.service';
 import {SignalrService} from '../services/SignalrService';
-import {Vector3} from "three/src/math/Vector3";
-import {Box3} from "three/src/math/Box3";
-import {Group} from "three/src/objects/Group";
+import {Vector3} from "three/src/math/Vector3.js";
+import {Box3} from "three/src/math/Box3.js";
+import {Group} from "three/src/objects/Group.js";
 
 export class MgGame{
 
@@ -255,7 +255,7 @@ export class MgGame{
           const geometry = new TextGeometry(itemData.text!, {
             font: font,
             size: 0.5,
-            height: 0.2,
+            depth: 0.2,
             curveSegments: 12,
             bevelEnabled: true,
             bevelThickness: 0.03,
@@ -578,19 +578,19 @@ export class MgGame{
 
     this.removeAction(itemData);
 
-    itemData.mesh!.addEventListener('click', this.onMeshClickFunc);
+    (itemData.mesh as any).addEventListener('click', this.onMeshClickFunc);
 
-    itemData.mesh!.addEventListener('mouseover', this.onMeshMouseOverFunc);
+    (itemData.mesh as any).addEventListener('mouseover', this.onMeshMouseOverFunc);
 
-    itemData.mesh!.addEventListener('mouseout', this.onMeshMouseOutFunc);
+    (itemData.mesh as any).addEventListener('mouseout', this.onMeshMouseOutFunc);
 
     this.mgThree.interactionManager.add(itemData.mesh!);
   }
 
   removeAction(itemData: ItemData) {
     //console.log("removeAction",itemData);
-    itemData.mesh!.removeEventListener('click', this.onMeshClickFunc);
-    itemData.mesh!.removeEventListener('click', this.onMeshMouseOverFunc);
+    (itemData.mesh as any).removeEventListener('click', this.onMeshClickFunc);
+    (itemData.mesh as any).removeEventListener('click', this.onMeshMouseOverFunc);
     this.mgThree.interactionManager.remove(itemData.mesh!);
   }
 }

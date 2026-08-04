@@ -1,10 +1,16 @@
 import {Injectable} from '@angular/core';
-import {HttpClient} from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 // import {EnvironmentParamsService} from '../services/env-params.service';
 import {Observable} from 'rxjs';
 import {GameData} from '../entities/game.data';
 import {environment} from '../../environments/environment';
 import {UserData} from '../entities/user.data';
+
+// server now returns the signed token alongside the user
+export interface LoginResult {
+  token: string;
+  user: UserData;
+}
 
 @Injectable({
   providedIn: 'root'
@@ -17,8 +23,8 @@ export class DALService{
   constructor(private http: HttpClient) {}
 
 
-  login(name:string): Observable<UserData> {
-    return this.http.post<UserData>(this.baseUserUrl + `/Login`,{name});
+  login(name:string): Observable<LoginResult> {
+    return this.http.post<LoginResult>(this.baseUserUrl + `/Login`,{name});
   }
 
   getGameById(gameId:string): Observable<GameData> {

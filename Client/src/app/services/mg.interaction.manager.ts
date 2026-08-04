@@ -1,5 +1,6 @@
+import * as THREE from 'three';
 import {Raycaster, Vector2, Vector3} from 'three';
-import {Object3D} from 'three/src/core/Object3D';
+import {Object3D} from 'three/src/core/Object3D.js';
 
 export class InteractiveObject {
   target: THREE.Object3D;
@@ -62,7 +63,7 @@ export class InteractionManagerOptions {
 }
 
 export class InteractionManager {
-  renderer: THREE.Renderer;
+  renderer: THREE.WebGLRenderer;
   camera: THREE.Camera;
   domElement: HTMLElement;
   bindEventsOnBodyElement: boolean;
@@ -76,7 +77,7 @@ export class InteractionManager {
   treatTouchEventsAsMouseEvents: boolean;
 
   constructor(
-    renderer: THREE.Renderer,
+    renderer: THREE.WebGLRenderer,
     camera: THREE.Camera,
     domElement: HTMLElement,
     options?: InteractionManagerOptions
@@ -94,10 +95,10 @@ export class InteractionManager {
     if (this.scene) {
       this.scene.onBeforeRender = () => {
         if (this.autoAdd && this.scene !== null) {
-          this.scene.traverse((object) => {
+          this.scene.traverse((object: THREE.Object3D) => {
             this.add(object);
 
-            object.addEventListener('removed', (o) => {
+            object.addEventListener('removed', (o: any) => {
               this.remove(o.target);
             });
           });
@@ -289,7 +290,7 @@ export class InteractionManager {
 
     if (intersects.length > 0) {
       let distance = intersects[0].distance;
-      intersects.forEach((i) => {
+      intersects.forEach((i: any) => {
         if (i.distance < distance) {
           distance = i.distance;
         }
