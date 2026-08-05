@@ -50,7 +50,10 @@ export class DebugViewComponent implements OnInit, OnDestroy, AfterViewInit, OnC
   }
 
   showDebug() {
-    this.showDebugWindow = true;
+    this.showDebugWindow = !this.showDebugWindow;
+    // show/hide the red bounding boxes + ground grid together with the debug window
+    this.mgGame.setDebugBoxes(this.showDebugWindow);
+    this.mgThree.setDebugHelpers(this.showDebugWindow);
   }
 
   addAsset(assetData: AssetData) {

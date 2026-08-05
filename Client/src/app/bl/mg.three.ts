@@ -47,6 +47,11 @@ export class MgThree{
   clock = new THREE.Clock();
   rendererContainerElement!:HTMLDivElement;
   animationMixers:AnimationMixer[]=[];
+  gridHelper!: THREE.GridHelper;
+
+  setDebugHelpers(on: boolean) {
+    if (this.gridHelper) this.gridHelper.visible = on;
+  }
 
   constructor() {
 
@@ -196,8 +201,9 @@ export class MgThree{
     // const x = VRButton.createButton( this.renderer )
     // document.body.appendChild( x );
 
-    const gridHelper = new THREE.GridHelper( 100, 100 ,0xff0000);
-    this.scene.add( gridHelper );
+    this.gridHelper = new THREE.GridHelper( 100, 100 ,0xff0000);
+    this.gridHelper.visible = false;   // debug grid — off unless DEBUG toggled
+    this.scene.add( this.gridHelper );
 
     onFinish();
 

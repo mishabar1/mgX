@@ -23,6 +23,15 @@ export class MgGame{
 
   playerData!: PlayerData;
   allItems: { [key: string]: ItemData } = {};
+
+  // red bounding-box helpers around items — hidden unless DEBUG is toggled on
+  showDebugBoxes = false;
+  boxHelpers: THREE.Object3D[] = [];
+  setDebugBoxes(on: boolean) {
+    this.showDebugBoxes = on;
+    this.boxHelpers.forEach(h => h.visible = on);
+  }
+
   getPlayerByUserId(userId: string): PlayerData | null | undefined {
     return find(this.gameData.players, p => p.user?.id == userId);
   }
@@ -469,6 +478,8 @@ export class MgGame{
 
     // Add a box helper
     let boxHelper = new THREE.BoxHelper(mesh, new THREE.Color(0xFF0000));
+    boxHelper.visible = this.showDebugBoxes;   // only visible when DEBUG is on
+    this.boxHelpers.push(boxHelper);
     this.mgThree.scene.add(boxHelper);
 
 

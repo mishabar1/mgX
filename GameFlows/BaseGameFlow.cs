@@ -290,20 +290,22 @@ namespace MG.Server.GameFlows
         // Height a picked-up piece is raised to, as a visible "selected" cue.
         private const double LiftHeight = 1.2;
 
+        // Hooks so a specific game can show/hide move targets (Chess shows yellow markers).
+        protected virtual void OnPieceSelected(ItemData? piece) { }
+        protected virtual void OnMarkersClear() { }
+
         [GameAction]
         public async Task SelectPiece(ExecuteActionData data)
         {
-            // Drop any previously-selected piece back down.
-            if (GameData.Attributes.TryGetValue("selectedItem", out var prevId)
-                && !string.IsNullOrEmpty(prevId))
-            {
-                var prev = GameData.FindItem(prevId);
-                if (prev != null) prev.Position.Y = 0;
-            }
+            // Drop any previously-selected piece and clear its markers.
+            ClearSelection();
 
             // Remember + lift the newly selected piece so the user sees it's picked up.
             GameData.Attributes["selectedItem"] = data.itemId;
             if (data.Item != null) data.Item.Position.Y = LiftHeight;
+
+            // Let the game show where the piece can go (Chess: yellow square markers).
+            OnPieceSelected(data.Item);
 
             await Task.CompletedTask;
         }
@@ -315,16 +317,37 @@ namespace MG.Server.GameFlows
                 && !string.IsNullOrEmpty(selectedId))
             {
                 var piece = GameData.FindItem(selectedId);
-                if (piece != null && data.point != null)
+                if (piece != null)
                 {
-                    // Move to where the surface was clicked, and drop it back onto the board.
-                    piece.Position.X = data.point.X;
-                    piece.Position.Z = data.point.Z;
-                    piece.Position.Y = 0;
+                    if (data.Item != null && data.Item.HaveAttribute("moveMarker"))
+                    {
+                        // Clicked a move marker → snap the piece to that exact square.
+                        piece.Position.X = data.Item.Position.X;
+                        piece.Position.Z = data.Item.Position.Z;
+                    }
+                    else if (data.point != null)
+                    {
+                        // Clicked the board surface → free placement at the click point.
+                        piece.Position.X = data.point.X;
+                        piece.Position.Z = data.point.Z;
+                    }
+                    piece.Position.Y = 0; // drop it back down
                 }
-                GameData.Attributes.Remove("selectedItem");
             }
+            ClearSelection();
             await Task.CompletedTask;
+        }
+
+        private void ClearSelection()
+        {
+            if (GameData.Attributes.TryGetValue("selectedItem", out var prevId)
+                && !string.IsNullOrEmpty(prevId))
+            {
+                var prev = GameData.FindItem(prevId);
+                if (prev != null) prev.Position.Y = 0;
+            }
+            GameData.Attributes.Remove("selectedItem");
+            OnMarkersClear();
         }
 
 

@@ -26,6 +26,9 @@ namespace MG.Server.GameFlows
             internal static AssetData BISHOP_B = new ObjectAssetData("chess/bishop_b.gltf");
             internal static AssetData KNIGHT_B = new ObjectAssetData("chess/knight_black.gltf");
             internal static AssetData PAWN_B = new ObjectAssetData("chess/pawn_b.gltf");
+
+            // yellow move-target marker (reused from tic-tac-toe), shown on squares when a piece is picked up
+            internal static AssetData MARKER = new ObjectAssetData("ticktacktoe/hover.gltf") { Scale = new V3(0.7) };
         }
 
         public ChessGameFlow(GameData gameData) : base(gameData)
@@ -40,6 +43,7 @@ namespace MG.Server.GameFlows
             addAsset(Assets.BISHOP_W); addAsset(Assets.KNIGHT_W); addAsset(Assets.PAWN_W);
             addAsset(Assets.KING_B); addAsset(Assets.QUEEN_B); addAsset(Assets.ROOK_B);
             addAsset(Assets.BISHOP_B); addAsset(Assets.KNIGHT_B); addAsset(Assets.PAWN_B);
+            addAsset(Assets.MARKER);
 
             GameData.Observer.Position.Set(0, 10, 0);
 
@@ -102,6 +106,27 @@ namespace MG.Server.GameFlows
         protected override List<PlayerData> GetGameWinners()
         {
             return new List<PlayerData>();
+        }
+
+        // Show a yellow marker on every square when a piece is picked up, so the player
+        // sees exactly where they can click to move (like tic-tac-toe's hover cells).
+        protected override void OnPieceSelected(ItemData? piece)
+        {
+            double[] cells = { -2.8, -2.0, -1.2, -0.4, 0.4, 1.2, 2.0, 2.8 };
+            foreach (var z in cells)
+                foreach (var x in cells)
+                {
+                    addItem(Assets.MARKER)
+                        .SetPosition(x, 0.05, z)
+                        .AddAttribute("moveMarker", "1")
+                        .AddAction(MoveHere);
+                }
+        }
+
+        protected override void OnMarkersClear()
+        {
+            foreach (var m in getItemsByAttribute("moveMarker"))
+                removeItem(m.Id);
         }
     }
 }
