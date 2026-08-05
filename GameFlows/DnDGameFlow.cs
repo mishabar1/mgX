@@ -70,6 +70,13 @@ namespace MG.Server.GameFlows
         protected override async Task Setup()
         {
             Console.WriteLine("DnDGameFlow Setup ");
+            // Board, tokens and cards are placed in StartGame (which always runs on START),
+            // so the scene appears reliably even if SETUP is skipped.
+        }
+
+        protected override async Task StartGame()
+        {
+            Console.WriteLine("DnDGameFlow StartGame " + this.GameData);
 
             //set the map — the map is the surface you click to move the selected token
             makeMoveSurface(addItem(Assets.MAP_1_0).SetPosition(0, 0, 0).SetScale(10));
@@ -81,7 +88,6 @@ namespace MG.Server.GameFlows
             makeMovable(addItem(Assets.rover).SetPosition(4, 0, -3).SetAnimation(3));
             makeMovable(addItem(Assets.flytrap).SetPosition(3, 0, 3));
             makeMovable(addItem(Assets.flytrap).SetPosition(4, 0, 3));
-
 
             // give players cards
             var p = getPlayerByAttribute("type", "DungeonMaster");
@@ -95,17 +101,6 @@ namespace MG.Server.GameFlows
 
             p = getPlayerByAttribute("type", "Wizard");
             addItemToPlayerTable(p, Assets.Card4);
-
-        }
-
-        protected override async Task StartGame()
-        {
-            Console.WriteLine("DnDGameFlow StartGame " + this.GameData);
-
-            //addItem("MAP_1_0")
-            //    .SetPosition(0, 0, 0)
-            //    .SetScale(1128/40, 1, 876/40).AddAction(MapClick); ;
-
         }
 
         [GameAction]

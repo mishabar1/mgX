@@ -9,13 +9,15 @@ namespace MG.Server.GameFlows
     {
         internal class Assets
         {
-            internal static AssetData BOARD = new ObjectAssetData("chess/board.glb") { Scale = new V3(1) };
+            // The client normalizes every model so max(width,depth) == asset.scale.
+            // Pieces sit on x/z from -3.5..3.5 (8 squares), so the board must span ~8 units.
+            internal static AssetData BOARD = new ObjectAssetData("chess/board.glb") { Scale = new V3(8) };
 
             internal static AssetData KING_W = new ObjectAssetData("chess/king_w.gltf");
             internal static AssetData QUEEN_W = new ObjectAssetData("chess/queen_w.gltf");
             internal static AssetData ROOK_W = new ObjectAssetData("chess/rook_w.gltf");
             internal static AssetData BISHOP_W = new ObjectAssetData("chess/bishop_w.gltf");
-            internal static AssetData KNIGHT_W = new ObjectAssetData("chess/knight_white.gltf");
+            internal static AssetData KNIGHT_W = new ObjectAssetData("chess/knight_white.glb"); // only .glb exists for white knight
             internal static AssetData PAWN_W = new ObjectAssetData("chess/pawn_w.gltf");
 
             internal static AssetData KING_B = new ObjectAssetData("chess/king_b.gltf");
