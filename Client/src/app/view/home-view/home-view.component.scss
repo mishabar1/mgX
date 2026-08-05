@@ -1,0 +1,42 @@
+.home-view {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 22px;
+
+  .title {
+    font-size: 72px;
+    font-weight: 800;
+    letter-spacing: 8px;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg, #10b981, #0ea5e9);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .username-input {
+    width: 340px;
+    max-width: 80vw;
+    padding: 14px 18px;
+    font-size: 20px;
+    text-align: center;
+    border-radius: 12px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #1e293b;
+    outline: none;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .05);
+    transition: border-color .12s ease, box-shadow .12s ease;
+
+    &:focus {
+      border-color: #10b981;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, .15);
+    }
+
+    &::placeholder { color: #94a3b8; }
+  }
+}
