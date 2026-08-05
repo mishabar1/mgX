@@ -44,82 +44,33 @@ namespace MG.Server.BL
             
             //Debug.WriteLine("STOP timer" + player.Name);
 
+            // Game over → stop the agent for good.
             if (this.gameData.GameStatus != GameStatusEnum.PLAY)
             {
-                //Debug.WriteLine(DateTime.Now.Ticks + " GameStatus = " + this.gameData.GameStatus);                
                 return;
             }
 
-            if (gameData.CurrentTurnId != player.Id)
-            {                
-                //Debug.WriteLine(DateTime.Now.Ticks + " " + player.Name + " - NOT MY TURN");
+            // Not this AI's turn → wait for the next tick. Each game decides what
+            // "this player's turn" means (Chess uses a white/black turn attribute).
+            if (!gameData.GameFlow.IsAITurn(player))
+            {
                 timer.Start();
                 return;
             }
-            
 
-            var allGameItems = gameData.GetAllGameItems();
-
-            // filter allowed actions
-            allGameItems = allGameItems.Where(item =>
+            // (H1) this runs from an async-void timer handler; a thrown exception here would
+            // otherwise crash the process. Contain and log it.
+            try
             {
-                var allow = false;
-                if (item.ClickActions.ContainsKey("") || item.ClickActions.ContainsKey(player.Id))
-                {
-                    allow = true;
-                }
-
-                return allow;
-            }).ToList();
-
-            if (allGameItems.Count > 0)
+                await gameData.GameFlow.RunAITurn(player, rnd);
+            }
+            catch (Exception ex)
             {
-                // play random
-                var idx = rnd.Next(0, allGameItems.Count);
-                var item = allGameItems[idx];
-
-
-                ////*********************
-                ////test ML - START
-                ////Load model and predict output
-                //var result = MLModel.Predict(new MLModel.ModelInput()
-                //{
-                //    Col0 = @"Crust is not good.",
-                //});
-                //Console.WriteLine(result.Col1);
-                //result = MLModel.Predict(new MLModel.ModelInput()
-                //{
-                //    Col0 = @"Very good product, recomend to buy",
-                //});
-                //Console.WriteLine(result.Col1);
-                ////test ML - FINISH
-                ////*********************
-
-                
-                ExecuteActionData action = new ExecuteActionData()
-                {
-                    actionId = item.ClickActions.GetValueOrDefault("", item.ClickActions.GetValueOrDefault(player.Id)),
-                    gameId = this.gameData.Id,
-                    playerId = this.player.Id,
-                    itemId = item.Id
-                };
-                //Debug.WriteLine(DateTime.Now.Ticks + " execute action " + action.actionId + "TIMER:"+player.Name);
-                // (H1) this runs from an async-void timer handler; a thrown exception here would
-                // otherwise crash the process. Contain and log it.
-                try
-                {
-                    await gameData.GameFlow.ExecuteAction(action);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("AIAgent action failed: " + ex);
-                }
-
+                Console.WriteLine("AIAgent action failed: " + ex);
             }
 
             //continue the timer
             timer.Start();
-            //Debug.WriteLine(DateTime.Now.Ticks + " continue timer " + player.Name);
 
 
         }

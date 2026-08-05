@@ -124,13 +124,17 @@ namespace MG.Server.GameFlows
 
         public async Task ExecuteAction(ExecuteActionData data)
         {
-            Console.WriteLine("TikTakToeGameFlow ExecuteAction ");
+            await DispatchAction(data);
+            await AfterAction();
+        }
 
+        // Dispatch a single action by name to a [GameAction]-marked method (no broadcast).
+        private async Task DispatchAction(ExecuteActionData data)
+        {
             data.Item = GameData.FindItem(data.itemId);
             data.Player = GameData.FindPlayer(data.playerId);
             if (data.Item != null && data.Player != null)
             {
-
                 // SECURITY (C1): dispatch by client-supplied action name, but ONLY to methods
                 // explicitly marked [GameAction]. Previously this invoked ANY method named by the
                 // client (arbitrary-method-invocation / RCE vector).
@@ -147,27 +151,61 @@ namespace MG.Server.GameFlows
 
                 await (Task)theMethod.Invoke(this, new object[] { data })!;
             }
+        }
 
-            // check if game ended - 
+        // Shared tail: end-game check, snapshot history, and broadcast the new state.
+        private async Task AfterAction()
+        {
             var ended = await IsEndGame();
             if (ended)
             {
                 this.GameData.GameStatus = GameStatusEnum.ENDED;
-
                 this.GameData.Winners = GetGameWinners();
-                Console.WriteLine("TikTakToeGameFlow GAME ENDED !!!!!! winners count: " + this.GameData.Winners.Count());
-
+                Console.WriteLine("GAME ENDED !!!!!! winners count: " + this.GameData.Winners.Count());
                 await RunEndGameFlow();
-
-
-
             }
 
             HistoryGameData.Add(GameData.DeepCopy());
 
             await DataRepository.Singleton.HubGameUpdated(GameData);
             await DataRepository.Singleton.HubGamesUpdated(GameData);
+        }
 
+        // ---------------------------------------------------------------------
+        // AI hooks. An AIAgent ticks on a timer and, when it's this player's turn,
+        // calls RunAITurn. Games with special turn/movement models (e.g. Chess)
+        // override IsAITurn and PlayAI.
+        // ---------------------------------------------------------------------
+
+        /// <summary>Is it this AI player's turn to act?</summary>
+        public virtual bool IsAITurn(PlayerData player) => GameData.CurrentTurnId == player.Id;
+
+        /// <summary>Play the AI's move (if any) and broadcast the result.</summary>
+        public async Task RunAITurn(PlayerData player, Random rnd)
+        {
+            if (await PlayAI(player, rnd))
+                await AfterAction();
+        }
+
+        /// <summary>Make one AI move. Returns true if a move was made.
+        /// Default: pick a random clickable item and run its action.</summary>
+        public virtual async Task<bool> PlayAI(PlayerData player, Random rnd)
+        {
+            var items = GameData.GetAllGameItems()
+                .Where(i => i.ClickActions.ContainsKey("") || i.ClickActions.ContainsKey(player.Id))
+                .ToList();
+            if (items.Count == 0) return false;
+
+            var item = items[rnd.Next(0, items.Count)];
+            var action = new ExecuteActionData
+            {
+                actionId = item.ClickActions.GetValueOrDefault("", item.ClickActions.GetValueOrDefault(player.Id)),
+                gameId = GameData.Id,
+                playerId = player.Id,
+                itemId = item.Id
+            };
+            await DispatchAction(action);
+            return true;
         }
 
         internal AssetData addAsset(AssetData asset)

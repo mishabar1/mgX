@@ -85,10 +85,10 @@ namespace MG.Server.GameFlows
 
             for (int i = 0; i < 8; i++)
             {
-                makeMovable(addItem(whiteBack[i]).SetPosition(COORDS[i], 0, COORDS[0]).SetScale(PIECE_SCALE).AddAttribute("color", "white").AddAttribute("piece", backTypes[i]));
-                makeMovable(addItem(Assets.PAWN_W).SetPosition(COORDS[i], 0, COORDS[1]).SetScale(PIECE_SCALE).AddAttribute("color", "white").AddAttribute("piece", "pawn"));
-                makeMovable(addItem(blackBack[i]).SetPosition(COORDS[i], 0, COORDS[7]).SetScale(PIECE_SCALE).AddAttribute("color", "black").AddAttribute("piece", backTypes[i]));
-                makeMovable(addItem(Assets.PAWN_B).SetPosition(COORDS[i], 0, COORDS[6]).SetScale(PIECE_SCALE).AddAttribute("color", "black").AddAttribute("piece", "pawn"));
+                makeChessMovable(addItem(whiteBack[i]).SetPosition(COORDS[i], 0, COORDS[0]).SetScale(PIECE_SCALE).AddAttribute("color", "white").AddAttribute("piece", backTypes[i]));
+                makeChessMovable(addItem(Assets.PAWN_W).SetPosition(COORDS[i], 0, COORDS[1]).SetScale(PIECE_SCALE).AddAttribute("color", "white").AddAttribute("piece", "pawn"));
+                makeChessMovable(addItem(blackBack[i]).SetPosition(COORDS[i], 0, COORDS[7]).SetScale(PIECE_SCALE).AddAttribute("color", "black").AddAttribute("piece", backTypes[i]));
+                makeChessMovable(addItem(Assets.PAWN_B).SetPosition(COORDS[i], 0, COORDS[6]).SetScale(PIECE_SCALE).AddAttribute("color", "black").AddAttribute("piece", "pawn"));
             }
 
             return Task.CompletedTask;
@@ -140,6 +140,42 @@ namespace MG.Server.GameFlows
         // ------------------------------------------------------------------
         // Executing a legal move (clicking a yellow marker).
         // ------------------------------------------------------------------
+        // Chess pieces use this instead of the generic SelectPiece. If a piece is
+        // already selected and you click an enemy piece that sits on one of its
+        // legal target squares, that's a capture — do the move (the yellow marker is
+        // hidden under the tall enemy model, so clicking the piece must work too).
+        // Otherwise fall back to normal selection (highlight + show legal markers).
+        [GameAction]
+        public async Task ChessSelect(ExecuteActionData data)
+        {
+            var clicked = data.Item;
+            if (clicked != null
+                && GameData.Attributes.TryGetValue("selectedItem", out var selId)
+                && !string.IsNullOrEmpty(selId) && selId != clicked.Id)
+            {
+                var selected = GameData.FindItem(selId);
+                if (selected != null)
+                {
+                    var (board, items) = BuildBoard();
+                    int fc = ToIndex(selected.Position.X), fr = ToIndex(selected.Position.Z);
+                    if (board[fc, fr] != null)
+                    {
+                        int tc = ToIndex(clicked.Position.X), tr = ToIndex(clicked.Position.Z);
+                        var moves = ChessRules.LegalMoves(board, fc, fr, GetEnPassant(), GetCastling(items));
+                        var hit = moves.Find(m => m.ToC == tc && m.ToR == tr);
+                        if (hit != null)
+                        {
+                            ApplyMove(selected, fc, fr, hit); // capture this piece
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // Not a capture of the selected piece → normal selection.
+            await SelectPiece(data);
+        }
+
         [GameAction]
         public async Task ChessMove(ExecuteActionData data)
         {
@@ -152,31 +188,48 @@ namespace MG.Server.GameFlows
             var piece = GameData.FindItem(selId);
             if (piece == null) { ClearSelection(); await Task.CompletedTask; return; }
 
-            int tc = int.Parse(marker.GetStringAttribute("tc"));
-            int tr = int.Parse(marker.GetStringAttribute("tr"));
-            int fromR = ToIndex(piece.Position.Z);
+            int fromC = ToIndex(piece.Position.X), fromR = ToIndex(piece.Position.Z);
 
+            // Reconstruct the move the clicked marker represents, then apply it.
+            var m = new ChessRules.Move
+            {
+                ToC = int.Parse(marker.GetStringAttribute("tc")),
+                ToR = int.Parse(marker.GetStringAttribute("tr")),
+                Castle = marker.HaveAttribute("castle") ? marker.GetStringAttribute("castle")[0] : '\0',
+                EnPassant = marker.HaveAttribute("ep"),
+                Promote = marker.HaveAttribute("promote"),
+                DoublePush = marker.HaveAttribute("dbl")
+            };
+            ApplyMove(piece, fromC, fromR, m);
+            await Task.CompletedTask;
+        }
+
+        // Apply a legal move to the scene: capture, castle, en passant, promotion,
+        // update the en-passant target, flip the turn, clear selection/markers.
+        // Shared by human moves (ChessMove) and the AI (PlayAI).
+        private void ApplyMove(ItemData piece, int fromC, int fromR, ChessRules.Move m)
+        {
             var (_, items) = BuildBoard();
+            int tc = m.ToC, tr = m.ToR;
 
-            // Normal capture: remove any enemy piece standing on the destination.
+            // Normal capture: remove any enemy piece on the destination.
             var occ = items[tc, tr];
             if (occ != null && occ.Id != piece.Id) removeItem(occ.Id);
 
             // En passant: the captured pawn sits beside the destination, on the from-row.
-            if (marker.HaveAttribute("ep"))
+            if (m.EnPassant)
             {
                 var cap = items[tc, fromR];
                 if (cap != null) removeItem(cap.Id);
             }
 
-            // Move the piece and remember that it has moved (for castling rights).
             piece.SetPosition(ToCoord(tc), 0, ToCoord(tr));
             piece.Attributes["moved"] = "1";
 
-            // Castling: slide the corresponding rook next to the king.
-            if (marker.HaveAttribute("castle"))
+            // Castling: slide the rook next to the king.
+            if (m.Castle == 'K' || m.Castle == 'Q')
             {
-                bool kingside = marker.GetStringAttribute("castle") == "K";
+                bool kingside = m.Castle == 'K';
                 var rook = items[kingside ? 7 : 0, fromR];
                 if (rook != null)
                 {
@@ -186,11 +239,11 @@ namespace MG.Server.GameFlows
             }
 
             // Promotion: swap the pawn for a queen of the same color (auto-queen).
-            if (marker.HaveAttribute("promote"))
+            if (m.Promote)
             {
                 string color = piece.GetStringAttribute("color");
                 removeItem(piece.Id);
-                makeMovable(addItem(color == "white" ? Assets.QUEEN_W : Assets.QUEEN_B)
+                makeChessMovable(addItem(color == "white" ? Assets.QUEEN_W : Assets.QUEEN_B)
                     .SetPosition(ToCoord(tc), 0, ToCoord(tr))
                     .SetScale(PIECE_SCALE)
                     .AddAttribute("color", color)
@@ -200,7 +253,7 @@ namespace MG.Server.GameFlows
 
             // Set / clear the en-passant target square for the opponent's next move.
             GameData.Attributes.Remove("ep");
-            if (marker.HaveAttribute("dbl"))
+            if (m.DoublePush)
                 GameData.Attributes["ep"] = tc + "," + (fromR + tr) / 2;
 
             // Alternate turns.
@@ -208,7 +261,46 @@ namespace MG.Server.GameFlows
             GameData.Attributes["turn"] = turn == "white" ? "black" : "white";
 
             ClearSelection(); // un-highlight + remove markers
+        }
+
+        // ------------------------------------------------------------------
+        // AI: on its turn, pick a random piece that has at least one legal move,
+        // then pick a random one of that piece's legal moves.
+        // ------------------------------------------------------------------
+        public override bool IsAITurn(PlayerData player)
+        {
+            string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "white";
+            return player.GetStringAttribute("type") == turn; // seat's "type" is "white"/"black"
+        }
+
+        public override async Task<bool> PlayAI(PlayerData player, Random rnd)
+        {
+            var (board, items) = BuildBoard();
+            char me = player.GetStringAttribute("type") == "white" ? 'w' : 'b';
+            var ep = GetEnPassant();
+            var cast = GetCastling(items);
+
+            // Every piece of my color that has at least one legal move.
+            var movable = new List<(int c, int r, List<ChessRules.Move> moves)>();
+            for (int c = 0; c < 8; c++)
+                for (int r = 0; r < 8; r++)
+                {
+                    var sq = board[c, r];
+                    if (sq == null || sq.Value.Color != me) continue;
+                    var mv = ChessRules.LegalMoves(board, c, r, ep, cast);
+                    if (mv.Count > 0) movable.Add((c, r, mv));
+                }
+
+            if (movable.Count == 0) return false; // checkmate / stalemate — nothing to do
+
+            var pick = movable[rnd.Next(movable.Count)];        // random piece
+            var move = pick.moves[rnd.Next(pick.moves.Count)];  // random legal move
+            var pieceItem = items[pick.c, pick.r];
+            if (pieceItem == null) return false;
+
+            ApplyMove(pieceItem, pick.c, pick.r, move);
             await Task.CompletedTask;
+            return true;
         }
 
         // ------------------------------------------------------------------
@@ -303,5 +395,8 @@ namespace MG.Server.GameFlows
         }
 
         private static double ToCoord(int i) => COORDS[i];
+
+        // Chess pieces select via ChessSelect (which also handles capture-by-click).
+        private void makeChessMovable(ItemData piece) => piece.AddAction(ChessSelect);
     }
 }
