@@ -268,6 +268,51 @@ namespace MG.Server.GameFlows
             return ItemData.GetItemsByAttribute(this.GameData.Table, key);
         }
 
+        // ---------------------------------------------------------------------
+        // Generic virtual-tabletop movement (used by Chess and D&D).
+        // Interaction model: click a piece to select it, then click the move
+        // surface (board/map) — the piece jumps to the clicked world point.
+        // No rule enforcement; players self-enforce, like a tabletop simulator.
+        // ---------------------------------------------------------------------
+
+        /// <summary>Make an item selectable so it can be picked up and moved.</summary>
+        protected void makeMovable(ItemData piece)
+        {
+            piece.AddAction(SelectPiece);
+        }
+
+        /// <summary>Make an item (board/map) a surface that moves the selected piece to the click point.</summary>
+        protected void makeMoveSurface(ItemData surface)
+        {
+            surface.AddAction(MoveHere);
+        }
+
+        [GameAction]
+        public async Task SelectPiece(ExecuteActionData data)
+        {
+            // Remember which item this player picked up. GameData carries an attribute bag.
+            GameData.Attributes["selectedItem"] = data.itemId;
+            await Task.CompletedTask;
+        }
+
+        [GameAction]
+        public async Task MoveHere(ExecuteActionData data)
+        {
+            if (GameData.Attributes.TryGetValue("selectedItem", out var selectedId)
+                && !string.IsNullOrEmpty(selectedId))
+            {
+                var piece = GameData.FindItem(selectedId);
+                if (piece != null && data.point != null)
+                {
+                    // Snap the piece to where the surface was clicked (keep its own height).
+                    piece.Position.X = data.point.X;
+                    piece.Position.Z = data.point.Z;
+                }
+                GameData.Attributes.Remove("selectedItem");
+            }
+            await Task.CompletedTask;
+        }
+
 
 
     }

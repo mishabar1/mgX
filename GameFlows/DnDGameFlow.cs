@@ -71,15 +71,16 @@ namespace MG.Server.GameFlows
         {
             Console.WriteLine("DnDGameFlow Setup ");
 
-            //set the map
-            addItem(Assets.MAP_1_0).SetPosition(0, 0, 0).SetScale(10);
-            addItem(Assets.SKELETON).SetPosition(0, 0, 0);
-            addItem(Assets.angel).SetPosition(1, 0, 1);
+            //set the map — the map is the surface you click to move the selected token
+            makeMoveSurface(addItem(Assets.MAP_1_0).SetPosition(0, 0, 0).SetScale(10));
+            // tokens are movable: click a token to pick it up, then click the map to place it
+            makeMovable(addItem(Assets.SKELETON).SetPosition(0, 0, 0));
+            makeMovable(addItem(Assets.angel).SetPosition(1, 0, 1));
 
-            addItem(Assets.rover).SetPosition(3, 0, -3).SetAnimation(2);
-            addItem(Assets.rover).SetPosition(4, 0, -3).SetAnimation(3);
-            addItem(Assets.flytrap).SetPosition(3, 0, 3);
-            addItem(Assets.flytrap).SetPosition(4, 0, 3);
+            makeMovable(addItem(Assets.rover).SetPosition(3, 0, -3).SetAnimation(2));
+            makeMovable(addItem(Assets.rover).SetPosition(4, 0, -3).SetAnimation(3));
+            makeMovable(addItem(Assets.flytrap).SetPosition(3, 0, 3));
+            makeMovable(addItem(Assets.flytrap).SetPosition(4, 0, 3));
 
 
             // give players cards
