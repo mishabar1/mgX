@@ -1,28 +1,31 @@
 @if (gameData) {
-  <div style="overflow: auto;width: 100%;height: 100%;padding: 20px;">
-    <div class="mg-row-center">
-      <p-button (onClick)="backClick()" icon="fa-solid fa-chevron-left" severity="secondary" ></p-button>
-      <div style="font-size: 40px;margin-left: 20px;">{{gameData.gameType}} - <b>{{gameData.gameStatus}}</b> - {{gameData.name}}</div>
+  <div class="mg-page">
+    <div class="mg-header">
+      <p-button (onClick)="backClick()" icon="fa-solid fa-chevron-left" severity="secondary"></p-button>
+      <div class="mg-title">{{gameData.gameType}} · <span style="color:var(--mg-muted);font-weight:500;">{{gameData.name}}</span></div>
+      <span class="mg-badge play">{{gameData.gameStatus}}</span>
     </div>
-    <div class="mg-row-center" style="margin-top: 20px;">
-      <p-button (onClick)="setup()" severity="secondary">SETUP</p-button>
-      <p-button (onClick)="start()" severity="warn">START</p-button>
-      <p-button (onClick)="open()" severity="success">OPEN</p-button>
+
+    <div class="mg-row-center" style="gap: 10px;">
+      <p-button (onClick)="setup()" severity="secondary" label="Setup" icon="pi pi-cog"></p-button>
+      <p-button (onClick)="start()" severity="warn" label="Start" icon="pi pi-play"></p-button>
+      <p-button (onClick)="open()" severity="success" label="Open" icon="pi pi-external-link"></p-button>
     </div>
-    <div class="mg-col">
-      <div style="margin-top: 20px;font-size: 20px">Players</div>
-      @for (player of gameData.players; track player) {
-        <div class="mg-row-center">
-          <div style="width: 100px">{{player.type}}</div>
-          <div><p-button (onClick)="join_game(player)" severity="success">JOIN</p-button></div>
-          <div><p-button (onClick)="set_ai(player)" severity="warn">AI</p-button></div>
-          <div><p-button (onClick)="leave(player)"  severity="danger">LEAVE</p-button></div>
-        </div>
-      }
-    </div>
-    <div>
+
+    <div class="mg-section">Players</div>
+    @for (player of gameData.players; track player) {
+      <div class="mg-game-card">
+        <div class="mg-game-name">{{player.type}}</div>
+        <div class="mg-spacer"></div>
+        <p-button (onClick)="join_game(player)" severity="success" label="Join" icon="pi pi-user"></p-button>
+        <p-button (onClick)="set_ai(player)" severity="warn" label="AI"></p-button>
+        <p-button (onClick)="leave(player)" severity="danger" label="Leave" icon="pi pi-sign-out"></p-button>
+      </div>
+    }
+
+    <div class="mg-section">Game data</div>
+    <div class="mg-game-card" style="display: block;">
       <ngx-json-viewer [json]="gameData" [depth]="1"></ngx-json-viewer>
     </div>
-    <!--  {{gameData | json}}-->
   </div>
 }

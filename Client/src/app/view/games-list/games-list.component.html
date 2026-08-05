@@ -1,23 +1,26 @@
-<div>
-  <div class="mg-row-center">
-    <p-button (onClick)="backClick()" icon="fa-solid fa-chevron-left" severity="secondary" ></p-button>
-    <div style="font-size: 40px;margin-left: 20px;">Hello <b>{{user.name}}</b></div>
+<div class="mg-page">
+  <div class="mg-header">
+    <p-button (onClick)="backClick()" icon="fa-solid fa-chevron-left" severity="secondary"></p-button>
+    <div class="mg-title">Hello, {{user.name}}</div>
   </div>
 
+  <div class="mg-section">Your games</div>
 
   @for (game of games; track game) {
-    <div class="mg-row-center" style="margin:10px;column-gap: 10px;border: 1px solid black;">
-      <div>{{game.name}} </div>
-      <div>{{game.gameStatus}} </div>
-      <div>{{game.gameType}} </div>
-      <p-button (onClick)="setup(game)" severity="warn">settings</p-button>
-      <p-button (onClick)="delete(game)"  severity="danger">DELETE</p-button>
+    <div class="mg-game-card">
+      <div class="mg-game-name">{{game.name}}</div>
+      <span class="mg-badge">{{game.gameType}}</span>
+      <span class="mg-badge play">{{game.gameStatus}}</span>
+      <div class="mg-spacer"></div>
+      <p-button (onClick)="setup(game)" severity="warn" label="Settings" icon="pi pi-cog"></p-button>
+      <p-button (onClick)="delete(game)" severity="danger" label="Delete" icon="pi pi-trash"></p-button>
     </div>
   }
 
-  <div class="mg-row-center" style="column-gap: 10px;">
-    <p-button (onClick)="createGame('TIK_TAK_TOE')" severity="secondary">create game TIK_TAK_TOE</p-button>
-    <p-button (onClick)="createGame('CHESS')" severity="secondary">create game CHESS</p-button>
-    <p-button (onClick)="createGame('DND')" severity="secondary">create game DnD</p-button>
+  <div class="mg-section">Create a game</div>
+  <div class="mg-row-center" style="column-gap: 12px;">
+    <p-button (onClick)="createGame('TIK_TAK_TOE')" label="Tic-Tac-Toe" icon="pi pi-th-large"></p-button>
+    <p-button (onClick)="createGame('CHESS')" label="Chess" icon="pi pi-flag"></p-button>
+    <p-button (onClick)="createGame('DND')" label="D&D" icon="pi pi-compass"></p-button>
   </div>
 </div>

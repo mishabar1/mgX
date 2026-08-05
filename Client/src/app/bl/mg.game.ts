@@ -399,11 +399,9 @@ export class MgGame{
     //console.log("updateItemPosition", item, position);
 
     item.position = position;
-    // item.mesh!.position.set(position.x, position.y, position.z);
-    // this.createMoveAnimation(item.mesh,item.mesh!.position,position)
-    if (!GeneralService.deepEqual(position, item.mesh!.position)) {
-      new TWEEN.Tween(item.mesh!.position).to(position, 300).start();
-    }
+    // Set directly (was a TWEEN.Tween that stopped advancing after the tween.js v25 bump,
+    // so pieces updated in data but never moved on screen). Direct set is reliable.
+    item.mesh!.position.set(position.x, position.y, position.z);
 
   }
 
@@ -411,11 +409,7 @@ export class MgGame{
     //console.log("updateItemScale", item, scale);
 
     item.scale = scale;
-    // item.mesh!.position.set(position.x, position.y, position.z);
-    // this.createMoveAnimation(item.mesh,item.mesh!.position,position)
-    if (!GeneralService.deepEqual(scale, item.mesh!.scale)) {
-      new TWEEN.Tween(item.mesh!.scale).to(scale, 300).start();
-    }
+    item.mesh!.scale.set(scale.x, scale.y, scale.z);
 
   }
 
@@ -430,18 +424,7 @@ export class MgGame{
       z: MathUtils.degToRad(rot.z)
     }
 
-    // item.mesh!.position.set(position.x, position.y, position.z);
-    // this.createMoveAnimation(item.mesh,item.mesh!.position,position)
-    // let meshRot =new THREE.Vector3();
-    // meshRot = meshRot.applyEuler(item.mesh!.rotation);
-    if (!GeneralService.deepEqual(r, {
-      x: item.mesh!.rotation.x,
-      y: item.mesh!.rotation.y,
-      z: item.mesh!.rotation.z
-    })) {
-      // const u = new THREE.Euler( rot.x, rot.y, rot.z, 'XYZ' )
-      new TWEEN.Tween(item.mesh!.rotation).to(r, 300).start();
-    }
+    item.mesh!.rotation.set(r.x, r.y, r.z);
 
   }
 
