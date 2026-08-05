@@ -287,11 +287,24 @@ namespace MG.Server.GameFlows
             surface.AddAction(MoveHere);
         }
 
+        // Height a picked-up piece is raised to, as a visible "selected" cue.
+        private const double LiftHeight = 1.2;
+
         [GameAction]
         public async Task SelectPiece(ExecuteActionData data)
         {
-            // Remember which item this player picked up. GameData carries an attribute bag.
+            // Drop any previously-selected piece back down.
+            if (GameData.Attributes.TryGetValue("selectedItem", out var prevId)
+                && !string.IsNullOrEmpty(prevId))
+            {
+                var prev = GameData.FindItem(prevId);
+                if (prev != null) prev.Position.Y = 0;
+            }
+
+            // Remember + lift the newly selected piece so the user sees it's picked up.
             GameData.Attributes["selectedItem"] = data.itemId;
+            if (data.Item != null) data.Item.Position.Y = LiftHeight;
+
             await Task.CompletedTask;
         }
 
@@ -304,9 +317,10 @@ namespace MG.Server.GameFlows
                 var piece = GameData.FindItem(selectedId);
                 if (piece != null && data.point != null)
                 {
-                    // Snap the piece to where the surface was clicked (keep its own height).
+                    // Move to where the surface was clicked, and drop it back onto the board.
                     piece.Position.X = data.point.X;
                     piece.Position.Z = data.point.Z;
+                    piece.Position.Y = 0;
                 }
                 GameData.Attributes.Remove("selectedItem");
             }

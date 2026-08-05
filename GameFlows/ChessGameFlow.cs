@@ -65,21 +65,24 @@ namespace MG.Server.GameFlows
 
         protected override Task StartGame()
         {
-            // The board is the surface you click to drop the selected piece.
-            makeMoveSurface(addItem(Assets.BOARD).SetPosition(0, 0, 0));
+            // board.glb's model origin is at a CORNER (measured bbox center ≈ (3.17, 3.14)
+            // after the client normalizes it to 8 units), so offset the board item to
+            // recenter it on the origin, under the pieces.
+            makeMoveSurface(addItem(Assets.BOARD).SetPosition(-3.17, 0, -3.14));
 
-            // files a..h mapped to x = -3.5 .. 3.5 (one unit per square, centered on origin)
-            double[] files = { -3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5 };
+            // 8 square-centers spanning the board's playing area, centered on origin (~0.8/square).
+            double[] files = { -2.8, -2.0, -1.2, -0.4, 0.4, 1.2, 2.0, 2.8 };
+            const double PIECE_SCALE = 0.7; // fit a piece within a ~0.8-unit square
 
             AssetData[] whiteBack = { Assets.ROOK_W, Assets.KNIGHT_W, Assets.BISHOP_W, Assets.QUEEN_W, Assets.KING_W, Assets.BISHOP_W, Assets.KNIGHT_W, Assets.ROOK_W };
             AssetData[] blackBack = { Assets.ROOK_B, Assets.KNIGHT_B, Assets.BISHOP_B, Assets.QUEEN_B, Assets.KING_B, Assets.BISHOP_B, Assets.KNIGHT_B, Assets.ROOK_B };
 
             for (int i = 0; i < 8; i++)
             {
-                makeMovable(addItem(whiteBack[i]).SetPosition(files[i], 0, -3.5).AddAttribute("color", "white"));
-                makeMovable(addItem(Assets.PAWN_W).SetPosition(files[i], 0, -2.5).AddAttribute("color", "white"));
-                makeMovable(addItem(blackBack[i]).SetPosition(files[i], 0, 3.5).AddAttribute("color", "black"));
-                makeMovable(addItem(Assets.PAWN_B).SetPosition(files[i], 0, 2.5).AddAttribute("color", "black"));
+                makeMovable(addItem(whiteBack[i]).SetPosition(files[i], 0, -2.8).SetScale(PIECE_SCALE).AddAttribute("color", "white"));
+                makeMovable(addItem(Assets.PAWN_W).SetPosition(files[i], 0, -2.0).SetScale(PIECE_SCALE).AddAttribute("color", "white"));
+                makeMovable(addItem(blackBack[i]).SetPosition(files[i], 0, 2.8).SetScale(PIECE_SCALE).AddAttribute("color", "black"));
+                makeMovable(addItem(Assets.PAWN_B).SetPosition(files[i], 0, 2.0).SetScale(PIECE_SCALE).AddAttribute("color", "black"));
             }
 
             return Task.CompletedTask;

@@ -81,3 +81,20 @@ html, body {
   color: var(--mg-muted);
 }
 .mg-badge.play { background: #d1fae5; color: #047857; }
+
+/* in-game move hint banner ---------------------------------------------- */
+.mg-move-hint {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .85);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
+}
