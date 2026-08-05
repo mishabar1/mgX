@@ -300,9 +300,10 @@ namespace MG.Server.GameFlows
             // Drop any previously-selected piece and clear its markers.
             ClearSelection();
 
-            // Remember + lift the newly selected piece so the user sees it's picked up.
+            // Remember the selection and mark the item so the client highlights it IN PLACE
+            // (no lift, no move — the piece stays put and just glows).
             GameData.Attributes["selectedItem"] = data.itemId;
-            if (data.Item != null) data.Item.Position.Y = LiftHeight;
+            if (data.Item != null) data.Item.Attributes["selected"] = "1";
 
             // Let the game show where the piece can go (Chess: yellow square markers).
             OnPieceSelected(data.Item);
@@ -338,13 +339,13 @@ namespace MG.Server.GameFlows
             await Task.CompletedTask;
         }
 
-        private void ClearSelection()
+        protected void ClearSelection()
         {
             if (GameData.Attributes.TryGetValue("selectedItem", out var prevId)
                 && !string.IsNullOrEmpty(prevId))
             {
                 var prev = GameData.FindItem(prevId);
-                if (prev != null) prev.Position.Y = 0;
+                if (prev != null) prev.Attributes.Remove("selected"); // un-highlight
             }
             GameData.Attributes.Remove("selectedItem");
             OnMarkersClear();

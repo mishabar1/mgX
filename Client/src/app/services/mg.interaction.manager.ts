@@ -353,30 +353,32 @@ export class InteractionManager {
     });
   };
 
-  onMouseClick = (mouseEvent: MouseEvent) => {
-    this.update();
-
-    const event = new InteractiveEvent('click', mouseEvent);
-
+  // Dispatch an action event (click / down) ONLY to the front-most intersected
+  // object. Without this, a single click that passes through a piece and continues
+  // into the board (or a marker) behind it would fire on BOTH — e.g. SelectPiece on
+  // the piece AND MoveHere on the board — so the piece would select and immediately
+  // move/deselect ("jump"). Hover/up events still fan out to all objects (below).
+  dispatchToClosest = (event: InteractiveEvent) => {
+    let closest: any = null;
     this.interactiveObjects.forEach((object) => {
-      if (object.intersected) {
-        this.dispatch(object, event);
+      if (object.intersected && (closest === null || object.distance < closest.distance)) {
+        closest = object;
       }
     });
+    if (closest) {
+      this.dispatch(closest, event);
+    }
+  };
+
+  onMouseClick = (mouseEvent: MouseEvent) => {
+    this.update();
+    this.dispatchToClosest(new InteractiveEvent('click', mouseEvent));
   };
 
   onMouseDown = (mouseEvent: MouseEvent) => {
     this.mapPositionToPoint(this.mouse, mouseEvent.clientX, mouseEvent.clientY);
-
     this.update();
-
-    const event = new InteractiveEvent('mousedown', mouseEvent);
-
-    this.interactiveObjects.forEach((object) => {
-      if (object.intersected) {
-        this.dispatch(object, event);
-      }
-    });
+    this.dispatchToClosest(new InteractiveEvent('mousedown', mouseEvent));
   };
 
   onPointerDown = (pointerEvent: PointerEvent) => {
@@ -385,16 +387,8 @@ export class InteractionManager {
       pointerEvent.clientX,
       pointerEvent.clientY
     );
-
     this.update();
-
-    const event = new InteractiveEvent('pointerdown', pointerEvent);
-
-    this.interactiveObjects.forEach((object) => {
-      if (object.intersected) {
-        this.dispatch(object, event);
-      }
-    });
+    this.dispatchToClosest(new InteractiveEvent('pointerdown', pointerEvent));
   };
 
   onTouchStart = (touchEvent: TouchEvent) => {
@@ -407,17 +401,10 @@ export class InteractionManager {
     }
 
     this.update();
-
-    const event = new InteractiveEvent(
+    this.dispatchToClosest(new InteractiveEvent(
       this.treatTouchEventsAsMouseEvents ? 'mousedown' : 'touchstart',
       touchEvent
-    );
-
-    this.interactiveObjects.forEach((object) => {
-      if (object.intersected) {
-        this.dispatch(object, event);
-      }
-    });
+    ));
   };
 
   onMouseUp = (mouseEvent: MouseEvent) => {

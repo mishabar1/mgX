@@ -8,6 +8,7 @@ export class PlayerData {
   name?: string;
   type!: string;
   user?: UserData;
+  attributes?: any;
 
   avatar!: LocationData;
   camera!: LocationData;

@@ -91,12 +91,18 @@ var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get
     ?? new[] { "http://localhost:4200" };
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy(name: "MGX",
-        policy => policy
-            .WithOrigins(allowedOrigins)
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials());
+    options.AddPolicy(name: "MGX", policy =>
+    {
+        if (builder.Environment.IsDevelopment())
+        {
+            // Dev: allow any local origin so `ng serve` works on whatever port Vite picks.
+            policy.SetIsOriginAllowed(_ => true).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+        }
+        else
+        {
+            policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+        }
+    });
 });
 
 builder.Services.AddControllers().AddJsonOptions(options =>

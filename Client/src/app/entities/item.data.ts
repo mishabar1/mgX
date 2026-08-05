@@ -19,6 +19,7 @@ export class ItemData {
   visible! : any;
   clickActions! : any;
   hoverActions! : any;
+  attributes? : any;
 
   mesh?: THREE.Object3D;
   markForDelete!:boolean;

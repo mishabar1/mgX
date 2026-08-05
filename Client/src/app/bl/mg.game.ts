@@ -357,6 +357,10 @@ export class MgGame{
     old_item.clickActions = new_item.clickActions;
     old_item.visible = new_item.visible;
     old_item.hoverActions = new_item.hoverActions;
+    old_item.attributes = new_item.attributes;
+
+    // colour the selected piece / move-target markers from their attributes
+    this.refreshItemHighlight(old_item);
 
     // update position/scale/rotation/actions....
     this.updateItemPosition(old_item, V3.FromJson(new_item.position));
@@ -496,6 +500,9 @@ export class MgGame{
     // visibility
     this.handleItemVisibility(itemData);
 
+    // colour newly-created items (e.g. yellow move markers) from their attributes
+    this.refreshItemHighlight(itemData);
+
     this.allItems[itemData.id] = itemData;
   }
 
@@ -579,6 +586,44 @@ export class MgGame{
     (itemData.mesh as any).addEventListener('mouseout', this.onMeshMouseOutFunc);
 
     this.mgThree.interactionManager.add(itemData.mesh!);
+  }
+
+  // Tint every material in an item's mesh to `hex` (sets base colour + emissive so it's
+  // clearly visible regardless of the model's material); null reverts to the original.
+  applyEmissive(item: ItemData, hex: number | null) {
+    if (!item.mesh) return;
+    item.mesh.traverse((o: any) => {
+      if (o.isMesh && o.material) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach((m: any) => {
+          if (!m) return;
+          if (hex != null) {
+            if (!o.userData.hl) {
+              o.userData.hl = {
+                color: m.color ? m.color.clone() : null,
+                emissive: m.emissive ? m.emissive.clone() : null
+              };
+            }
+            if (m.color) m.color.setHex(hex);
+            if (m.emissive) m.emissive.setHex(hex);
+            m.needsUpdate = true;
+          } else if (o.userData.hl) {
+            if (m.color && o.userData.hl.color) m.color.copy(o.userData.hl.color);
+            if (m.emissive && o.userData.hl.emissive) m.emissive.copy(o.userData.hl.emissive);
+            o.userData.hl = null;
+            m.needsUpdate = true;
+          }
+        });
+      }
+    });
+  }
+
+  // Colour an item from its attributes: selected piece = bright green, move-target = bright yellow.
+  refreshItemHighlight(item: ItemData) {
+    const a = item.attributes || {};
+    if (a['selected'] == '1') this.applyEmissive(item, 0x33ff44);
+    else if (a['moveMarker']) this.applyEmissive(item, 0xffe000);
+    else this.applyEmissive(item, null);
   }
 
   removeAction(itemData: ItemData) {

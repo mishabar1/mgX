@@ -1,6 +1,9 @@
 /* You can add global styles to this file, and also import other style files */
 @import "primeicons/primeicons.css";
 
+/* Hide PrimeNG's invalid-license banner (injected as #p-license-host on <body>) */
+#p-license-host { display: none !important; }
+
 :root {
   --mg-accent: #10b981;
   --mg-accent-2: #0ea5e9;

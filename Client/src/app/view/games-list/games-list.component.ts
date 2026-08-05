@@ -1,4 +1,4 @@
-import {AfterViewInit, Component, OnChanges, OnDestroy, OnInit, SimpleChanges, ChangeDetectionStrategy} from '@angular/core';
+import {AfterViewInit, Component, OnChanges, OnDestroy, OnInit, SimpleChanges, ChangeDetectionStrategy, NgZone} from '@angular/core';
 import {SignalrService} from '../../services/SignalrService';
 import {DALService} from '../../dal/dal.service';
 import {GameData} from '../../entities/game.data';
@@ -21,6 +21,7 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
   constructor(public signalRService: SignalrService,
               private router: Router,
               private generalService: GeneralService,
+              private zone: NgZone,
               private dalService: DALService) {
   }
 
@@ -28,14 +29,17 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
     this.user = this.generalService.User!;
     this.updateGamesList();
 
+    // SignalR callbacks fire OUTSIDE Angular's zone, so re-run the refresh inside
+    // the zone — otherwise this.games updates but change detection never runs and
+    // the list only repaints on the next in-app click (e.g. Refresh).
     this.signalRService.hubConnection.on('GamesUpdated', data => {
       console.log('GamesUpdated', data);
-      this.updateGamesList();
+      this.zone.run(() => this.updateGamesList());
     });
 
     this.signalRService.hubConnection.on('GameDeleted', data => {
       console.log('GameDeleted', data);
-      this.updateGamesList();
+      this.zone.run(() => this.updateGamesList());
     });
 
 

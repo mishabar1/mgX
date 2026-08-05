@@ -15,7 +15,12 @@
     <div class="mg-section">Players</div>
     @for (player of gameData.players; track player) {
       <div class="mg-game-card">
-        <div class="mg-game-name">{{player.type}}</div>
+        <div class="mg-game-name">
+          {{ player.attributes?.['type'] || 'Seat' }}
+          <span style="color: var(--mg-muted); font-weight: 400; margin-left: 8px;">
+            {{ player.user?.name || (player.type === 'AI' ? 'AI' : 'open') }}
+          </span>
+        </div>
         <div class="mg-spacer"></div>
         <p-button (onClick)="join_game(player)" severity="success" label="Join" icon="pi pi-user"></p-button>
         <p-button (onClick)="set_ai(player)" severity="warn" label="AI"></p-button>
