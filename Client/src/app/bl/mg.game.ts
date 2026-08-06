@@ -24,12 +24,31 @@ export class MgGame{
   playerData!: PlayerData;
   allItems: { [key: string]: ItemData } = {};
 
-  // red bounding-box helpers around items — hidden unless DEBUG is toggled on
+  // red bounding-box helpers + the green/cyan player table & hand boxes —
+  // all hidden unless DEBUG is toggled on.
   showDebugBoxes = false;
   boxHelpers: THREE.Object3D[] = [];
+  debugPlanes: THREE.Mesh[] = []; // player table (green) + hand (cyan) anchors
   setDebugBoxes(on: boolean) {
     this.showDebugBoxes = on;
     this.boxHelpers.forEach(h => h.visible = on);
+    // Toggle the coloured boxes' visibility via opacity so any child items
+    // (e.g. cards on a player's table) keep rendering when DEBUG is off.
+    this.debugPlanes.forEach(m => {
+      const mat = m.material as THREE.MeshBasicMaterial;
+      mat.transparent = true;
+      mat.opacity = on ? 1 : 0;
+      mat.needsUpdate = true;
+    });
+  }
+
+  // Player avatar heads (suzanne). Optional — toggled from the game setup page
+  // (persisted in localStorage) and read when the game loads.
+  showHeads = true;
+  headMeshes: THREE.Object3D[] = [];
+  setHeadsVisible(on: boolean) {
+    this.showHeads = on;
+    this.headMeshes.forEach(h => h.visible = on);
   }
 
   getPlayerByUserId(userId: string): PlayerData | null | undefined {
@@ -40,6 +59,9 @@ export class MgGame{
     this.mgThree=mgThree;
 
     this.playerData = this.getPlayerByUserId(user.id)!;
+
+    // Heads-visibility preference set on the game setup page (default: shown).
+    this.showHeads = localStorage.getItem('mg.showHeads') !== 'false';
 
     console.log("loadGame");
     // console.log(gameData, dayjs().startOf('month').add(1, 'day').set('year', 2018).format('YYYY-MM-DD HH:mm:ss'));
@@ -88,25 +110,29 @@ export class MgGame{
           // mesh.position.set(playerData.avatar.position.x,playerData.avatar.position.y,playerData.avatar.position.z);
           // this.mgThree.camera.add(mesh);
         }else{
+          head.visible = this.showHeads;   // optional per the setup-page setting
+          this.headMeshes.push(head);
           playerData.avatar.mesh!.add(head)
         }
 
       });
 
-      //table
-      const playerTable = new Mesh(new BoxGeometry(0.1, 0.01, 0.1), new MeshBasicMaterial({color: 0x00ff00}));
+      //table (green) — a debug anchor for the player's table items
+      const playerTable = new Mesh(new BoxGeometry(0.1, 0.01, 0.1), new MeshBasicMaterial({color: 0x00ff00, transparent: true, opacity: this.showDebugBoxes ? 1 : 0}));
       playerTable.name = "PLAYER TABLE";
       playerData.avatar.mesh?.add(playerTable);
       playerTable.position.set(0,-1.5,1.5);
+      this.debugPlanes.push(playerTable);
 
       this.createItem(playerData.table,playerTable);
 
-      //hand
-      const playerHand = new Mesh(new BoxGeometry(0.1, 0.01, 0.1), new MeshBasicMaterial({color: 0x00ffff}));
+      //hand (cyan) — a debug anchor for the player's hand items
+      const playerHand = new Mesh(new BoxGeometry(0.1, 0.01, 0.1), new MeshBasicMaterial({color: 0x00ffff, transparent: true, opacity: this.showDebugBoxes ? 1 : 0}));
       playerHand.name = "PLAYER HAND";
       playerData.avatar.mesh?.add(playerHand);
       playerHand.rotation.x = -Math.PI / 2;
       playerHand.position.set(0,0,1.5);
+      this.debugPlanes.push(playerHand);
 
       this.createItem(playerData.hand, playerHand);
 
@@ -119,6 +145,13 @@ export class MgGame{
     //console.log("createItem",itemData,parentMesh);
 
     if (itemData.asset) {
+      // Guard: skip items whose asset key isn't in the dictionary. Without this, one
+      // unresolved asset threw and aborted loadGame — blanking the ENTIRE scene.
+      if (!this.gameData.assets[itemData.asset]) {
+        console.warn('Skipping item with unknown asset key:', itemData.asset, itemData.name);
+        this.allItems[itemData.id] = itemData;
+        return;
+      }
       const frontURL = '\\assets\\games\\' + this.gameData.assets[itemData.asset].frontURL;
       const backURL = '\\assets\\games\\' + (this.gameData.assets[itemData.asset].backURL || this.gameData.assets[itemData.asset].frontURL);
       const asset = this.gameData.assets[itemData.asset];
@@ -272,6 +305,7 @@ export class MgGame{
             bevelOffset: 0,
             bevelSegments: 5,
           });
+          geometry.center(); // center the text on the item's position
           var textMaterial = new THREE.MeshPhongMaterial(
             {color: 0xff0000, specular: 0xffffff}
           );
@@ -490,6 +524,15 @@ export class MgGame{
     mesh.userData['ItemData'] = itemData;
     itemData.mesh = mesh
 
+    // Cast & receive shadows so pieces separate visually (contact + inter-piece shadows).
+    mesh.traverse((o: any) => {
+      if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+    });
+
+    // Bake in an optional base colour tint (e.g. warm ivory for white chess pieces)
+    // BEFORE any highlight runs, so highlight revert returns to the tinted colour.
+    this.applyBaseTint(itemData);
+
     forEach(itemData.items, (itemData: ItemData) => {
       this.createItem(itemData, mesh);
     });
@@ -618,11 +661,28 @@ export class MgGame{
     });
   }
 
+  // Permanently recolour an item's model to its `tint` attribute (a hex string like
+  // "0xE3D5B8"). Sets the base colour only (no glow); applied once at creation.
+  applyBaseTint(item: ItemData) {
+    const a = item.attributes || {};
+    if (!a['tint'] || !item.mesh) return;
+    const hex = parseInt(a['tint']);
+    if (isNaN(hex)) return;
+    item.mesh.traverse((o: any) => {
+      if (o.isMesh && o.material) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach((m: any) => {
+          if (m && m.color) { m.color.setHex(hex); m.needsUpdate = true; }
+        });
+      }
+    });
+  }
+
   // Colour an item from its attributes: selected piece = bright green, move-target = bright yellow.
   refreshItemHighlight(item: ItemData) {
     const a = item.attributes || {};
     if (a['selected'] == '1') this.applyEmissive(item, 0x33ff44);
-    else if (a['moveMarker']) this.applyEmissive(item, 0xffe000);
+    else if (a['moveMarker'] || a['captureTarget'] == '1') this.applyEmissive(item, 0xffe000);
     else this.applyEmissive(item, null);
   }
 

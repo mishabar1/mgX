@@ -31,11 +31,19 @@ namespace MG.Server.GameFlows
 
             // yellow move-target marker (reused from tic-tac-toe), shown on a piece's legal squares
             internal static AssetData MARKER = new ObjectAssetData("ticktacktoe/hover.gltf") { Scale = new V3(0.6) };
+
+            // 3D text used for the "whose turn" labels around the board edges.
+            internal static AssetData TURN_TEXT = new Text3dAssetData("turn");
         }
 
         // Square centers along x and z, measured from the live board (8 squares over ~[-3.63..3.64]).
         private static readonly double[] COORDS = { -3.18, -2.27, -1.36, -0.45, 0.45, 1.36, 2.27, 3.18 };
         private const double PIECE_SCALE = 0.85;
+
+        // Piece tints (the raw models are harsh pure-white / purple). Charcoal (not pure
+        // black) keeps the black pieces' shape readable under lighting.
+        private const string WHITE_TINT = "0xE3D5B8";
+        private const string BLACK_TINT = "0x2B2B2B";
 
         public ChessGameFlow(GameData gameData) : base(gameData)
         {
@@ -50,6 +58,7 @@ namespace MG.Server.GameFlows
             addAsset(Assets.KING_B); addAsset(Assets.QUEEN_B); addAsset(Assets.ROOK_B);
             addAsset(Assets.BISHOP_B); addAsset(Assets.KNIGHT_B); addAsset(Assets.PAWN_B);
             addAsset(Assets.MARKER);
+            addAsset(Assets.TURN_TEXT);
 
             GameData.Observer.Position.Set(0, 10, 0);
 
@@ -85,13 +94,46 @@ namespace MG.Server.GameFlows
 
             for (int i = 0; i < 8; i++)
             {
-                makeChessMovable(addItem(whiteBack[i]).SetPosition(COORDS[i], 0, COORDS[0]).SetScale(PIECE_SCALE).AddAttribute("color", "white").AddAttribute("piece", backTypes[i]));
-                makeChessMovable(addItem(Assets.PAWN_W).SetPosition(COORDS[i], 0, COORDS[1]).SetScale(PIECE_SCALE).AddAttribute("color", "white").AddAttribute("piece", "pawn"));
-                makeChessMovable(addItem(blackBack[i]).SetPosition(COORDS[i], 0, COORDS[7]).SetScale(PIECE_SCALE).AddAttribute("color", "black").AddAttribute("piece", backTypes[i]));
-                makeChessMovable(addItem(Assets.PAWN_B).SetPosition(COORDS[i], 0, COORDS[6]).SetScale(PIECE_SCALE).AddAttribute("color", "black").AddAttribute("piece", "pawn"));
+                makeChessMovable(addItem(whiteBack[i]).SetPosition(COORDS[i], 0, COORDS[0]).SetScale(PIECE_SCALE).AddAttribute("color", "white").AddAttribute("piece", backTypes[i]).AddAttribute("tint", WHITE_TINT));
+                makeChessMovable(addItem(Assets.PAWN_W).SetPosition(COORDS[i], 0, COORDS[1]).SetScale(PIECE_SCALE).AddAttribute("color", "white").AddAttribute("piece", "pawn").AddAttribute("tint", WHITE_TINT));
+                makeChessMovable(addItem(blackBack[i]).SetPosition(COORDS[i], 0, COORDS[7]).SetScale(PIECE_SCALE).AddAttribute("color", "black").AddAttribute("piece", backTypes[i]).AddAttribute("tint", BLACK_TINT));
+                makeChessMovable(addItem(Assets.PAWN_B).SetPosition(COORDS[i], 0, COORDS[6]).SetScale(PIECE_SCALE).AddAttribute("color", "black").AddAttribute("piece", "pawn").AddAttribute("tint", BLACK_TINT));
             }
 
+            UpdateTurnText();
             return Task.CompletedTask;
+        }
+
+        // Place a flat "whose turn" label on each of the board's 4 edges (readable from
+        // any side, low profile so it doesn't block the pieces). Rebuilt each move.
+        private void UpdateTurnText()
+        {
+            foreach (var t in getItemsByAttribute("turnText")) removeItem(t.Id);
+
+            string turn = GameData.Attributes.TryGetValue("turn", out var tv) ? tv : "white";
+            string label = (turn == "white" ? "WHITE" : "BLACK") + " TO MOVE";
+            string tint = turn == "white" ? "0xF2F2F2" : "0x151515"; // colour follows the side to move
+
+            // Text is laid FLAT with a -90° X tilt; the in-plane facing must then be a
+            // ROLL about Z (using Y here tilted them upright — the "standing" labels).
+            // (x, z, rollZ°) for the south, north, west and east edges.
+            (double x, double z, double roll)[] sides =
+            {
+                (0, -3.9, 180),  // south (white's side)
+                (0,  3.9, 0),    // north (black's side)
+                (-3.9, 0, -90),  // west
+                ( 3.9, 0,  90),  // east
+            };
+            foreach (var s in sides)
+            {
+                addTextItem(Assets.TURN_TEXT)
+                    .SetText(label)
+                    .SetPosition(s.x, 0.12, s.z)   // just above the board surface
+                    .SetScale(0.5)
+                    .SetRotation(-90, 0, s.roll)   // lay flat (X), then face its edge (Z)
+                    .AddAttribute("turnText", "1")
+                    .AddAttribute("tint", tint);
+            }
         }
 
         protected override Task EndGame() => Task.CompletedTask;
@@ -118,6 +160,18 @@ namespace MG.Server.GameFlows
 
             foreach (var m in moves)
             {
+                var occ = items[m.ToC, m.ToR];
+
+                // Capturing an enemy piece → highlight THAT piece yellow (a flat marker
+                // would just hide under the tall model). Clicking it performs the
+                // capture via ChessSelect.
+                if (m.Capture && !m.EnPassant && occ != null)
+                {
+                    occ.Attributes["captureTarget"] = "1";
+                    continue;
+                }
+
+                // Otherwise (empty square, or en passant onto an empty square) → yellow marker.
                 var marker = addItem(Assets.MARKER)
                     .SetPosition(ToCoord(m.ToC), 0.02, ToCoord(m.ToR))
                     .AddAttribute("moveMarker", "1")
@@ -135,6 +189,8 @@ namespace MG.Server.GameFlows
         {
             foreach (var m in getItemsByAttribute("moveMarker"))
                 removeItem(m.Id);
+            foreach (var p in getItemsByAttribute("captureTarget"))
+                p.Attributes.Remove("captureTarget"); // un-highlight capturable enemies
         }
 
         // ------------------------------------------------------------------
@@ -149,6 +205,17 @@ namespace MG.Server.GameFlows
         public async Task ChessSelect(ExecuteActionData data)
         {
             var clicked = data.Item;
+
+            // Clicking the already-selected piece deselects it (toggle off).
+            if (clicked != null
+                && GameData.Attributes.TryGetValue("selectedItem", out var curSel)
+                && curSel == clicked.Id)
+            {
+                ClearSelection();
+                await Task.CompletedTask;
+                return;
+            }
+
             if (clicked != null
                 && GameData.Attributes.TryGetValue("selectedItem", out var selId)
                 && !string.IsNullOrEmpty(selId) && selId != clicked.Id)
@@ -212,8 +279,13 @@ namespace MG.Server.GameFlows
             var (_, items) = BuildBoard();
             int tc = m.ToC, tr = m.ToR;
 
+            // Capture the move details up front (for the move-history log below).
+            string moverColor = piece.GetStringAttribute("color");
+            string moverPiece = piece.HaveAttribute("piece") ? piece.GetStringAttribute("piece") : "piece";
+
             // Normal capture: remove any enemy piece on the destination.
             var occ = items[tc, tr];
+            bool captured = (occ != null && occ.Id != piece.Id) || m.EnPassant;
             if (occ != null && occ.Id != piece.Id) removeItem(occ.Id);
 
             // En passant: the captured pawn sits beside the destination, on the from-row.
@@ -243,12 +315,14 @@ namespace MG.Server.GameFlows
             {
                 string color = piece.GetStringAttribute("color");
                 removeItem(piece.Id);
-                makeChessMovable(addItem(color == "white" ? Assets.QUEEN_W : Assets.QUEEN_B)
+                var promoted = addItem(color == "white" ? Assets.QUEEN_W : Assets.QUEEN_B)
                     .SetPosition(ToCoord(tc), 0, ToCoord(tr))
                     .SetScale(PIECE_SCALE)
                     .AddAttribute("color", color)
                     .AddAttribute("piece", "queen")
-                    .AddAttribute("moved", "1"));
+                    .AddAttribute("moved", "1");
+                promoted.AddAttribute("tint", color == "white" ? WHITE_TINT : BLACK_TINT);
+                makeChessMovable(promoted);
             }
 
             // Set / clear the en-passant target square for the opponent's next move.
@@ -260,8 +334,18 @@ namespace MG.Server.GameFlows
             string turn = GameData.Attributes.TryGetValue("turn", out var tv) ? tv : "white";
             GameData.Attributes["turn"] = turn == "white" ? "black" : "white";
 
+            // Move-history log, e.g. "CHESS: white knight g1->f3  |  black to move".
+            string tag = m.Castle == 'K' ? " O-O" : m.Castle == 'Q' ? " O-O-O" : "";
+            if (captured) tag += m.EnPassant ? " x(e.p.)" : " x";
+            if (m.Promote) tag += "=Queen";
+            Console.WriteLine($"CHESS: {moverColor} {moverPiece} {Square(fromC, fromR)}->{Square(tc, tr)}{tag}  |  {GameData.Attributes["turn"]} to move");
+
+            UpdateTurnText();  // refresh the board-edge "whose turn" labels
             ClearSelection(); // un-highlight + remove markers
         }
+
+        // Board coordinate → algebraic square name, e.g. (4,0) → "e1".
+        private static string Square(int c, int r) => $"{(char)('a' + c)}{r + 1}";
 
         // ------------------------------------------------------------------
         // AI: on its turn, pick a random piece that has at least one legal move,

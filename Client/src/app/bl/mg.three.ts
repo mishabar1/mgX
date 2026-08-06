@@ -61,6 +61,9 @@ export class MgThree{
 
   initThree(nativeElement: any,onFinish:any) {
     this.rendererContainerElement = nativeElement;
+    // Cache fetched assets (fonts, models) so re-created items — e.g. the chess
+    // turn-indicator text rebuilt each move — don't re-download every time.
+    THREE.Cache.enabled = true;
     // Initialize scene
     this.scene = new THREE.Scene();
     // this.scene.background = new THREE.Color(0xffffff)
@@ -88,6 +91,10 @@ export class MgThree{
     // Initialize renderer
     this.renderer = new THREE.WebGLRenderer({antialias: true});
     this.renderer.xr.enabled = true;
+    // Soft shadows give the pieces contact/inter-piece shadows so they read as
+    // separate 3D forms instead of one flat blob.
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setSize(this.rendererContainerElement.clientWidth, this.rendererContainerElement.clientHeight);
     this.rendererContainerElement.appendChild(this.renderer.domElement);
 
@@ -156,11 +163,38 @@ export class MgThree{
     });
 
 
-    // Add ambient light
-    // const ambientLight = new THREE.AmbientLight(0xffffff,2);
-    // this.scene.add(ambientLight);
+    // ---- Lighting -----------------------------------------------------
+    // Keep the image-based environment only as a SUBTLE fill — on its own it lit
+    // everything evenly, which made the white pieces read as one flat white block.
     const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0).texture;
+    this.scene.environmentIntensity = 0.35;
+
+    // Gentle sky/ground ambient so shadowed sides aren't pure black.
+    const hemiLight = new THREE.HemisphereLight(0xdfeaff, 0x2b2b33, 0.5);
+    hemiLight.position.set(0, 20, 0);
+    this.scene.add(hemiLight);
+
+    // Key light: the main directional source. This is what gives each piece a
+    // light-to-dark shading gradient (and casts the shadows) so its shape reads.
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    keyLight.position.set(6, 12, 4);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.camera.near = 0.5;
+    keyLight.shadow.camera.far = 60;
+    keyLight.shadow.camera.left = -8;
+    keyLight.shadow.camera.right = 8;
+    keyLight.shadow.camera.top = 8;
+    keyLight.shadow.camera.bottom = -8;
+    keyLight.shadow.bias = -0.0004;
+    keyLight.shadow.normalBias = 0.02;
+    this.scene.add(keyLight);
+
+    // Soft fill from the opposite side to keep the shadowed faces readable.
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    fillLight.position.set(-6, 6, -5);
+    this.scene.add(fillLight);
 
     // this.labelRenderer = new CSS2DRenderer();
     // this.labelRenderer.setSize( window.innerWidth, window.innerHeight );

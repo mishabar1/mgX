@@ -10,6 +10,11 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Quiet the noisy EF Core SQL logging (every SELECT/UPDATE was printed at Info).
+// Only surface EF warnings/errors; the rest of the app keeps its default levels.
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
+
 // ---------------------------------------------------------------------------
 // Persistence (C4): EF Core + SQLite. Registered as a factory so the singleton
 // DataRepository can create short-lived contexts safely.

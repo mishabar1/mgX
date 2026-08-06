@@ -1,3 +1,4 @@
+<p-confirmdialog></p-confirmdialog>
 <div class="mg-page">
   <div class="mg-header">
     <p-button (onClick)="backClick()" icon="fa-solid fa-chevron-left" severity="secondary"></p-button>
@@ -7,13 +8,16 @@
   <div class="mg-section">Your games</div>
 
   @for (game of games; track game) {
-    <div class="mg-game-card">
+    <div class="mg-game-card" style="cursor:pointer;" (click)="openGame(game)" title="Open game">
       <div class="mg-game-name">{{game.name}}</div>
       <span class="mg-badge">{{game.gameType}}</span>
       <span class="mg-badge play">{{game.gameStatus}}</span>
       <div class="mg-spacer"></div>
-      <p-button (onClick)="setup(game)" severity="warn" label="Settings" icon="pi pi-cog"></p-button>
-      <p-button (onClick)="delete(game)" severity="danger" label="Delete" icon="pi pi-trash"></p-button>
+      <!-- buttons stop the click from bubbling to the card so they don't open the game -->
+      <div class="mg-row-center" style="gap:8px;" (click)="$event.stopPropagation()">
+        <p-button (onClick)="setup(game)" severity="warn" label="Settings" icon="pi pi-cog"></p-button>
+        <p-button (onClick)="delete(game)" severity="danger" label="Delete" icon="pi pi-trash"></p-button>
+      </div>
     </div>
   }
 

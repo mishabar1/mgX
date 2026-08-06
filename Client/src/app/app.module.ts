@@ -17,6 +17,8 @@ import { EditorComponent } from './view/editor/editor.component';
 import { FontAwesomeModule } from '@fortawesome/angular-fontawesome'
 import {TooltipModule} from "primeng/tooltip";
 import {InputNumberModule} from "primeng/inputnumber";
+import {ConfirmDialogModule} from 'primeng/confirmdialog';
+import {ConfirmationService} from 'primeng/api';
 import {DebugViewComponent} from "./comps/debug-view/debug-view.component";
 import { providePrimeNG } from 'primeng/config';
 import Aura from '@primeuix/themes/aura';
@@ -39,9 +41,11 @@ import Aura from '@primeuix/themes/aura';
         NgxJsonViewerModule,
         TooltipModule,
         FontAwesomeModule,
+        ConfirmDialogModule,
         InputNumberModule], providers: [
         { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
         provideHttpClient(withXhr(), withInterceptorsFromDi()),
-        providePrimeNG({ theme: { preset: Aura } })
+        providePrimeNG({ theme: { preset: Aura } }),
+        ConfirmationService
     ] })
 export class AppModule { }

@@ -24,6 +24,14 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
   gameData!: GameData;
   user!:UserData;
 
+  // Show/hide the player avatar heads in the 3D scene (persisted, read on game load).
+  get showHeads(): boolean { return localStorage.getItem('mg.showHeads') !== 'false'; }
+  set showHeads(v: boolean) { localStorage.setItem('mg.showHeads', v ? 'true' : 'false'); }
+
+  // The game can only be opened once it has actually started (status PLAY).
+  get canOpen(): boolean { return String(this.gameData?.gameStatus) === 'PLAY'; }
+  get isStarted(): boolean { return String(this.gameData?.gameStatus) === 'PLAY'; }
+
   constructor(public signalRService: SignalrService,
               private router: Router,
               private unsubscriberService: UnsubscriberService,
@@ -107,7 +115,23 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
 
 
   start() {
-    this.dalService.startGame(this.gameId!).subscribe();
+    if (this.isStarted) return; // already running — use Restart instead
+    const status = String(this.gameData?.gameStatus);
+    if (status === 'SETUP') {
+      this.dalService.startGame(this.gameId!).subscribe();
+    } else {
+      // Never set up → run Setup first, then Start.
+      this.dalService.setupGame(this.gameId!, this.user.id).subscribe(() => {
+        this.dalService.startGame(this.gameId!).subscribe();
+      });
+    }
+  }
+
+  // Restart a running game: reset the board (Setup) then Start again.
+  restart() {
+    this.dalService.setupGame(this.gameId!, this.user.id).subscribe(() => {
+      this.dalService.startGame(this.gameId!).subscribe();
+    });
   }
 
 
@@ -127,6 +151,7 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
     this.dalService.setupGame(this.gameId!, this.user.id).subscribe()
   }
   open() {
+    if (!this.canOpen) return; // only openable once started
     this.router.navigate([RouteNames.GamePlay,this.gameId]);
   }
 

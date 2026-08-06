@@ -6,6 +6,7 @@ import {RouteNames} from '../../app-routing.module';
 import {Router} from '@angular/router';
 import {UserData} from '../../entities/user.data';
 import {GeneralService} from '../../bl/general.service';
+import {ConfirmationService} from 'primeng/api';
 
 @Component({
     selector: 'app-games-list',
@@ -22,6 +23,7 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
               private router: Router,
               private generalService: GeneralService,
               private zone: NgZone,
+              private confirmationService: ConfirmationService,
               private dalService: DALService) {
   }
 
@@ -68,10 +70,28 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
     this.router.navigate([RouteNames.GameSetup,game.id]);
   }
 
+  // Click a game → jump to the play view if it's running, else to its settings.
+  openGame(game: GameData) {
+    if (String(game.gameStatus) === 'PLAY') {
+      this.router.navigate([RouteNames.GamePlay, game.id]);
+    } else {
+      this.router.navigate([RouteNames.GameSetup, game.id]);
+    }
+  }
+
 
 
   delete(game: GameData) {
-    this.dalService.deleteGame(game.id).subscribe();
+    this.confirmationService.confirm({
+      header: 'Delete game',
+      message: `Delete "${game.name}"? This can't be undone.`,
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Delete',
+      rejectLabel: 'Cancel',
+      acceptButtonStyleClass: 'p-button-danger',
+      rejectButtonStyleClass: 'p-button-secondary p-button-outlined',
+      accept: () => this.dalService.deleteGame(game.id).subscribe()
+    });
   }
 
   backClick() {

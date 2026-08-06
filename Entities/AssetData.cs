@@ -27,6 +27,10 @@ namespace MG.Server.Entities
         }
     }
 
+    // NOTE: asset keys (Name) are DETERMINISTIC (derived from the asset's content),
+    // not the random BaseData name. Assets are static/process-global, so a random
+    // name is regenerated on every restart — which left persisted games referencing
+    // asset keys that no longer existed (blank scene / "undefined frontURL" crash).
     public class TokenAssetData : AssetData
     {
         public TokenAssetData() { }
@@ -34,6 +38,7 @@ namespace MG.Server.Entities
         {
             FrontURL = frontURL;
             BackURL = backUrl;
+            Name = "token:" + frontURL + "|" + backUrl;
         }
     }
     public class ObjectAssetData : AssetData
@@ -42,6 +47,7 @@ namespace MG.Server.Entities
         public ObjectAssetData( string url) : base(  AssetTypeEnum.OBJECT)
         {
             FrontURL = url;
+            Name = "object:" + url;
         }
     }
     public class SoundAssetData : AssetData
@@ -50,6 +56,7 @@ namespace MG.Server.Entities
         public SoundAssetData( string url) : base( AssetTypeEnum.SOUND)
         {
             FrontURL = url;
+            Name = "sound:" + url;
         }
     }
     public class Text3dAssetData : AssetData
@@ -58,6 +65,7 @@ namespace MG.Server.Entities
         public Text3dAssetData( string text) : base( AssetTypeEnum.TEXT3D)
         {
             this.Text = text;
+            Name = "text3d:" + text;
         }
     }
     public class TextBlockAssetData : AssetData
@@ -66,6 +74,7 @@ namespace MG.Server.Entities
         public TextBlockAssetData( string text) : base(  AssetTypeEnum.TEXTBLOCK)
         {
             this.Text = text;
+            Name = "textblock:" + text;
         }
     }
 

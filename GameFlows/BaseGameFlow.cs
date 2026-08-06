@@ -210,7 +210,9 @@ namespace MG.Server.GameFlows
 
         internal AssetData addAsset(AssetData asset)
         {
-            this.GameData.Assets.Add(asset.Name, asset);
+            // Idempotent: deterministic keys mean re-adding the same asset is a no-op
+            // rather than a duplicate-key crash.
+            this.GameData.Assets[asset.Name] = asset;
             return asset;
         }
 
