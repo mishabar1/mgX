@@ -672,7 +672,18 @@ export class MgGame{
       if (o.isMesh && o.material) {
         const mats = Array.isArray(o.material) ? o.material : [o.material];
         mats.forEach((m: any) => {
-          if (m && m.color) { m.color.setHex(hex); m.needsUpdate = true; }
+          if (!m) return;
+          if (m.color) m.color.setHex(hex);
+          // Normalize to a consistent MATTE finish. Some models (e.g. the black pawn)
+          // ship glossy/metallic, so once tinted dark their white specular highlights
+          // stand out as "strange glossy". Kill metalness and roughen the surface.
+          if ('metalness' in m) m.metalness = 0.0;
+          if ('roughness' in m) m.roughness = 0.9;
+          if (m.metalnessMap) m.metalnessMap = null;   // maps would override the scalars
+          if (m.roughnessMap) m.roughnessMap = null;
+          if ('shininess' in m) m.shininess = 0;       // (Phong materials)
+          if (m.specular) m.specular.setHex(0x000000);
+          m.needsUpdate = true;
         });
       }
     });
