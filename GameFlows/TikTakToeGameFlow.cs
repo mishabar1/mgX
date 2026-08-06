@@ -283,6 +283,40 @@ namespace MG.Server.GameFlows
             }
         }
 
+        private int[] WinningCombo(List<string> board, string a)
+        {
+            int[][] lines =
+            {
+                new[]{0,1,2}, new[]{3,4,5}, new[]{6,7,8}, // rows
+                new[]{0,3,6}, new[]{1,4,7}, new[]{2,5,8}, // cols
+                new[]{0,4,8}, new[]{2,4,6}                // diagonals
+            };
+            foreach (var L in lines)
+                if (board[L[0]] == a && board[L[1]] == a && board[L[2]] == a) return L;
+            return null;
+        }
+
+        // Cell centre for a board index (grid is x/z in {-1,0,1}; see StartGame layout).
+        private static (double x, double z) CellPos(int idx) => (idx % 3 - 1, 1 - idx / 3);
+
+        // Green bar over the winning three (reuses the hover disc, tinted green, stretched).
+        private void DrawWinLine(int[] combo)
+        {
+            var (x1, z1) = CellPos(combo[0]);
+            var (x2, z2) = CellPos(combo[2]);
+            double midx = (x1 + x2) / 2.0, midz = (z1 + z2) / 2.0;
+            double dxw = x2 - x1, dzw = z2 - z1;
+            double len = Math.Sqrt(dxw * dxw + dzw * dzw) + 0.6;
+            double angDeg = Math.Atan2(-dzw, dxw) * 180.0 / Math.PI;
+
+            addItem(Assets.HOVER)
+                .SetPosition(midx, 0.2, midz) // just above the marks
+                .SetScale(len, 1, 0.18)
+                .SetRotation(0, angDeg, 0)
+                .AddAttribute("winbar", "1")
+                .AddAttribute("tint", "0xE03131"); // red win line
+        }
+
         protected async override Task EndGame()
         {
             // TODO !!!
@@ -299,6 +333,9 @@ namespace MG.Server.GameFlows
                 string who = PlayerDisplayName(GameData.Winners[0]);
                 SetBoardText(t.ToUpper() + " WINS!", t == "x" ? "0x22C55E" : "0x2563EB"); // X green, O blue
                 GameData.Attributes["result"] = t.ToUpper() + " (" + who + ") wins!";
+
+                var combo = WinningCombo(getGameAsBoard(), t);
+                if (combo != null) DrawWinLine(combo);
             }
             else
             {

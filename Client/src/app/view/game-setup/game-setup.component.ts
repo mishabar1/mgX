@@ -117,13 +117,15 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
 
   start() {
     if (this.isStarted) return; // already running — use Restart instead
+    // Once started, jump straight into the game (same as clicking Open).
+    const go = () => this.router.navigate([RouteNames.GamePlay, this.gameId]);
     const status = String(this.gameData?.gameStatus);
     if (status === 'SETUP') {
-      this.dalService.startGame(this.gameId!).subscribe();
+      this.dalService.startGame(this.gameId!).subscribe(() => go());
     } else {
       // Never set up → run Setup first, then Start.
       this.dalService.setupGame(this.gameId!, this.user.id).subscribe(() => {
-        this.dalService.startGame(this.gameId!).subscribe();
+        this.dalService.startGame(this.gameId!).subscribe(() => go());
       });
     }
   }
