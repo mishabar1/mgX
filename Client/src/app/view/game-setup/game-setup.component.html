@@ -1,0 +1,56 @@
+@if (gameData) {
+  <div class="mg-page">
+    <div class="mg-header">
+      <p-button (onClick)="backClick()" icon="fa-solid fa-chevron-left" severity="secondary"></p-button>
+      <div class="mg-title">{{gameData.gameType}} · <span style="color:var(--mg-muted);font-weight:500;">{{gameData.name}}</span></div>
+      <span class="mg-badge play">{{gameData.gameStatus}}</span>
+    </div>
+
+    <div class="mg-row-center" style="gap: 10px;">
+      <p-button (onClick)="setup()" severity="secondary" label="Setup" icon="pi pi-cog"></p-button>
+      <p-button (onClick)="start()" severity="warn" label="Start" icon="pi pi-play" [disabled]="isStarted"></p-button>
+      @if (isStarted) {
+        <p-button (onClick)="restart()" severity="warn" label="Restart" icon="pi pi-refresh"></p-button>
+      }
+      <p-button (onClick)="open()" severity="success" label="Open" icon="pi pi-external-link" [disabled]="!canOpen"></p-button>
+    </div>
+
+    <div class="mg-section">Players</div>
+    @for (player of gameData.players; track player) {
+      <div class="mg-game-card">
+        <div class="mg-game-name">
+          {{ player.attributes?.['type'] || 'Seat' }}
+          @if (player.type === 'AI') {
+            <span style="color:#f59e0b; font-weight:600; margin-left:8px;">
+              <i class="pi pi-desktop" style="margin-right:6px;"></i>AI
+            </span>
+          } @else {
+            <span style="color: var(--mg-muted); font-weight: 400; margin-left: 8px;">
+              {{ player.user?.name || '… click Join to take this seat …' }}
+            </span>
+          }
+        </div>
+        <div class="mg-spacer"></div>
+        <p-button (onClick)="join_game(player)" severity="success" label="Join" icon="pi pi-user"></p-button>
+        <p-button (onClick)="set_ai(player)" severity="warn" label="AI"></p-button>
+        @if (player.type !== 'EMPTY_SEAT') {
+          <p-button (onClick)="leave(player)" severity="danger" label="Leave" icon="pi pi-sign-out"></p-button>
+        }
+      </div>
+    }
+
+    <div class="mg-section">Settings</div>
+    <div class="mg-game-card">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+        <input type="checkbox" [checked]="showHeads"
+               (change)="showHeads = $any($event.target).checked" />
+        <span class="mg-game-name">Show player heads (avatars)</span>
+      </label>
+    </div>
+
+    <div class="mg-section">Game data</div>
+    <div class="mg-game-card" style="display: block;">
+      <ngx-json-viewer [json]="gameData" [depth]="1"></ngx-json-viewer>
+    </div>
+  </div>
+}

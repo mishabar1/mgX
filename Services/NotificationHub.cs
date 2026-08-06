@@ -1,0 +1,58 @@
+﻿using MG.Server.BL;
+using MG.Server.Controllers;
+using MG.Server.Database;
+using MG.Server.Entities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
+using static System.Net.Mime.MediaTypeNames;
+
+namespace MG.Server.Services
+{
+    //public class NotificationModel
+    //{
+    //    public string Data { get; set; }
+    //    public string NotificationType { get; set; }
+    //    public NotificationModel(string t, string d)
+    //    {
+    //        Data = d;
+    //        NotificationType = t;
+    //    }
+    //}
+
+    public class NotificationHub : Hub
+    {
+        readonly GameBL _gameBL;
+        private readonly ILogger<NotificationHub> _logger;
+        public NotificationHub(GameBL gameBL, DataRepository dataRepository, ILogger<NotificationHub> logger) :base()
+        {
+            _gameBL = gameBL;
+            _logger = logger;
+        }
+
+        // (H1) async Task, not async void — exceptions are now observable instead of crashing the process.
+        public async Task SetConnectionIDUser(string? userId)
+        {
+            // Guard: the client can connect before a user id is available; without this,
+            // userId.ToString() threw a NullReferenceException that SignalR logged as a
+            // failed hub invocation.
+            if (string.IsNullOrEmpty(userId))
+            {
+                _logger.LogInformation("Hub connected (no user yet) conn={ConnectionId}", Context.ConnectionId);
+                return;
+            }
+            _logger.LogInformation("Hub user registered user={UserId} conn={ConnectionId}", userId, Context.ConnectionId);
+            await Groups.AddToGroupAsync(Context.ConnectionId, userId);
+        }
+
+
+        public async Task ExecuteAction(ExecuteActionData s)
+        {
+            _logger.LogInformation(
+                "ExecuteAction action={Action} item={ItemId} player={PlayerId} game={GameId}",
+                s?.actionId ?? "(none)", s?.itemId ?? "-", s?.playerId ?? "-", s?.gameId ?? "-");
+            await _gameBL.ExecuteAction(s);
+        }
+
+        
+    }
+}
