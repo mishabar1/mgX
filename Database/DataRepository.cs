@@ -125,6 +125,12 @@ namespace MG.Server.Database
                 case GameTypeEnum.GOMOKU:
                     game.GameFlow = new GomokuGameFlow(game);
                     break;
+                case GameTypeEnum.REVERSI:
+                    game.GameFlow = new ReversiGameFlow(game);
+                    break;
+                case GameTypeEnum.CHECKERS:
+                    game.GameFlow = new CheckersGameFlow(game);
+                    break;
             }
         }
 
