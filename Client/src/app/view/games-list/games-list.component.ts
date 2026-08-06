@@ -66,13 +66,29 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
     });
   }
 
+  // Result text (e.g. "White wins!" / "X wins!" / "It's a tie.") for finished games.
+  endedResult(game: GameData): string {
+    return String(game.gameStatus) === 'ENDED' ? (game.attributes?.result || 'Finished') : '';
+  }
+
+  // Participants, e.g. "A (white) vs AI (black)".
+  playersLabel(game: GameData): string {
+    return (game.players || []).map(p => {
+      const who = p.user?.name || (p.type === 'AI' ? 'AI' : 'open');
+      const seat = p.attributes?.['type'];
+      return seat ? `${who} (${seat})` : who;
+    }).join(' vs ');
+  }
+
   setup(game: GameData) {
     this.router.navigate([RouteNames.GameSetup,game.id]);
   }
 
-  // Click a game → jump to the play view if it's running, else to its settings.
+  // Click a game → jump to the play view if it's running or finished (to review),
+  // otherwise to its settings.
   openGame(game: GameData) {
-    if (String(game.gameStatus) === 'PLAY') {
+    const s = String(game.gameStatus);
+    if (s === 'PLAY' || s === 'ENDED') {
       this.router.navigate([RouteNames.GamePlay, game.id]);
     } else {
       this.router.navigate([RouteNames.GameSetup, game.id]);

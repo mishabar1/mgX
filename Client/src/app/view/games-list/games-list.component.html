@@ -12,6 +12,12 @@
       <div class="mg-game-name">{{game.name}}</div>
       <span class="mg-badge">{{game.gameType}}</span>
       <span class="mg-badge play">{{game.gameStatus}}</span>
+      @if (endedResult(game)) {
+        <span class="mg-badge" style="background:#fef9c3;color:#854d0e;">
+          <i class="pi pi-trophy" style="margin-right:5px;"></i>{{ endedResult(game) }}
+        </span>
+      }
+      <span style="color:var(--mg-muted);font-size:13px;margin-left:6px;">{{ playersLabel(game) }}</span>
       <div class="mg-spacer"></div>
       <!-- buttons stop the click from bubbling to the card so they don't open the game -->
       <div class="mg-row-center" style="gap:8px;" (click)="$event.stopPropagation()">

@@ -108,14 +108,18 @@ namespace MG.Server.GameFlows
         // any side, low profile so it doesn't block the pieces). Rebuilt each move.
         private void UpdateTurnText()
         {
+            string turn = GameData.Attributes.TryGetValue("turn", out var tv) ? tv : "white";
+            SetBoardText((turn == "white" ? "WHITE" : "BLACK") + " TO MOVE",
+                         turn == "white" ? "0xF2F2F2" : "0x151515"); // colour follows the side to move
+        }
+
+        // Place the same label flat on all 4 board edges (readable from any side).
+        // Text is laid FLAT with a -90° X tilt; the in-plane facing must then be a
+        // ROLL about Z (using Y tilted them upright — the "standing" labels bug).
+        private void SetBoardText(string label, string tint)
+        {
             foreach (var t in getItemsByAttribute("turnText")) removeItem(t.Id);
 
-            string turn = GameData.Attributes.TryGetValue("turn", out var tv) ? tv : "white";
-            string label = (turn == "white" ? "WHITE" : "BLACK") + " TO MOVE";
-            string tint = turn == "white" ? "0xF2F2F2" : "0x151515"; // colour follows the side to move
-
-            // Text is laid FLAT with a -90° X tilt; the in-plane facing must then be a
-            // ROLL about Z (using Y here tilted them upright — the "standing" labels).
             // (x, z, rollZ°) for the south, north, west and east edges.
             (double x, double z, double roll)[] sides =
             {
@@ -137,8 +141,47 @@ namespace MG.Server.GameFlows
         }
 
         protected override Task EndGame() => Task.CompletedTask;
-        protected override Task<bool> IsEndGame() => Task.FromResult(false);
-        protected override List<PlayerData> GetGameWinners() => new List<PlayerData>();
+
+        // The game ends when the side to move has no legal moves: checkmate if it is
+        // in check (the other side wins), otherwise stalemate (a draw).
+        protected override Task<bool> IsEndGame()
+        {
+            var (board, items) = BuildBoard();
+            string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "white";
+            char side = turn == "white" ? 'w' : 'b';
+
+            if (ChessRules.HasAnyLegalMove(board, side, GetEnPassant(), GetCastling(items)))
+                return Task.FromResult(false);
+
+            if (ChessRules.InCheck(board, side))
+            {
+                string winner = turn == "white" ? "black" : "white"; // the side that just moved
+                var wp = getPlayerByAttribute("type", winner);
+                string who = wp != null ? PlayerDisplayName(wp) : winner;
+                GameData.Attributes["result"] = "Checkmate — " + Cap(winner) + " (" + who + ") wins!";
+                GameData.Attributes["winnerColor"] = winner;
+                SetBoardText(winner.ToUpper() + " WINS!", winner == "white" ? "0xF2F2F2" : "0x151515");
+            }
+            else
+            {
+                GameData.Attributes["result"] = "Stalemate — it's a draw.";
+                GameData.Attributes.Remove("winnerColor");
+                SetBoardText("DRAW", "0x888888");
+            }
+            return Task.FromResult(true);
+        }
+
+        protected override List<PlayerData> GetGameWinners()
+        {
+            if (GameData.Attributes.TryGetValue("winnerColor", out var wc) && !string.IsNullOrEmpty(wc))
+            {
+                var p = getPlayerByAttribute("type", wc); // the seat whose "type" is white/black
+                if (p != null) return new List<PlayerData> { p };
+            }
+            return new List<PlayerData>();
+        }
+
+        private static string Cap(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s.Substring(1);
 
         // ------------------------------------------------------------------
         // Selecting a piece → show only its legal moves as yellow markers.

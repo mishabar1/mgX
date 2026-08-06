@@ -28,8 +28,9 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
   get showHeads(): boolean { return localStorage.getItem('mg.showHeads') !== 'false'; }
   set showHeads(v: boolean) { localStorage.setItem('mg.showHeads', v ? 'true' : 'false'); }
 
-  // The game can only be opened once it has actually started (status PLAY).
-  get canOpen(): boolean { return String(this.gameData?.gameStatus) === 'PLAY'; }
+  // Openable once started (PLAY) and still afterwards (ENDED) so a finished game
+  // can be reviewed/analysed.
+  get canOpen(): boolean { const s = String(this.gameData?.gameStatus); return s === 'PLAY' || s === 'ENDED'; }
   get isStarted(): boolean { return String(this.gameData?.gameStatus) === 'PLAY'; }
 
   constructor(public signalRService: SignalrService,

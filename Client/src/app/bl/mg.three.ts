@@ -53,6 +53,24 @@ export class MgThree{
     if (this.gridHelper) this.gridHelper.visible = on;
   }
 
+  // Keep the canvas and camera in sync with the container/window size on resize.
+  onWindowResize = () => {
+    if (!this.renderer || !this.camera || !this.rendererContainerElement) return;
+    const w = this.rendererContainerElement.clientWidth;
+    const h = this.rendererContainerElement.clientHeight;
+    if (!w || !h) return;
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h);
+    this.renderer.render(this.scene, this.camera);
+  };
+
+  // Tear down when leaving the view so old renderers stop drawing / listening.
+  dispose() {
+    window.removeEventListener('resize', this.onWindowResize);
+    try { this.renderer?.setAnimationLoop(null); } catch {}
+  }
+
   constructor() {
 
     // let x = ThreeHelper.func1(1);
@@ -97,6 +115,9 @@ export class MgThree{
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setSize(this.rendererContainerElement.clientWidth, this.rendererContainerElement.clientHeight);
     this.rendererContainerElement.appendChild(this.renderer.domElement);
+
+    // Refresh the canvas whenever the window resizes.
+    window.addEventListener('resize', this.onWindowResize);
 
     this.renderer.xr.addEventListener("sessionstart", () => {
 

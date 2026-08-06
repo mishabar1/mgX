@@ -7,7 +7,8 @@ import {
   OnInit,
   SimpleChanges,
   ViewChild,
-  ChangeDetectionStrategy
+  ChangeDetectionStrategy,
+  NgZone
 } from '@angular/core';
 import * as THREE from 'three';
 import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
@@ -65,9 +66,13 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
 
   mgGame!:MgGame;
 
+  endMessage = ''; // friendly "game over" message shown when the game ends
+  private lastStatus = ''; // to only pop the overlay on the transition into ENDED
+
   constructor(public signalRService: SignalrService,
               private router: Router,
               private generalService: GeneralService,
+              private zone: NgZone,
               private activatedRoute: ActivatedRoute,
               private unsubscriberService: UnsubscriberService,
               private dalService: DALService) {
@@ -81,13 +86,28 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     this.signalRService.hubConnection.off('GameUpdated');
     this.signalRService.hubConnection.on('GameUpdated', data => {
       console.log('GameUpdated', data);
-      this.mgGame.updateGame(data);
+      if (this.mgGame) this.mgGame.updateGame(data);
+      // SignalR fires outside Angular's zone — run inside so the overlay renders.
+      this.zone.run(() => {
+        const status = String(data.gameStatus);
+        // Only pop the overlay when the game FIRST ends — not on every later update
+        // (otherwise it re-appears on each click after the user dismissed it).
+        if (status === 'ENDED' && this.lastStatus !== 'ENDED') {
+          this.endMessage = data.attributes?.result || 'Game over';
+        }
+        this.lastStatus = status;
+      });
     });
 
   }
 
+  backToList() {
+    this.router.navigate([RouteNames.GamesList]);
+  }
+
   ngOnDestroy(): void {
     this.signalRService.hubConnection.off('GameUpdated');
+    this.mgThree?.dispose();
   }
 
   ngAfterViewInit(): void {
@@ -100,6 +120,12 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
 
       this.mgGame = new MgGame();
       this.mgGame.gameData = game;
+
+      // If opening an already-finished game (e.g. to analyse it), show the result once.
+      this.lastStatus = String(game.gameStatus);
+      this.endMessage = this.lastStatus === 'ENDED'
+        ? ((game.attributes?.result) || 'Game over')
+        : '';
 
       this.mgThree=new MgThree();
       this.mgThree.initThree(this.rendererContainer.nativeElement,()=>{

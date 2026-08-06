@@ -256,6 +256,14 @@ namespace MG.Server.GameFlows
             return null;
         }
 
+        // Human-readable name for a seat: the joined user's name, "AI", or "open".
+        internal static string PlayerDisplayName(PlayerData p)
+        {
+            if (p == null) return "?";
+            if (!string.IsNullOrEmpty(p.User?.Name)) return p.User!.Name!;
+            return p.Type == PlayerTypeEnum.AI ? "AI" : "open";
+        }
+
         internal ItemData addItemToPlayerTable(PlayerData player, AssetData asset)
         {
             var item = new ItemData(asset.Name, player.Table);

@@ -2,7 +2,7 @@
   <div style="flex-shrink:0">
 
   </div>
-  <div #rendererContainer style="flex-grow:1;border: 1px dashed red;"></div>
+  <div #rendererContainer style="flex-grow:1;"></div>
 </div>
 
 <div style="position: absolute;bottom: 0;right: 0;">
@@ -13,6 +13,19 @@
   <app-debug-view
     [mgThree]="mgThree"
   [mgGame]="mgGame"></app-debug-view>
+}
+
+@if (endMessage) {
+  <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,.45);z-index:50;">
+    <div style="background:#fff;border-radius:16px;padding:30px 40px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:18px;align-items:center;min-width:280px;">
+      <i class="pi pi-flag" style="font-size:34px;color:var(--mg-accent, #6366f1);"></i>
+      <div style="font-size:24px;font-weight:700;color:#0f172a;">{{ endMessage }}</div>
+      <div style="display:flex;gap:10px;">
+        <p-button label="Analyse board" severity="secondary" icon="pi pi-search" (onClick)="endMessage=''"></p-button>
+        <p-button label="Back to games" icon="pi pi-list" (onClick)="backToList()"></p-button>
+      </div>
+    </div>
+  </div>
 }
 
 

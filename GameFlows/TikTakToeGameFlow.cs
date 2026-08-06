@@ -16,6 +16,9 @@ namespace MG.Server.GameFlows
             internal static AssetData X = new ObjectAssetData( "ticktacktoe/x.glb");
             internal static AssetData O = new ObjectAssetData( "ticktacktoe/o.glb");
 
+            // 3D text for the "whose turn / who wins" labels on the board edges.
+            internal static AssetData TURN_TEXT = new Text3dAssetData("turn");
+
             internal static AssetData TEST_TEXT3D = new Text3dAssetData( "this is test text");
             internal static AssetData TEST_TEXTBLOCK = new TextBlockAssetData( "xxx");
             internal static AssetData TEST_SOUND = new SoundAssetData( "ticktacktoe/beep.mp3");
@@ -36,6 +39,7 @@ namespace MG.Server.GameFlows
             addAsset(Assets.HOVER);
             addAsset(Assets.X);
             addAsset(Assets.O);
+            addAsset(Assets.TURN_TEXT);
 
             //some tests
             addAsset(Assets.TEST_TEXT3D);
@@ -69,11 +73,6 @@ namespace MG.Server.GameFlows
         {
             Console.WriteLine("TikTakToeGameFlow StartGame ");
 
-            addTextItem(Assets.TEST_TEXTBLOCK).SetPosition(0, 1, 0).AddAttribute("text1").SetText("START");
-
-            //demo
-            //addItem(Assets.BOARD).SetPosition(0, 0, 0).SetScale(3, 1, 3);
-            
             addItem(Assets.BOARD).SetPosition(0, 0, 0);
 
             // start sound
@@ -103,18 +102,55 @@ namespace MG.Server.GameFlows
         {
             List<ItemData> hovers = ItemData.GetItemsByAttribute(this.GameData.Table, "hover");
 
+            PlayerData current = GameData.Players.First(p => p.Id == GameData.CurrentTurnId);
+
+            // Every seat controlled by the SAME user as the current-turn seat. This lets a
+            // single user holding BOTH seats (hotseat) act for whichever side is to move —
+            // driven entirely by the server; the client stays dumb.
+            var controllingSeatIds = GameData.Players
+                .Where(p => current.User != null && p.User?.Id == current.User.Id)
+                .Select(p => p.Id)
+                .ToList();
+            if (controllingSeatIds.Count == 0) controllingSeatIds.Add(current.Id); // AI / empty seat (no user)
+
             foreach (var x in hovers)
             {
                 x.ClickActions = new Dictionary<string, string>();
                 x.Visible = new Dictionary<string, bool>();
-
-                x.AddAction(this.GameData.CurrentTurnId, HoverClick);
-                x.Visible.Add(this.GameData.CurrentTurnId, true);
+                foreach (var sid in controllingSeatIds)
+                {
+                    x.AddAction(sid, HoverClick);
+                    x.Visible[sid] = true;
+                }
             }
 
-            ItemData text1 = ItemData.GetItemsByAttribute(this.GameData.Table, "text1").First();
-            PlayerData player = GameData.Players.Where(x => x.Id == GameData.CurrentTurnId).First();
-            text1.Text = "Turn " + player.Name + " " + player.GetStringAttribute("type").ToUpper();
+            string type = current.GetStringAttribute("type"); // "x" or "o"
+            SetBoardText(type.ToUpper() + " TO MOVE", type == "x" ? "0x22C55E" : "0x2563EB"); // X green, O blue
+        }
+
+        // Place the same label flat on all 4 board edges (readable from any side).
+        // Laid flat with a -90° X tilt; in-plane facing is a ROLL about Z.
+        private void SetBoardText(string label, string tint)
+        {
+            foreach (var t in getItemsByAttribute("turnText")) removeItem(t.Id);
+
+            (double x, double z, double roll)[] sides =
+            {
+                (0, -1.8, 180),  // O's side (-z)
+                (0,  1.8, 0),    // X's side (+z)
+                (-1.8, 0, -90),  // west
+                ( 1.8, 0,  90),  // east
+            };
+            foreach (var s in sides)
+            {
+                addTextItem(Assets.TURN_TEXT)
+                    .SetText(label)
+                    .SetPosition(s.x, 0.1, s.z)
+                    .SetScale(0.4)
+                    .SetRotation(-90, 0, s.roll)
+                    .AddAttribute("turnText", "1")
+                    .AddAttribute("tint", tint);
+            }
         }
 
 
@@ -123,18 +159,19 @@ namespace MG.Server.GameFlows
         {
             Console.WriteLine("TikTakToeGameFlow HoverClick ");
 
-            ItemData a;
-            if (data.Player.GetStringAttribute("type") == "x")
-            {
-                a = addItem(Assets.X);                
-            }
-            else
-            {
-                a = addItem(Assets.O);               
-            }
-            a.AddAttribute("item"); // x or o
-            a.AddAttribute(data.Player.GetStringAttribute("type")); // x or o
-            a.AddAttribute("type", data.Player.GetStringAttribute("type"));
+            var current = GameData.Players.FirstOrDefault(p => p.Id == GameData.CurrentTurnId);
+            if (current == null || data.Player == null) return;
+
+            // Server-authoritative turn check: the click must come from the user who
+            // controls the current-turn seat (AI seats have no user, so allow those).
+            if (current.User != null && data.Player.User?.Id != current.User.Id) return;
+
+            string type = current.GetStringAttribute("type"); // whose turn it is: "x" or "o"
+
+            var a = addItem(type == "x" ? Assets.X : Assets.O);
+            a.AddAttribute("item");
+            a.AddAttribute(type); // x or o
+            a.AddAttribute("type", type);
             a.AddAttribute("idx", data.Item.GetStringAttribute("idx"));
             a.SetPosition(data.Item.GetNumberAttribute("x"), 0, data.Item.GetNumberAttribute("z"));
 
@@ -181,21 +218,18 @@ namespace MG.Server.GameFlows
             //remove hovers
             removeItemsByAsset(Assets.HOVER);
 
-            ItemData text1 = getItemsByAttribute("text1").First();            
-            text1.Text = "Game ended: ";
-
             if (GameData.Winners?.Count > 0)
             {
-                PlayerData player = GameData.Winners[0];
-                text1.Text += player.GetStringAttribute("type").ToUpper() + " WIN !"; 
-
+                string t = GameData.Winners[0].GetStringAttribute("type"); // "x" or "o"
+                string who = PlayerDisplayName(GameData.Winners[0]);
+                SetBoardText(t.ToUpper() + " WINS!", t == "x" ? "0x22C55E" : "0x2563EB"); // X green, O blue
+                GameData.Attributes["result"] = t.ToUpper() + " (" + who + ") wins!";
             }
             else
             {
-                text1.Text += "TIE !";
+                SetBoardText("TIE!", "0x888888");
+                GameData.Attributes["result"] = "It's a tie.";
             }
-
-
         }
 
         protected override async Task<bool> IsEndGame()
