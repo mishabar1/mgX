@@ -301,5 +301,88 @@ namespace MG.Server.GameFlows
             if (m.Castle == 'K') { var rook = b[7, fromR]; b[7, fromR] = null; b[5, fromR] = rook; }
             else if (m.Castle == 'Q') { var rook = b[0, fromR]; b[0, fromR] = null; b[3, fromR] = rook; }
         }
+
+        // ---- simple search-based AI (negamax + alpha-beta, material evaluation) ----
+
+        static int PieceValue(char t) => t switch
+        {
+            'P' => 100, 'N' => 320, 'B' => 330, 'R' => 500, 'Q' => 900, 'K' => 20000, _ => 0
+        };
+
+        static int Material(Piece?[,] b, char color)
+        {
+            int s = 0;
+            for (int c = 0; c < 8; c++)
+                for (int r = 0; r < 8; r++)
+                    if (b[c, r] != null && b[c, r]!.Value.Color == color) s += PieceValue(b[c, r]!.Value.Type);
+            return s;
+        }
+
+        static int Evaluate(Piece?[,] b, char color) => Material(b, color) - Material(b, Opp(color));
+
+        // All legal moves for a colour, tagged with their from-square.
+        public static List<(int c, int r, Move m)> AllMoves(Piece?[,] b, char color, (int c, int r)? ep, Castling cast)
+        {
+            var list = new List<(int, int, Move)>();
+            for (int c = 0; c < 8; c++)
+                for (int r = 0; r < 8; r++)
+                    if (b[c, r] != null && b[c, r]!.Value.Color == color)
+                        foreach (var m in LegalMoves(b, c, r, ep, cast))
+                            list.Add((c, r, m));
+            return list;
+        }
+
+        // Board copy with a move applied (for search).
+        public static Piece?[,] Make(Piece?[,] b, int fromC, int fromR, Move m)
+        {
+            var nb = Clone(b);
+            ApplyOnCopy(nb, fromC, fromR, m);
+            return nb;
+        }
+
+        const int MATE = 1_000_000;
+
+        // NOTE: within the search we ignore castling / en-passant (pass none) to keep it
+        // manageable — the rare cases barely affect material-based play, and the ROOT still
+        // considers them so the AI can actually castle / capture en passant when it's its move.
+        static int Negamax(Piece?[,] b, char color, int depth, int alpha, int beta)
+        {
+            var moves = AllMoves(b, color, null, default);
+            if (moves.Count == 0)
+                return InCheck(b, color) ? -MATE - depth : 0; // checkmated (bad) or stalemate (draw)
+            if (depth == 0) return Evaluate(b, color);
+
+            moves.Sort((a, z) => (z.Item3.Capture ? 1 : 0) - (a.Item3.Capture ? 1 : 0)); // captures first
+            int best = int.MinValue + 1;
+            foreach (var (c, r, m) in moves)
+            {
+                int score = -Negamax(Make(b, c, r, m), Opp(color), depth - 1, -beta, -alpha);
+                if (score > best) best = score;
+                if (best > alpha) alpha = best;
+                if (alpha >= beta) break;
+            }
+            return best;
+        }
+
+        /// <summary>Best move for `color` via a `depth`-ply search. Ties broken randomly.</summary>
+        public static (int c, int r, Move m)? ChooseBestMove(
+            Piece?[,] b, char color, (int c, int r)? ep, Castling cast, int depth, Random rnd)
+        {
+            var moves = AllMoves(b, color, ep, cast);
+            if (moves.Count == 0) return null;
+            moves.Sort((a, z) => (z.Item3.Capture ? 1 : 0) - (a.Item3.Capture ? 1 : 0));
+
+            int bestScore = int.MinValue + 1;
+            int alpha = int.MinValue + 1;
+            var bests = new List<(int, int, Move)>();
+            foreach (var (c, r, m) in moves)
+            {
+                int score = -Negamax(Make(b, c, r, m), Opp(color), depth - 1, int.MinValue + 1, -alpha);
+                if (score > bestScore) { bestScore = score; bests.Clear(); bests.Add((c, r, m)); }
+                else if (score == bestScore) bests.Add((c, r, m));
+                if (bestScore > alpha) alpha = bestScore;
+            }
+            return bests[rnd.Next(bests.Count)];
+        }
     }
 }

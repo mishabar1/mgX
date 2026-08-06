@@ -208,6 +208,81 @@ namespace MG.Server.GameFlows
 
 
 
+        // Smart AI: perfect play via minimax (this AI never loses).
+        public override async Task<bool> PlayAI(PlayerData player, Random rnd)
+        {
+            var board = getGameAsBoard();
+            string myType = player.GetStringAttribute("type"); // "x" / "o"
+            int idx = BestMove(board, myType);
+            if (idx < 0) return false;
+
+            var hover = ItemData.GetItemsByAttribute(GameData.Table, "hover")
+                .FirstOrDefault(h => h.GetIntAttribute("idx") == idx);
+            if (hover == null) return false;
+
+            // Route through the normal move so placement / turn / win logic all runs.
+            await HoverClick(new ExecuteActionData
+            {
+                Item = hover,
+                Player = player,
+                itemId = hover.Id,
+                playerId = player.Id,
+                gameId = GameData.Id
+            });
+            return true;
+        }
+
+        private int BestMove(List<string> board, string me)
+        {
+            string next = me == "x" ? "o" : "x";
+            int bestIdx = -1, bestScore = int.MinValue;
+            for (int i = 0; i < 9; i++)
+                if (board[i] == "")
+                {
+                    board[i] = me;
+                    int score = Minimax(board, next, me, 1);
+                    board[i] = "";
+                    if (score > bestScore) { bestScore = score; bestIdx = i; }
+                }
+            return bestIdx;
+        }
+
+        // Score from `me`'s perspective: + for a win (sooner is better), - for a loss
+        // (later is better), 0 for a tie.
+        private int Minimax(List<string> board, string turn, string me, int depth)
+        {
+            string opp = me == "x" ? "o" : "x";
+            if (isAWon(board, me)) return 10 - depth;
+            if (isAWon(board, opp)) return depth - 10;
+            if (!board.Contains("")) return 0;
+
+            string next = turn == "x" ? "o" : "x";
+            if (turn == me)
+            {
+                int best = int.MinValue;
+                for (int i = 0; i < 9; i++)
+                    if (board[i] == "")
+                    {
+                        board[i] = turn;
+                        best = Math.Max(best, Minimax(board, next, me, depth + 1));
+                        board[i] = "";
+                    }
+                return best;
+            }
+            else
+            {
+                int best = int.MaxValue;
+                for (int i = 0; i < 9; i++)
+                    if (board[i] == "")
+                    {
+                        board[i] = turn;
+                        best = Math.Min(best, Minimax(board, next, me, depth + 1));
+                        board[i] = "";
+                    }
+                return best;
+            }
+        }
+
         protected async override Task EndGame()
         {
             // TODO !!!

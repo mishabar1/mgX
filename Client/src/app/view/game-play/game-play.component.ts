@@ -105,6 +105,16 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     this.router.navigate([RouteNames.GamesList]);
   }
 
+  // Reset the same game (Setup + Start) and keep playing. The fresh board arrives via
+  // the GameUpdated broadcast, so the scene re-renders itself.
+  playAgain() {
+    this.endMessage = '';
+    this.lastStatus = '';
+    this.dalService.setupGame(this.gameId!, this.generalService.User!.id).subscribe(() => {
+      this.dalService.startGame(this.gameId!).subscribe();
+    });
+  }
+
   ngOnDestroy(): void {
     this.signalRService.hubConnection.off('GameUpdated');
     this.mgThree?.dispose();

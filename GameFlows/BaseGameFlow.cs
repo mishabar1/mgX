@@ -30,6 +30,9 @@ namespace MG.Server.GameFlows
                 case GameTypeEnum.DND:
                     game.GameFlow = new DnDGameFlow(game);
                     break;
+                case GameTypeEnum.GOMOKU:
+                    game.GameFlow = new GomokuGameFlow(game);
+                    break;
                 default:
                     break;
             }
@@ -59,11 +62,15 @@ namespace MG.Server.GameFlows
 
         public async Task RunSetupFlow()
         {
-            // reset all            
+            // reset all
             this.GameData.Table = ItemData.Table();
             this.GameData.Winners = null;
             this.GameData.CurrentTurnId = null;
             this.GameData.GameStatus = GameStatusEnum.SETUP;
+            // Clear per-game state (turn, en-passant, game-over flag, result, …) so a
+            // replay/restart starts clean — otherwise a stale "over" ended the new game
+            // on the first move. Each game's StartGame repopulates what it needs.
+            this.GameData.Attributes.Clear();
 
             foreach (var player in GameData.Players)
             {

@@ -106,6 +106,7 @@ namespace MG.Server.Entities
         public const string TIK_TAK_TOE = "TIK_TAK_TOE";
         public const string CHESS = "CHESS";
         public const string DND = "DND";
+        public const string GOMOKU = "GOMOKU";
     }
 
     public class GameStatusEnum

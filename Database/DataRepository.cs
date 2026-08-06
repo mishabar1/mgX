@@ -122,6 +122,9 @@ namespace MG.Server.Database
                 case GameTypeEnum.DND:
                     game.GameFlow = new DnDGameFlow(game);
                     break;
+                case GameTypeEnum.GOMOKU:
+                    game.GameFlow = new GomokuGameFlow(game);
+                    break;
             }
         }
 

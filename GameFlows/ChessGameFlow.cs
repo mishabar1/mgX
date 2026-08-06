@@ -404,28 +404,16 @@ namespace MG.Server.GameFlows
         {
             var (board, items) = BuildBoard();
             char me = player.GetStringAttribute("type") == "white" ? 'w' : 'b';
-            var ep = GetEnPassant();
-            var cast = GetCastling(items);
 
-            // Every piece of my color that has at least one legal move.
-            var movable = new List<(int c, int r, List<ChessRules.Move> moves)>();
-            for (int c = 0; c < 8; c++)
-                for (int r = 0; r < 8; r++)
-                {
-                    var sq = board[c, r];
-                    if (sq == null || sq.Value.Color != me) continue;
-                    var mv = ChessRules.LegalMoves(board, c, r, ep, cast);
-                    if (mv.Count > 0) movable.Add((c, r, mv));
-                }
+            // Search-based move: negamax + alpha-beta, 3-ply. Captures free material, avoids
+            // hanging pieces, finds short tactics/mates — dramatically better than random.
+            var choice = ChessRules.ChooseBestMove(board, me, GetEnPassant(), GetCastling(items), 3, rnd);
+            if (choice == null) return false; // checkmate / stalemate
 
-            if (movable.Count == 0) return false; // checkmate / stalemate — nothing to do
-
-            var pick = movable[rnd.Next(movable.Count)];        // random piece
-            var move = pick.moves[rnd.Next(pick.moves.Count)];  // random legal move
-            var pieceItem = items[pick.c, pick.r];
+            var pieceItem = items[choice.Value.c, choice.Value.r];
             if (pieceItem == null) return false;
 
-            ApplyMove(pieceItem, pick.c, pick.r, move);
+            ApplyMove(pieceItem, choice.Value.c, choice.Value.r, choice.Value.m);
             await Task.CompletedTask;
             return true;
         }

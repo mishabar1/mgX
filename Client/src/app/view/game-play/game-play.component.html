@@ -21,8 +21,9 @@
       <i class="pi pi-flag" style="font-size:34px;color:var(--mg-accent, #6366f1);"></i>
       <div style="font-size:24px;font-weight:700;color:#0f172a;">{{ endMessage }}</div>
       <div style="display:flex;gap:10px;">
+        <p-button label="Play again" icon="pi pi-replay" (onClick)="playAgain()"></p-button>
         <p-button label="Analyse board" severity="secondary" icon="pi pi-search" (onClick)="endMessage=''"></p-button>
-        <p-button label="Back to games" icon="pi pi-list" (onClick)="backToList()"></p-button>
+        <p-button label="Back to games" severity="secondary" icon="pi pi-list" (onClick)="backToList()"></p-button>
       </div>
     </div>
   </div>
