@@ -99,6 +99,17 @@ namespace MG.Server.Services
                 new { fromConnectionId = Context.ConnectionId, data });
         }
 
+        // Live transcript / captions: a speaker's browser recognized some speech; fan it out
+        // to everyone (each client filters by gameId). Text is capped to keep it sane.
+        public async Task SendTranscript(string gameId, string? userName, string? text)
+        {
+            if (string.IsNullOrEmpty(gameId) || string.IsNullOrWhiteSpace(text)) return;
+            var line = text.Trim();
+            if (line.Length > 300) line = line[..300];
+            await Clients.All.SendAsync("Transcript",
+                new { gameId, userName = string.IsNullOrEmpty(userName) ? "player" : userName, text = line });
+        }
+
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
             // Drop the connection from every voice room it was in and tell the peers.

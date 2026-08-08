@@ -55,5 +55,8 @@ export class SignalrService {
   voiceSignal(targetConnectionId: string, data: any) {
     this.hubConnection.send('VoiceSignal', targetConnectionId, data);
   }
+  sendTranscript(gameId: string, userName: string, text: string) {
+    this.hubConnection.send('SendTranscript', gameId, userName, text);
+  }
 
 }

@@ -13,6 +13,12 @@ interface Peer {
  * connection handshake (offer / answer / ICE); the audio streams flow directly between
  * browsers. A small mesh (one RTCPeerConnection per other participant) — fine for the
  * 2–3 players in a game. STUN only (no TURN) for this first version.
+ *
+ * Also provides:
+ *  - a "who is speaking" indicator (WebAudio level metering of each stream), and
+ *  - auto-transcript / live captions via the browser SpeechRecognition API (Chrome/Edge;
+ *    degrades gracefully where unsupported). Each browser transcribes its OWN mic and
+ *    broadcasts the text over the hub so everyone sees a shared transcript.
  */
 @Injectable({providedIn: 'root'})
 export class VoiceService {
@@ -20,12 +26,27 @@ export class VoiceService {
   joined = false;
   muted = false;
   error = '';
+  selfName = '';
+  selfSpeaking = false;
   // remote participants currently in the call (not including yourself)
-  participants: { id: string; name: string }[] = [];
+  participants: { id: string; name: string; speaking?: boolean }[] = [];
+
+  // captions / transcript
+  transcriptSupported = false;
+  captionsOn = false;
+  transcript: { name: string; text: string }[] = [];
 
   private gameId = '';
   private localStream?: MediaStream;
   private peers: { [connId: string]: Peer } = {};
+
+  // speaking detection
+  private audioCtx?: AudioContext;
+  private analysers: { [id: string]: { analyser: AnalyserNode; data: Uint8Array } } = {};
+  private levelTimer?: any;
+
+  // speech recognition
+  private recognition?: any;
 
   private readonly rtcConfig: RTCConfiguration = {
     iceServers: [
@@ -43,6 +64,7 @@ export class VoiceService {
     if (this.joined) return;
     this.error = '';
     this.gameId = gameId;
+    this.selfName = userName || 'player';
 
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({audio: true, video: false});
@@ -52,8 +74,16 @@ export class VoiceService {
     }
 
     this.wireSignaling();
+    this.setupSpeaking();
+    this.setupRecognition();
     this.joined = true;
-    this.signal.joinVoice(gameId, userName);
+    this.signal.joinVoice(gameId, this.selfName);
+
+    // Auto-start captions where supported (the "auto" in auto-transcript).
+    if (this.transcriptSupported) {
+      this.captionsOn = true;
+      try { this.recognition?.start(); } catch {}
+    }
   }
 
   private wireSignaling() {
@@ -61,6 +91,7 @@ export class VoiceService {
     this.hub.off('VoicePeerJoined');
     this.hub.off('VoicePeerLeft');
     this.hub.off('VoiceSignal');
+    this.hub.off('Transcript');
 
     // We just joined: offer to everyone already here.
     this.hub.on('VoicePeers', async (peers: any[]) => {
@@ -101,6 +132,12 @@ export class VoiceService {
         if (pc) { try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch {} }
       }
     });
+
+    // Live transcript line from any participant (including our own echo).
+    this.hub.on('Transcript', (msg: any) => {
+      if (!msg || msg.gameId !== this.gameId) return;
+      this.addTranscript(msg.userName, msg.text);
+    });
   }
 
   private createPeer(connId: string, name: string): RTCPeerConnection {
@@ -116,7 +153,10 @@ export class VoiceService {
     (audio as any).playsInline = true;
     document.body.appendChild(audio);
 
-    pc.ontrack = (ev) => { audio.srcObject = ev.streams[0]; };
+    pc.ontrack = (ev) => {
+      audio.srcObject = ev.streams[0];
+      this.attachAnalyser(connId, ev.streams[0]); // metering for the speaking indicator
+    };
     pc.onicecandidate = (ev) => {
       if (ev.candidate) this.signal.voiceSignal(connId, {type: 'candidate', candidate: ev.candidate});
     };
@@ -135,7 +175,7 @@ export class VoiceService {
 
   private addParticipant(connId: string, name: string) {
     if (!this.participants.find(x => x.id === connId)) {
-      this.participants.push({id: connId, name: name || 'player'});
+      this.participants.push({id: connId, name: name || 'player', speaking: false});
     }
   }
 
@@ -147,7 +187,84 @@ export class VoiceService {
       peer.audio.remove();
       delete this.peers[connId];
     }
+    delete this.analysers[connId];
     this.participants = this.participants.filter(x => x.id !== connId);
+  }
+
+  // ---- speaking indicator (WebAudio level metering) ----
+  private setupSpeaking() {
+    try {
+      this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (this.localStream) this.attachAnalyser('self', this.localStream);
+      this.levelTimer = setInterval(() => this.tickLevels(), 150);
+    } catch {}
+  }
+
+  private attachAnalyser(id: string, stream: MediaStream) {
+    if (!this.audioCtx) return;
+    try {
+      const src = this.audioCtx.createMediaStreamSource(stream);
+      const analyser = this.audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      src.connect(analyser); // analyser is a sink; not connected to destination, so no echo
+      this.analysers[id] = {analyser, data: new Uint8Array(analyser.frequencyBinCount)};
+    } catch {}
+  }
+
+  private tickLevels() {
+    const THRESH = 12; // RMS deviation from silence
+    for (const id of Object.keys(this.analysers)) {
+      const a = this.analysers[id];
+      a.analyser.getByteTimeDomainData(a.data);
+      let sum = 0;
+      for (let i = 0; i < a.data.length; i++) { const v = a.data[i] - 128; sum += v * v; }
+      const rms = Math.sqrt(sum / a.data.length);
+      const speaking = rms > THRESH;
+      if (id === 'self') {
+        this.selfSpeaking = !this.muted && speaking;
+      } else {
+        const p = this.participants.find(x => x.id === id);
+        if (p) p.speaking = speaking;
+      }
+    }
+  }
+
+  // ---- auto transcript / captions (browser SpeechRecognition) ----
+  private setupRecognition() {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { this.transcriptSupported = false; return; }
+    this.transcriptSupported = true;
+
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.lang = navigator.language || 'en-US';
+    rec.onresult = (e: any) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          const text = (e.results[i][0].transcript || '').trim();
+          // Broadcast only — our own line comes back via the "Transcript" echo, so it's
+          // added once (and in the same order everyone else sees).
+          if (text) { try { this.signal.sendTranscript(this.gameId, this.selfName, text); } catch {} }
+        }
+      }
+    };
+    rec.onend = () => { if (this.joined && this.captionsOn) { try { rec.start(); } catch {} } };
+    rec.onerror = () => {};
+    this.recognition = rec;
+  }
+
+  toggleCaptions() {
+    if (!this.transcriptSupported) return;
+    this.captionsOn = !this.captionsOn;
+    if (this.captionsOn) { try { this.recognition?.start(); } catch {} }
+    else { try { this.recognition?.stop(); } catch {} }
+  }
+
+  private addTranscript(name: string, text: string) {
+    if (!text) return;
+    this.transcript.push({name: name || 'player', text});
+    if (this.transcript.length > 60) this.transcript.shift();
   }
 
   /** Mute/unmute your own mic (keeps the connection up). */
@@ -163,12 +280,25 @@ export class VoiceService {
     Object.keys(this.peers).forEach(id => this.removePeer(id));
     this.localStream?.getTracks().forEach(t => t.stop());
     this.localStream = undefined;
+
+    if (this.levelTimer) { clearInterval(this.levelTimer); this.levelTimer = undefined; }
+    this.analysers = {};
+    try { this.audioCtx?.close(); } catch {}
+    this.audioCtx = undefined;
+
+    try { this.recognition?.stop(); } catch {}
+    this.recognition = undefined;
+    this.captionsOn = false;
+
     this.participants = [];
+    this.selfSpeaking = false;
     this.joined = false;
     this.muted = false;
+
     this.hub.off('VoicePeers');
     this.hub.off('VoicePeerJoined');
     this.hub.off('VoicePeerLeft');
     this.hub.off('VoiceSignal');
+    this.hub.off('Transcript');
   }
 }
