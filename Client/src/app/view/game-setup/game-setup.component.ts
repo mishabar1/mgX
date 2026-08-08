@@ -41,6 +41,16 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
     this.dalService.setVoice(this.gameId!, this.allowVoice, spectators).subscribe();
   }
 
+  // Card-back chooser (card games only, e.g. Durak).
+  get isDurak(): boolean { return String(this.gameData?.gameType) === 'DURAK'; }
+  get cardBack(): string { return this.gameData?.attributes?.['cardBack'] || 'red'; }
+  backFile(c: string): string {
+    return ({red: 'red-56.jpg', blue: 'blue-57.jpg', green: 'green-15.jpg', brown: 'brown-14.jpg'} as any)[c] || 'red-56.jpg';
+  }
+  setCardBack(value: string) {
+    this.dalService.setCardBack(this.gameId!, value).subscribe();
+  }
+
   // Openable once started (PLAY) and still afterwards (ENDED) so a finished game
   // can be reviewed/analysed.
   get canOpen(): boolean { const s = String(this.gameData?.gameStatus); return s === 'PLAY' || s === 'ENDED'; }

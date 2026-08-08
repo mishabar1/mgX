@@ -63,6 +63,22 @@
       }
     </div>
 
+    @if (isDurak) {
+      <div class="mg-game-card" style="display:block;">
+        <div class="mg-game-name" style="margin-bottom:10px;"><i class="pi pi-clone" style="margin-right:6px;"></i>Card back</div>
+        <div class="mg-row-center" style="gap:10px;">
+          @for (c of ['red','blue','green','brown']; track c) {
+            <button (click)="setCardBack(c)"
+                    [title]="c"
+                    [style.outline]="cardBack === c ? '3px solid var(--mg-accent)' : 'none'"
+                    [style.outline-offset.px]="2"
+                    [style.background-image]="'url(assets/games/common/back/' + backFile(c) + ')'"
+                    style="width:46px;height:64px;border-radius:6px;border:1px solid #cbd5e1;cursor:pointer;background-size:cover;background-position:center;"></button>
+          }
+        </div>
+      </div>
+    }
+
     <div class="mg-section">Game data</div>
     <div class="mg-game-card" style="display: block;">
       <ngx-json-viewer [json]="gameData" [depth]="1"></ngx-json-viewer>

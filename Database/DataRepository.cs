@@ -131,6 +131,9 @@ namespace MG.Server.Database
                 case GameTypeEnum.CHECKERS:
                     game.GameFlow = new CheckersGameFlow(game);
                     break;
+                case GameTypeEnum.DURAK:
+                    game.GameFlow = new DurakGameFlow(game);
+                    break;
             }
         }
 

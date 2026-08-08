@@ -88,6 +88,14 @@ namespace MG.Server.Controllers
             return Ok(await _gameBL.SetShowHeads(data));
         }
 
+        // Choose the card back for card games (stored on the game, broadcast to all).
+        [HttpPost("SetCardBack")]
+        public async Task<IActionResult> SetCardBack(SetCardBackData data)
+        {
+            _logger.LogTrace("SetCardBack");
+            return Ok(await _gameBL.SetCardBack(data));
+        }
+
 
         //[HttpPost("ExecuteAction")]
         //public async Task<IActionResult> ExecuteAction(ExecuteActionData data)
@@ -126,6 +134,11 @@ namespace MG.Server.Controllers
     {
         public string gameId { get; set; }
         public bool enabled { get; set; }    // show player avatar heads in the 3D scene
+    }
+    public class SetCardBackData
+    {
+        public string gameId { get; set; }
+        public string value { get; set; }    // "red" | "blue" | "green" | "brown"
     }
     public class CreateGameData
     {       

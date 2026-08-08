@@ -42,7 +42,7 @@ export class VoiceService {
 
   // speaking detection
   private audioCtx?: AudioContext;
-  private analysers: { [id: string]: { analyser: AnalyserNode; data: Uint8Array } } = {};
+  private analysers: { [id: string]: { analyser: AnalyserNode; data: Uint8Array<ArrayBuffer> } } = {};
   private levelTimer?: any;
 
   // speech recognition
@@ -207,7 +207,7 @@ export class VoiceService {
       const analyser = this.audioCtx.createAnalyser();
       analyser.fftSize = 512;
       src.connect(analyser); // analyser is a sink; not connected to destination, so no echo
-      this.analysers[id] = {analyser, data: new Uint8Array(analyser.frequencyBinCount)};
+      this.analysers[id] = {analyser, data: new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount))};
     } catch {}
   }
 
@@ -215,7 +215,7 @@ export class VoiceService {
     const THRESH = 12; // RMS deviation from silence
     for (const id of Object.keys(this.analysers)) {
       const a = this.analysers[id];
-      a.analyser.getByteTimeDomainData(a.data);
+      a.analyser.getByteTimeDomainData(a.data as any);
       let sum = 0;
       for (let i = 0; i < a.data.length; i++) { const v = a.data[i] - 128; sum += v * v; }
       const rms = Math.sqrt(sum / a.data.length);

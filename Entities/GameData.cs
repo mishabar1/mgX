@@ -109,6 +109,7 @@ namespace MG.Server.Entities
         public const string GOMOKU = "GOMOKU";
         public const string REVERSI = "REVERSI";
         public const string CHECKERS = "CHECKERS";
+        public const string DURAK = "DURAK";
     }
 
     public class GameStatusEnum

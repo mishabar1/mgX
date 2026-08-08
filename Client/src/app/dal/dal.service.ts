@@ -71,4 +71,9 @@ export class DALService{
   setShowHeads(gameId: string, enabled: boolean): Observable<any> {
     return this.http.post<any>(this.baseGameUrl + `/SetShowHeads`, {gameId, enabled});
   }
+
+  // Choose the card back for card games (saved on the game).
+  setCardBack(gameId: string, value: string): Observable<any> {
+    return this.http.post<any>(this.baseGameUrl + `/SetCardBack`, {gameId, value});
+  }
 }

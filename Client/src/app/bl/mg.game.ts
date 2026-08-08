@@ -257,6 +257,15 @@ export class MgGame{
             x = aspect;
           }
 
+          const backTexture = this.mgThree.textureLoader.load(backURL);
+
+          // Owner-only faces: if a card carries an "owner" attribute and I'm not that owner,
+          // draw the BACK on the visible (top) face too — so opponents only ever see the back,
+          // from any camera angle, with a single card item.
+          const ownerId = itemData.attributes?.['owner'];
+          const amOwner = !ownerId || (this.playerData && this.playerData.id === ownerId);
+          const topTexture = amOwner ? frontTexture : backTexture;
+
           var cubeMaterial = [
 
             new THREE.MeshBasicMaterial({
@@ -269,11 +278,11 @@ export class MgGame{
             }),
             new THREE.MeshBasicMaterial({
               // top
-              map: frontTexture, transparent: true
+              map: topTexture, transparent: true
             }),
             new THREE.MeshBasicMaterial({
               // bottom
-              map: this.mgThree.textureLoader.load(backURL), transparent: true
+              map: backTexture, transparent: true
             }),
             new THREE.MeshBasicMaterial({
               // front

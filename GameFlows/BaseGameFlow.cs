@@ -39,6 +39,9 @@ namespace MG.Server.GameFlows
                 case GameTypeEnum.CHECKERS:
                     game.GameFlow = new CheckersGameFlow(game);
                     break;
+                case GameTypeEnum.DURAK:
+                    game.GameFlow = new DurakGameFlow(game);
+                    break;
                 default:
                     break;
             }
@@ -78,7 +81,7 @@ namespace MG.Server.GameFlows
             // on the first move. Each game's StartGame repopulates what it needs.
             // BUT preserve persistent game SETTINGS that also live in Attributes (e.g. the
             // voice-chat config) — otherwise Setup/Restart would silently reset them.
-            var preservedKeys = new[] { "allowVoice", "voiceSpectators", "showHeads" };
+            var preservedKeys = new[] { "allowVoice", "voiceSpectators", "showHeads", "cardBack" };
             var preserved = preservedKeys
                 .Where(k => this.GameData.Attributes.ContainsKey(k))
                 .ToDictionary(k => k, k => this.GameData.Attributes[k]);

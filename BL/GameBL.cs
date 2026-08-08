@@ -152,6 +152,20 @@ namespace MG.Server.BL
             return new { ok = true };
         }
 
+        // Persist the chosen card back on the game and broadcast.
+        internal async Task<object?> SetCardBack(SetCardBackData data)
+        {
+            var game = _dataRepository.Games.FirstOrDefault(x => x.Id == data.gameId);
+            if (game != null)
+            {
+                var allowed = new[] { "red", "blue", "green", "brown" };
+                game.Attributes["cardBack"] = allowed.Contains(data.value) ? data.value : "red";
+                await DataRepository.Singleton.HubGameUpdated(game);
+            }
+            await _dataRepository.Save();
+            return new { ok = true };
+        }
+
         internal async Task<object?> JoinGame(JoinGameData data)
         {
             // find game in db
