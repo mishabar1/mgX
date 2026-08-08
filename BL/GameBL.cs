@@ -178,6 +178,21 @@ namespace MG.Server.BL
                 {
                     player.User = data.user;
                     player.Type = data.type;
+
+                    // Give each AI a unique, friendly name (animal). Keep the seat's own name if
+                    // it's not already taken by another occupied seat; otherwise draw a new one.
+                    if (data.type == PlayerTypeEnum.AI)
+                    {
+                        var taken = game.Players
+                            .Where(p => p != player && p.Type != PlayerTypeEnum.EMPTY_SEAT)
+                            .Select(p => p.User?.Name ?? p.Name)
+                            .Where(n => !string.IsNullOrEmpty(n))
+                            .ToHashSet();
+                        var name = player.Name;
+                        for (int guard = 0; (string.IsNullOrEmpty(name) || taken.Contains(name)) && guard < 100; guard++)
+                            name = Utils.RandomName();
+                        player.Name = name;
+                    }
                 }
 
                 await DataRepository.Singleton.HubGameUpdated(game);

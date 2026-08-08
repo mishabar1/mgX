@@ -27,6 +27,9 @@ export class MgGame{
   // per-player hand/table anchor meshes, so updateGame can refresh those zones live
   handMeshes: { [id: string]: THREE.Object3D } = {};
   tableMeshes: { [id: string]: THREE.Object3D } = {};
+  // floating name labels + a "DEFENDING" badge above each opponent's head
+  nameSprites: { [id: string]: THREE.Sprite } = {};
+  defendSprites: { [id: string]: THREE.Sprite } = {};
 
   // red bounding-box helpers + the green/cyan player table & hand boxes —
   // all hidden unless DEBUG is toggled on.
@@ -85,6 +88,9 @@ export class MgGame{
 
     forEach(this.gameData.players,(playerData:PlayerData)=>{
 
+      // Unfilled seats (Durak has up to 6, most optional) get no avatar/zones in the scene.
+      if (playerData.type === 'EMPTY_SEAT') return;
+
       let group = new THREE.Group();
       group.name = "PLAYER";
       playerData.avatar.mesh = group;
@@ -142,8 +148,66 @@ export class MgGame{
       this.handMeshes[playerData.id] = playerHand;
       this.createItem(playerData.hand, playerHand);
 
+      // Floating name label + a DEFENDING badge above each OTHER player's head (you know your
+      // own seat, and you get the "YOU DEFENDING" status line instead).
+      if (!(this.playerData && this.playerData.id === playerData.id)) {
+        const disp = playerData.user?.name || playerData.name || (playerData.type === 'AI' ? 'AI' : 'open');
+        const nameSpr = this.makeTextSprite(disp, 'rgba(18,28,38,0.75)', '#ffffff');
+        nameSpr.position.set(0, 3.3, 0);
+        playerData.avatar.mesh!.add(nameSpr);
+        this.nameSprites[playerData.id] = nameSpr;
+
+        const defSpr = this.makeTextSprite('DEFENDING', 'rgba(210,32,42,0.92)', '#ffffff');
+        defSpr.position.set(0, 2.5, 0);
+        defSpr.visible = false;
+        playerData.avatar.mesh!.add(defSpr);
+        this.defendSprites[playerData.id] = defSpr;
+      }
 
 
+
+    });
+
+    this.refreshDefenderBadges();
+  }
+
+  // Build a billboard text label (canvas texture) that always faces the camera.
+  makeTextSprite(text: string, bg: string, fg: string): THREE.Sprite {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    const fontSize = 52;
+    const font = `bold ${fontSize}px Arial, sans-serif`;
+    ctx.font = font;
+    const textW = Math.max(40, ctx.measureText(text || ' ').width);
+    const pad = 26;
+    canvas.width = Math.ceil(textW + pad * 2);
+    canvas.height = Math.ceil(fontSize + pad * 2);
+    ctx.font = font;                       // re-set (resizing the canvas clears state)
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    if ((ctx as any).roundRect) (ctx as any).roundRect(0, 0, canvas.width, canvas.height, 18);
+    else ctx.rect(0, 0, canvas.width, canvas.height);
+    ctx.fill();
+    ctx.fillStyle = fg;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
+    const spr = new THREE.Sprite(mat);
+    const h = 0.9;
+    spr.scale.set(h * (canvas.width / canvas.height), h, 1);
+    return spr;
+  }
+
+  // Show the DEFENDING badge over whoever is currently defending (hide once the game is over).
+  refreshDefenderBadges() {
+    const def = this.gameData?.attributes?.['defender'];
+    const over = this.gameData?.attributes?.['over'];
+    forEach(this.defendSprites, (spr: THREE.Sprite, id: string) => {
+      spr.visible = !over && !!def && id === def;
     });
   }
 
@@ -460,6 +524,10 @@ export class MgGame{
     // client resolves item.asset against this map (otherwise "unknown asset key").
     if (new_game.assets) this.gameData.assets = new_game.assets;
 
+    // keep game attributes current (defender/turn/over) so the DEFENDING badge tracks play.
+    if (new_game.attributes) this.gameData.attributes = new_game.attributes;
+    this.refreshDefenderBadges();
+
     this.updateItem(new_game.table, null);
 
     // also refresh each player's hand & table zones (cards move in/out of these during play)
@@ -737,9 +805,13 @@ export class MgGame{
   // move-target = bright yellow.
   refreshItemHighlight(item: ItemData) {
     const a = item.attributes || {};
+    // The "playable" hint is private: only show it on cards the viewer OWNS, otherwise an
+    // opponent's face-down cards would glow and leak which cards they can play.
+    const owner = a['owner'];
+    const mine = !owner || (this.playerData && this.playerData.id === owner);
     if (a['selected'] == '1') this.applyEmissive(item, 0x33ff44);
     else if (a['check'] == '1') this.applyEmissive(item, 0xEE2222);
-    else if (a['playable'] == '1') this.applyEmissive(item, 0x8cff8c);   // a card you can play now
+    else if (a['playable'] == '1' && mine) this.applyEmissive(item, 0x8cff8c);   // a card YOU can play now
     else if (a['moveMarker'] || a['captureTarget'] == '1') this.applyEmissive(item, 0xffe000);
     else this.applyEmissive(item, null);
   }

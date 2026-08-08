@@ -299,7 +299,8 @@ namespace MG.Server.GameFlows
         {
             if (p == null) return "?";
             if (!string.IsNullOrEmpty(p.User?.Name)) return p.User!.Name!;
-            return p.Type == PlayerTypeEnum.AI ? "AI" : "open";
+            if (p.Type == PlayerTypeEnum.AI) return !string.IsNullOrEmpty(p.Name) ? p.Name! : "AI";
+            return "open";
         }
 
         internal ItemData addItemToPlayerTable(PlayerData player, AssetData asset)

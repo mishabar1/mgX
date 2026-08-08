@@ -18,7 +18,7 @@
       <div class="mg-row-center" style="margin-top:8px;">
         <span style="color:#ef4444;font-weight:600;">
           <i class="pi pi-exclamation-triangle" style="margin-right:6px;"></i>
-          {{ occupiedSeats }} / {{ minPlayers }} seats filled — fill every seat to start
+          {{ occupiedSeats }} / {{ minPlayers }} seats filled — need at least {{ minPlayers }} players to start
         </span>
       </div>
     }
@@ -30,14 +30,16 @@
           {{ player.attributes?.['type'] || 'Seat' }}
           @if (player.type === 'AI') {
             <span style="color:#f59e0b; font-weight:600; margin-left:8px;">
-              <i class="pi pi-desktop" style="margin-right:6px;"></i>AI
+              <i class="pi pi-desktop" style="margin-right:6px;"></i>{{ player.name || 'AI' }} <span style="opacity:.7;font-weight:400;">(AI)</span>
             </span>
           } @else {
             <span style="color: var(--mg-muted); font-weight: 400; margin-left: 8px;">
               {{ player.user?.name || '… click Join to take this seat …' }}
             </span>
-            @if (seatEmpty(player)) {
-              <span style="color:#ef4444; font-weight:600; margin-left:8px;">(required — empty)</span>
+            @if (seatEmpty(player) && !seatsReady) {
+              <span style="color:#ef4444; font-weight:600; margin-left:8px;">(needed)</span>
+            } @else if (seatEmpty(player)) {
+              <span style="color: var(--mg-muted); font-weight:400; margin-left:8px;">(optional)</span>
             }
           }
         </div>

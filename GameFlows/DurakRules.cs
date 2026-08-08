@@ -23,11 +23,15 @@ namespace MG.Server.GameFlows
             public string Code => $"{Rank}{Suit}"; // e.g. "14S" (ace of spades), "6H"
         }
 
-        public static List<Card> BuildDeck()
+        public static List<Card> BuildDeck() => BuildDeck(6);
+
+        // Build a deck from minRank..Ace. minRank 6 → the standard 36-card Durak deck (up to 6
+        // players); minRank 2 → a full 52-card deck so 7–8 players can each get 6 cards.
+        public static List<Card> BuildDeck(int minRank)
         {
-            var deck = new List<Card>(36);
+            var deck = new List<Card>(52);
             foreach (var s in Suits)
-                foreach (var r in Ranks)
+                for (int r = minRank; r <= 14; r++)
                     deck.Add(new Card(r, s));
             return deck;
         }
