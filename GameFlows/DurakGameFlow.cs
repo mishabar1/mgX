@@ -365,10 +365,9 @@ namespace MG.Server.GameFlows
         {
             int deckCount = GetDeck().Count;
 
-            // Trump indicator: just the suit SYMBOL, laid flat on the open felt beside the deck
-            // (not on top of the pile). The trump suit is fixed for the whole game, so it stays
-            // shown the entire game — even once the deck is empty.
-            addItem(SuitAsset(Trump)).SetPosition(5.0, 0.02, -1.8).SetScale(1.3)
+            // Trump indicator: the suit SYMBOL laid FLAT on the table beside the deck. The trump
+            // suit is fixed all game, so it stays shown even once the deck is empty.
+            addItem(SuitAsset(Trump)).SetPosition(7.4, 0.02, 0).SetRotation(0, -90, 0).SetScale(1.6)
                 .AddAttribute("trumpSuit", "1");
 
             // The face-down draw pile — only while cards remain to draw.
@@ -381,20 +380,20 @@ namespace MG.Server.GameFlows
             var seat = GameData.Players.Find(p => p.Id == seatId);
             if (seat == null) return;
             bool p1 = seat.GetStringAttribute("type") == "p1";
-            // On the open felt in FRONT of the hand, front-left corner, clear of the cards.
-            double z = p1 ? -7.2 : 7.2;
-            double x = p1 ? 5.2 : -5.2;   // front-left from that player's own view
+            // In front of the hand, pulled in from the corner so it sits fully on the felt.
+            double z = p1 ? -8.2 : 8.2;
+            double x = p1 ? 3.2 : -3.2;   // toward centre from that player's own view
             double roll = p1 ? 180 : 0;
 
             // Clickable plate = the whole button (not just the glyph outline).
-            var plate = addItem(ButtonBgAsset()).SetPosition(x, 0.05, z).SetScale(2.6)
+            var plate = addItem(ButtonBgAsset()).SetPosition(x, 0.05, z).SetScale(2.0)
                 .AddAttribute("button", "1");
             plate.ClickActions[seatId] = action;
             plate.Visible[seatId] = true;
 
             // White label sitting on top of the plate (purely visual — the plate takes clicks).
             addTextItem(Assets.TEXT).SetText(label)
-                .SetPosition(x, 0.14, z).SetScale(0.55).SetRotation(-90, 0, roll)
+                .SetPosition(x, 0.14, z).SetScale(0.45).SetRotation(-90, 0, roll)
                 .AddAttribute("buttonLabel", "1")
                 .AddAttribute("textColor", "ffffff")
                 .Visible[seatId] = true;
@@ -408,8 +407,8 @@ namespace MG.Server.GameFlows
             foreach (var seat in GameData.Players)
             {
                 bool p1 = seat.GetStringAttribute("type") == "p1";
-                // Compact line on the open felt just in front of the hand.
-                double z = p1 ? -7.2 : 7.2;
+                // Compact line down on the felt near the player, in front of the hand.
+                double z = p1 ? -8.6 : 8.6;
                 double roll = p1 ? 180 : 0;
                 string label;
                 if (over)
