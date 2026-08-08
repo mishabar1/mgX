@@ -1,8 +1,30 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;   /* fill the screen; dvh keeps it right on mobile browsers */
+  overflow: hidden;
+}
+
 .main-div {
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: yellow;
 }
 
+/* the renderer container holds the <canvas> three.js appends at runtime */
+.renderer-container {
+  flex-grow: 1;
+  min-height: 0;          /* let it shrink inside the flex column */
+  overflow: hidden;
+  touch-action: none;     /* gestures drive the 3D controls, not page scroll/zoom */
+}
+
+/* the canvas is created at runtime, so it isn't scoped — reach it with ::ng-deep */
+::ng-deep .renderer-container canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
