@@ -117,6 +117,26 @@ namespace MG.Server.BL
             return new { x = "TODO !!! DeleteGame" };
         }
 
+        // Persist the per-game voice settings on the game's Attributes and broadcast so
+        // every connected client (setup + in-game) sees the change.
+        internal async Task<object?> SetVoice(SetVoiceData data)
+        {
+            var game = _dataRepository.Games.FirstOrDefault(x => x.Id == data.gameId);
+            if (game != null)
+            {
+                if (data.enabled) game.Attributes["allowVoice"] = "1";
+                else game.Attributes.Remove("allowVoice");
+
+                if (data.enabled && data.spectators) game.Attributes["voiceSpectators"] = "1";
+                else game.Attributes.Remove("voiceSpectators");
+
+                await DataRepository.Singleton.HubGameUpdated(game);
+            }
+
+            await _dataRepository.Save();
+            return new { ok = true };
+        }
+
         internal async Task<object?> JoinGame(JoinGameData data)
         {
             // find game in db

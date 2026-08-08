@@ -48,6 +48,21 @@
       </label>
     </div>
 
+    <div class="mg-game-card" style="display:block;">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+        <input type="checkbox" [checked]="allowVoice"
+               (change)="setVoiceEnabled($any($event.target).checked)" />
+        <span class="mg-game-name"><i class="pi pi-microphone" style="margin-right:6px;"></i>Allow voice chat during the game</span>
+      </label>
+      @if (allowVoice) {
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:10px;padding-left:26px;color:var(--mg-muted);">
+          <input type="checkbox" [checked]="voiceSpectators"
+                 (change)="setVoiceSpectators($any($event.target).checked)" />
+          <span>Let spectators join voice too (otherwise players only)</span>
+        </label>
+      }
+    </div>
+
     <div class="mg-section">Game data</div>
     <div class="mg-game-card" style="display: block;">
       <ngx-json-viewer [json]="gameData" [depth]="1"></ngx-json-viewer>

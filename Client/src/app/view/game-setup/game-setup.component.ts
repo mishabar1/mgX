@@ -28,6 +28,16 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
   get showHeads(): boolean { return localStorage.getItem('mg.showHeads') !== 'false'; }
   set showHeads(v: boolean) { localStorage.setItem('mg.showHeads', v ? 'true' : 'false'); }
 
+  // Voice-chat settings (stored on the game, shared by everyone).
+  get allowVoice(): boolean { return !!this.gameData?.attributes?.['allowVoice']; }
+  get voiceSpectators(): boolean { return !!this.gameData?.attributes?.['voiceSpectators']; }
+  setVoiceEnabled(enabled: boolean) {
+    this.dalService.setVoice(this.gameId!, enabled, this.voiceSpectators).subscribe();
+  }
+  setVoiceSpectators(spectators: boolean) {
+    this.dalService.setVoice(this.gameId!, this.allowVoice, spectators).subscribe();
+  }
+
   // Openable once started (PLAY) and still afterwards (ENDED) so a finished game
   // can be reviewed/analysed.
   get canOpen(): boolean { const s = String(this.gameData?.gameStatus); return s === 'PLAY' || s === 'ENDED'; }

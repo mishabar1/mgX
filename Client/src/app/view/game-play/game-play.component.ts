@@ -47,6 +47,7 @@ import {GeneralService} from '../../bl/general.service';
 import {UnsubscriberService} from '../../services/unsubscriber.service';
 import {MgThree} from '../../bl/mg.three';
 import {MgGame} from '../../bl/mg.game';
+import {VoiceService} from '../../bl/voice.service';
 
 @Component({
     selector: 'app-game-play',
@@ -75,8 +76,22 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
               private zone: NgZone,
               private activatedRoute: ActivatedRoute,
               private unsubscriberService: UnsubscriberService,
+              public voice: VoiceService,
               private dalService: DALService) {
   }
+
+  // ---- voice chat ----
+  // Is the current user a seated player (vs a spectator)? mgGame.playerData is set on load.
+  get isPlayer(): boolean { return !!this.mgGame?.playerData; }
+  // Show the voice panel only if the game allows it AND (spectators allowed OR you're a player).
+  get voiceAllowed(): boolean {
+    const a = this.mgGame?.gameData?.attributes;
+    if (!a || !a['allowVoice']) return false;
+    return !!a['voiceSpectators'] || this.isPlayer;
+  }
+  joinVoice() { this.voice.join(this.gameId!, this.generalService.User?.name || 'player'); }
+  leaveVoice() { this.voice.leave(); }
+  toggleMute() { this.voice.toggleMute(); }
 
   ngOnInit() {
 
@@ -117,6 +132,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
 
   ngOnDestroy(): void {
     this.signalRService.hubConnection.off('GameUpdated');
+    this.voice.leave();   // drop out of the voice call when leaving the game view
     this.mgThree?.dispose();
   }
 

@@ -45,4 +45,15 @@ export class SignalrService {
     // this.hubConnection.invoke("ExecuteAction", data);
   }
 
+  // ---- voice chat (WebRTC) signaling ----
+  joinVoice(gameId: string, userName: string) {
+    this.hubConnection.send('JoinVoice', gameId, userName);
+  }
+  leaveVoice(gameId: string) {
+    this.hubConnection.send('LeaveVoice', gameId);
+  }
+  voiceSignal(targetConnectionId: string, data: any) {
+    this.hubConnection.send('VoiceSignal', targetConnectionId, data);
+  }
+
 }

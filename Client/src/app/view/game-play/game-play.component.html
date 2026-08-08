@@ -9,6 +9,30 @@
   <button (click)="onVrClick()" style="width: 100px;height: 30px">VR</button>
 </div>
 
+@if (voiceAllowed) {
+  <div class="voice-panel">
+    @if (!voice.joined) {
+      <button class="voice-btn join" (click)="joinVoice()">
+        <i class="pi pi-microphone"></i> Join voice
+      </button>
+    } @else {
+      <button class="voice-btn" (click)="toggleMute()" [class.muted]="voice.muted">
+        <i class="pi" [ngClass]="voice.muted ? 'pi-volume-off' : 'pi-microphone'"></i>
+        {{ voice.muted ? 'Unmute' : 'Mute' }}
+      </button>
+      <button class="voice-btn leave" (click)="leaveVoice()">
+        <i class="pi pi-phone"></i> Leave
+      </button>
+      <span class="voice-count">
+        <i class="pi pi-users"></i> {{ voice.participants.length + 1 }} in call
+      </span>
+    }
+    @if (voice.error) {
+      <div class="voice-error">{{ voice.error }}</div>
+    }
+  </div>
+}
+
 @if (mgThree && mgGame && mgGame.gameData) {
   <app-debug-view
     [mgThree]="mgThree"

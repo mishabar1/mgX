@@ -71,7 +71,15 @@ namespace MG.Server.Controllers
             _logger.LogTrace("JoinGame");
             return Ok(await _gameBL.JoinGame(data));
         }
-        
+
+        // Toggle the per-game voice-chat settings (stored on the game and broadcast to all).
+        [HttpPost("SetVoice")]
+        public async Task<IActionResult> SetVoice(SetVoiceData data)
+        {
+            _logger.LogTrace("SetVoice");
+            return Ok(await _gameBL.SetVoice(data));
+        }
+
 
         //[HttpPost("ExecuteAction")]
         //public async Task<IActionResult> ExecuteAction(ExecuteActionData data)
@@ -99,6 +107,12 @@ namespace MG.Server.Controllers
     public class StartGameData
     {
         public string gameId { get; set; }
+    }
+    public class SetVoiceData
+    {
+        public string gameId { get; set; }
+        public bool enabled { get; set; }    // voice chat allowed at all
+        public bool spectators { get; set; } // if true, spectators may join too (else players only)
     }
     public class CreateGameData
     {       

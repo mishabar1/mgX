@@ -61,4 +61,9 @@ export class DALService{
   joinGame(gameId: string, playerId: string, user: UserData|null, type: string) {
     return this.http.post<GameData>(this.baseGameUrl + `/JoinGame`, {gameId,playerId,user,type});
   }
+
+  // Toggle the game's voice-chat settings (enabled at all, and whether spectators may join).
+  setVoice(gameId: string, enabled: boolean, spectators: boolean): Observable<any> {
+    return this.http.post<any>(this.baseGameUrl + `/SetVoice`, {gameId, enabled, spectators});
+  }
 }

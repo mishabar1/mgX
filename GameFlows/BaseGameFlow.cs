@@ -73,10 +73,17 @@ namespace MG.Server.GameFlows
             this.GameData.Winners = null;
             this.GameData.CurrentTurnId = null;
             this.GameData.GameStatus = GameStatusEnum.SETUP;
-            // Clear per-game state (turn, en-passant, game-over flag, result, …) so a
+            // Clear per-game RUNTIME state (turn, en-passant, game-over flag, result, …) so a
             // replay/restart starts clean — otherwise a stale "over" ended the new game
             // on the first move. Each game's StartGame repopulates what it needs.
+            // BUT preserve persistent game SETTINGS that also live in Attributes (e.g. the
+            // voice-chat config) — otherwise Setup/Restart would silently reset them.
+            var preservedKeys = new[] { "allowVoice", "voiceSpectators" };
+            var preserved = preservedKeys
+                .Where(k => this.GameData.Attributes.ContainsKey(k))
+                .ToDictionary(k => k, k => this.GameData.Attributes[k]);
             this.GameData.Attributes.Clear();
+            foreach (var kv in preserved) this.GameData.Attributes[kv.Key] = kv.Value;
 
             foreach (var player in GameData.Players)
             {
