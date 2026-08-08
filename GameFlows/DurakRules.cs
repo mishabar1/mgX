@@ -69,8 +69,13 @@ namespace MG.Server.GameFlows
             _ => "spades",
         };
 
-        // e.g. Card(11,'H') -> "common/PNG-cards/jack_of_hearts.png"
-        public static string FrontUrl(Card c) => $"common/PNG-cards/{RankName(c.Rank)}_of_{SuitName(c.Suit)}.png";
+        // e.g. Card(11,'H') -> "common/PNG-cards/jack_of_hearts2.png"
+        // Face cards (J/Q/K) use the fancier illustrated "2" artwork; numbers & aces stay plain.
+        public static string FrontUrl(Card c)
+        {
+            string suffix = (c.Rank >= 11 && c.Rank <= 13) ? "2" : "";
+            return $"common/PNG-cards/{RankName(c.Rank)}_of_{SuitName(c.Suit)}{suffix}.png";
+        }
 
         public const string BackUrl = "common/card_back.png";
     }

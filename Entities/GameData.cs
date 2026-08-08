@@ -47,10 +47,16 @@ namespace MG.Server.Entities
 
         public ItemData? FindItem(string itemId)
         {
-
-                return Table.FindItem(itemId);
-
-            
+            // Search the main table first, then each player's hand/table zones — so cards held
+            // in a hand (e.g. Durak) are clickable, not just items on the shared table.
+            var found = Table.FindItem(itemId);
+            if (found != null) return found;
+            foreach (var p in Players)
+            {
+                if (p.Hand != null) { found = p.Hand.FindItem(itemId); if (found != null) return found; }
+                if (p.Table != null) { found = p.Table.FindItem(itemId); if (found != null) return found; }
+            }
+            return null;
         }
         public void RemoveItem(string itemId)
         {            

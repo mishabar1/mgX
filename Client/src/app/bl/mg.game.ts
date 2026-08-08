@@ -24,6 +24,10 @@ export class MgGame{
   playerData!: PlayerData;
   allItems: { [key: string]: ItemData } = {};
 
+  // per-player hand/table anchor meshes, so updateGame can refresh those zones live
+  handMeshes: { [id: string]: THREE.Object3D } = {};
+  tableMeshes: { [id: string]: THREE.Object3D } = {};
+
   // red bounding-box helpers + the green/cyan player table & hand boxes —
   // all hidden unless DEBUG is toggled on.
   showDebugBoxes = false;
@@ -125,6 +129,7 @@ export class MgGame{
       playerTable.position.set(0,-1.5,1.5);
       this.debugPlanes.push(playerTable);
 
+      this.tableMeshes[playerData.id] = playerTable;
       this.createItem(playerData.table,playerTable);
 
       //hand (cyan) — a debug anchor for the player's hand items
@@ -135,6 +140,7 @@ export class MgGame{
       playerHand.position.set(0,0,1.5);
       this.debugPlanes.push(playerHand);
 
+      this.handMeshes[playerData.id] = playerHand;
       this.createItem(playerData.hand, playerHand);
 
 
@@ -247,7 +253,7 @@ export class MgGame{
 
       if (assetType == "TOKEN") {
 
-        this.mgThree.textureLoader.load(frontURL, frontTexture => {
+        this.mgThree.getTexture(frontURL, (frontTexture: any) => {
           // console.log( frontTexture.image.width, frontTexture.image.height );
           let aspect = frontTexture.image.width / frontTexture.image.height;
           let x = 1;
@@ -257,7 +263,7 @@ export class MgGame{
             x = aspect;
           }
 
-          const backTexture = this.mgThree.textureLoader.load(backURL);
+          const backTexture = this.mgThree.getTexture(backURL);
 
           // Owner-only faces: if a card carries an "owner" attribute and I'm not that owner,
           // draw the BACK on the visible (top) face too — so opponents only ever see the back,
@@ -277,12 +283,13 @@ export class MgGame{
               color: 0xffffff, opacity: 0.5, transparent: true
             }),
             new THREE.MeshBasicMaterial({
-              // top
-              map: topTexture, transparent: true
+              // top — alphaTest discards fully-transparent pixels so PNGs with an alpha
+              // channel (e.g. the suit symbols) show the felt through, not a black square.
+              map: topTexture, transparent: true, alphaTest: 0.5
             }),
             new THREE.MeshBasicMaterial({
               // bottom
-              map: backTexture, transparent: true
+              map: backTexture, transparent: true, alphaTest: 0.5
             }),
             new THREE.MeshBasicMaterial({
               // front
@@ -316,8 +323,12 @@ export class MgGame{
             bevelSegments: 5,
           });
           geometry.center(); // center the text on the item's position
+          // Colour from an optional "textColor" attribute (hex string, e.g. "ffffff");
+          // defaults to red so existing text (chess "CHECK!") is unchanged.
+          const colorAttr = itemData.attributes?.['textColor'];
+          const textColor = colorAttr ? parseInt(colorAttr, 16) : 0xff0000;
           var textMaterial = new THREE.MeshPhongMaterial(
-            {color: 0xff0000, specular: 0xffffff}
+            {color: textColor, specular: 0xffffff}
           );
           let mesh = new THREE.Mesh(geometry, textMaterial);
           this.processItem(itemData, mesh, parentMesh);
@@ -446,7 +457,17 @@ export class MgGame{
       item.markForDelete = true;
     });
 
+    // keep the asset dictionary current — new cards drawn during play add assets, and the
+    // client resolves item.asset against this map (otherwise "unknown asset key").
+    if (new_game.assets) this.gameData.assets = new_game.assets;
+
     this.updateItem(new_game.table, null);
+
+    // also refresh each player's hand & table zones (cards move in/out of these during play)
+    forEach(new_game.players, (p: PlayerData) => {
+      if (p.hand && this.handMeshes[p.id]) this.updateItem(p.hand, this.handMeshes[p.id]);
+      if (p.table && this.tableMeshes[p.id]) this.updateItem(p.table, this.tableMeshes[p.id]);
+    });
 
     forEach(this.allItems, (item, key) => {
       if (item.markForDelete) {
@@ -719,6 +740,7 @@ export class MgGame{
     const a = item.attributes || {};
     if (a['selected'] == '1') this.applyEmissive(item, 0x33ff44);
     else if (a['check'] == '1') this.applyEmissive(item, 0xEE2222);
+    else if (a['playable'] == '1') this.applyEmissive(item, 0x8cff8c);   // a card you can play now
     else if (a['moveMarker'] || a['captureTarget'] == '1') this.applyEmissive(item, 0xffe000);
     else this.applyEmissive(item, null);
   }

@@ -30,6 +30,20 @@ export class MgThree{
   fontLoader!: FontLoader;
   interactionManager!: InteractionManager;
 
+  // Cache textures by URL so re-created items (e.g. cards rebuilt every action) reuse the
+  // same THREE.Texture instead of re-fetching/decoding the image each time.
+  private texCache: { [url: string]: { tex: any, ready: boolean, waiters: ((t: any) => void)[] } } = {};
+  getTexture(url: string, onReady?: (t: any) => void): any {
+    let e = this.texCache[url];
+    if (!e) {
+      e = { tex: null, ready: false, waiters: [] };
+      this.texCache[url] = e;
+      e.tex = this.textureLoader.load(url, (t: any) => { e.ready = true; e.waiters.forEach(w => w(t)); e.waiters = []; });
+    }
+    if (onReady) { if (e.ready) onReady(e.tex); else e.waiters.push(onReady); }
+    return e.tex;
+  }
+
   controllers: any;
   selectedObject: any;
   interactionObjects: any = [];
@@ -48,6 +62,22 @@ export class MgThree{
   rendererContainerElement!:HTMLDivElement;
   animationMixers:AnimationMixer[]=[];
   gridHelper!: THREE.GridHelper;
+
+  // --- magnifier loupe (top-left of the screen) ---------------------------
+  // A second small renderer draws the same scene through a "view offset" camera that
+  // samples just the square of screen under the mouse, blown up into a circular canvas.
+  private magRenderer?: THREE.WebGLRenderer;
+  private magCamera?: THREE.PerspectiveCamera;
+  private magElement?: HTMLCanvasElement;
+  private magSize = 280;                    // on-screen size of the loupe (css px)
+  private magZoom = 3;                      // magnification factor
+  private magMouse: { x: number, y: number } | null = null;
+  magEnabled = true;
+  private magMouseMove = (e: MouseEvent) => {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.magMouse = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+  private magMouseLeave = () => { this.magMouse = null; };
 
   setDebugHelpers(on: boolean) {
     if (this.gridHelper) this.gridHelper.visible = on;
@@ -69,6 +99,12 @@ export class MgThree{
   dispose() {
     window.removeEventListener('resize', this.onWindowResize);
     try { this.renderer?.setAnimationLoop(null); } catch {}
+    try {
+      this.renderer?.domElement.removeEventListener('mousemove', this.magMouseMove);
+      this.renderer?.domElement.removeEventListener('mouseleave', this.magMouseLeave);
+      this.magRenderer?.dispose();
+      this.magElement?.remove();
+    } catch {}
   }
 
   constructor() {
@@ -260,6 +296,8 @@ export class MgThree{
     this.gridHelper.visible = false;   // debug grid — off unless DEBUG toggled
     this.scene.add( this.gridHelper );
 
+    this.initMagnifier();
+
     onFinish();
 
   }
@@ -283,8 +321,69 @@ export class MgThree{
     this.orbitControls.update();
     this.interactionManager.update();
     this.renderer.render(this.scene, this.camera);
+    this.updateMagnifier();
 
     TWEEN.update();
+  }
+
+  // Create the loupe canvas + its dedicated renderer/camera and start tracking the mouse.
+  private initMagnifier() {
+    const size = this.magSize;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    Object.assign(canvas.style, {
+      position: 'absolute', top: '12px', left: '12px',
+      width: size + 'px', height: size + 'px',
+      borderRadius: '8px', border: '3px solid rgba(255,255,255,0.85)',
+      boxShadow: '0 2px 12px rgba(0,0,0,0.55)',
+      pointerEvents: 'none', zIndex: '20', display: 'none',
+    } as any);
+    if (!this.rendererContainerElement.style.position)
+      this.rendererContainerElement.style.position = 'relative';
+    this.rendererContainerElement.appendChild(canvas);
+    this.magElement = canvas;
+
+    const r = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    r.setPixelRatio(window.devicePixelRatio || 1);
+    r.setSize(size, size, false);
+    r.shadowMap.enabled = true;
+    r.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.magRenderer = r;
+
+    this.magCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 5000);
+
+    this.renderer.domElement.addEventListener('mousemove', this.magMouseMove);
+    this.renderer.domElement.addEventListener('mouseleave', this.magMouseLeave);
+  }
+
+  // Each frame: point the loupe camera at the square of screen under the mouse and render.
+  private updateMagnifier() {
+    const el = this.magElement, r = this.magRenderer, cam = this.magCamera;
+    if (!this.magEnabled || !el || !r || !cam) return;
+    if (this.renderer.xr.isPresenting || !this.magMouse) { el.style.display = 'none'; return; }
+    const W = this.renderer.domElement.clientWidth;
+    const H = this.renderer.domElement.clientHeight;
+    if (!W || !H) return;
+
+    const region = this.magSize / this.magZoom;          // sampled screen area (css px)
+    let x = this.magMouse.x - region / 2;
+    let y = this.magMouse.y - region / 2;
+    x = Math.max(0, Math.min(W - region, x));
+    y = Math.max(0, Math.min(H - region, y));
+
+    // Copy the main camera exactly, then window the projection to the sampled square.
+    cam.position.copy(this.camera.position);
+    cam.quaternion.copy(this.camera.quaternion);
+    cam.fov = this.camera.fov;
+    cam.near = this.camera.near;
+    cam.far = this.camera.far;
+    cam.aspect = this.camera.aspect;
+    cam.clearViewOffset();
+    cam.setViewOffset(W, H, x, y, region, region);   // square sub-rect → undistorted zoom
+    cam.updateProjectionMatrix();
+
+    el.style.display = 'block';
+    r.render(this.scene, cam);
   }
 
   handleController(controller: XRTargetRaySpace) {
