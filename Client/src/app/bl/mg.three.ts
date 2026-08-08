@@ -69,6 +69,8 @@ export class MgThree{
   private magRenderer?: THREE.WebGLRenderer;
   private magCamera?: THREE.PerspectiveCamera;
   private magElement?: HTMLCanvasElement;
+  private magCloseBtn?: HTMLDivElement;    // ✕ to hide the loupe
+  private magShowBtn?: HTMLDivElement;     // 🔍 to bring it back
   private magSize = 280;                    // on-screen size of the loupe (css px)
   private magZoom = 3;                      // magnification factor
   private magMouse: { x: number, y: number } | null = null;
@@ -104,6 +106,8 @@ export class MgThree{
       this.renderer?.domElement.removeEventListener('mouseleave', this.magMouseLeave);
       this.magRenderer?.dispose();
       this.magElement?.remove();
+      this.magCloseBtn?.remove();
+      this.magShowBtn?.remove();
     } catch {}
   }
 
@@ -354,6 +358,46 @@ export class MgThree{
 
     this.renderer.domElement.addEventListener('mousemove', this.magMouseMove);
     this.renderer.domElement.addEventListener('mouseleave', this.magMouseLeave);
+
+    // ✕ button to hide the loupe (sits in its top-right corner).
+    const closeBtn = document.createElement('div');
+    closeBtn.textContent = '✕';
+    closeBtn.title = 'Hide magnifier';
+    Object.assign(closeBtn.style, {
+      position: 'absolute', top: '16px', left: (12 + size - 28) + 'px',
+      width: '22px', height: '22px', lineHeight: '22px', textAlign: 'center',
+      borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff',
+      font: 'bold 14px sans-serif', cursor: 'pointer', zIndex: '21',
+      userSelect: 'none', display: 'block',   // always visible while the loupe is enabled
+    } as any);
+    this.rendererContainerElement.appendChild(closeBtn);
+    this.magCloseBtn = closeBtn;
+
+    // 🔍 button shown once hidden, to bring the loupe back.
+    const showBtn = document.createElement('div');
+    showBtn.textContent = '🔍';
+    showBtn.title = 'Show magnifier';
+    Object.assign(showBtn.style, {
+      position: 'absolute', top: '12px', left: '12px',
+      width: '34px', height: '34px', lineHeight: '34px', textAlign: 'center',
+      borderRadius: '8px', background: 'rgba(0,0,0,0.55)', color: '#fff',
+      fontSize: '18px', cursor: 'pointer', zIndex: '21',
+      userSelect: 'none', display: 'none',
+    } as any);
+    this.rendererContainerElement.appendChild(showBtn);
+    this.magShowBtn = showBtn;
+
+    closeBtn.addEventListener('click', () => {
+      this.magEnabled = false;
+      canvas.style.display = 'none';
+      closeBtn.style.display = 'none';
+      showBtn.style.display = 'block';
+    });
+    showBtn.addEventListener('click', () => {
+      this.magEnabled = true;
+      showBtn.style.display = 'none';
+      closeBtn.style.display = 'block';   // ✕ back; the loupe canvas reappears on next mouse move
+    });
   }
 
   // Each frame: point the loupe camera at the square of screen under the mouse and render.

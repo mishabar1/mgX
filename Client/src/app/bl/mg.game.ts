@@ -68,7 +68,7 @@ export class MgGame{
   debugPlanes: THREE.Mesh[] = []; // player table (green) + hand (cyan) anchors
   setDebugBoxes(on: boolean) {
     this.showDebugBoxes = on;
-    this.boxHelpers.forEach(h => h.visible = on);
+    this.rebuildDebugBoxes();   // actually ADD the red frames when on, and REMOVE them when off
     // Toggle the coloured boxes' visibility via opacity so any child items
     // (e.g. cards on a player's table) keep rendering when DEBUG is off.
     this.debugPlanes.forEach(m => {
@@ -76,6 +76,22 @@ export class MgGame{
       mat.transparent = true;
       mat.opacity = on ? 1 : 0;
       mat.needsUpdate = true;
+    });
+  }
+
+  // Remove every red item frame from the scene, then (only if debug is on) create a fresh one
+  // per current item. Called on toggle and after each game update, so frames are gone when
+  // debug is off and never linger for cards that have since been removed.
+  rebuildDebugBoxes() {
+    this.boxHelpers.forEach(h => { h.parent?.remove(h); (h as any).geometry?.dispose?.(); });
+    this.boxHelpers = [];
+    if (!this.showDebugBoxes) return;
+    forEach(this.allItems, (item: any) => {
+      if (item?.mesh) {
+        const bh = new THREE.BoxHelper(item.mesh, new THREE.Color(0xFF0000));
+        this.boxHelpers.push(bh);
+        this.mgThree.scene.add(bh);
+      }
     });
   }
 
@@ -655,6 +671,8 @@ export class MgGame{
 
     //players - move / add / remove
 
+    // keep debug frames in sync with the rebuilt item set (no-op when debug is off)
+    if (this.showDebugBoxes) this.rebuildDebugBoxes();
   }
 
 
@@ -731,12 +749,7 @@ export class MgGame{
       this.mgThree.scene.add(mesh);
     }
 
-    // Add a box helper
-    let boxHelper = new THREE.BoxHelper(mesh, new THREE.Color(0xFF0000));
-    boxHelper.visible = this.showDebugBoxes;   // only visible when DEBUG is on
-    this.boxHelpers.push(boxHelper);
-    this.mgThree.scene.add(boxHelper);
-
+    // (Red debug frames are managed centrally by rebuildDebugBoxes, only while DEBUG is on.)
 
     mesh.userData['ItemData'] = itemData;
     itemData.mesh = mesh
