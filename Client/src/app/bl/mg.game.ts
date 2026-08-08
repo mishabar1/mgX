@@ -31,6 +31,36 @@ export class MgGame{
   nameSprites: { [id: string]: THREE.Sprite } = {};
   defendSprites: { [id: string]: THREE.Sprite } = {};
 
+  // Drag-vs-click guard: a camera-orbit drag that happens to end over a clickable item must
+  // NOT fire that item's action. Track pointer travel between press and release.
+  private _ptrDown = false;
+  private _ptrX = 0;
+  private _ptrY = 0;
+  private _ptrMoved = false;
+  private _dragGuardReady = false;
+
+  setupDragGuard() {
+    if (this._dragGuardReady || !this.mgThree?.renderer) return;
+    this._dragGuardReady = true;
+    const el = this.mgThree.renderer.domElement;
+    el.addEventListener('pointerdown', (e: PointerEvent) => {
+      this._ptrDown = true; this._ptrX = e.clientX; this._ptrY = e.clientY; this._ptrMoved = false;
+    });
+    el.addEventListener('pointermove', (e: PointerEvent) => {
+      if (!this._ptrDown) return;
+      const dx = e.clientX - this._ptrX, dy = e.clientY - this._ptrY;
+      if (dx * dx + dy * dy > 36) this._ptrMoved = true;   // >6px travel = a drag, not a click
+    });
+    el.addEventListener('pointerup', () => { this._ptrDown = false; });
+  }
+
+  // Per-animal head tuning: rotX/rotY in DEGREES, size = fitted height (world units), y = lift.
+  // Only override what differs from the defaults (rotY 0 = face table; GLB body: rotX 0,
+  // size 2.6, y 1.4; OBJ head: rotX -90, size 1.9, y 2.0). Filled in as we eyeball each.
+  static ANIMAL_TWEAK: { [k: string]: { rotX?: number, rotY?: number, size?: number, y?: number } } = {
+    // (per-animal overrides go here if any Quaternius model needs adjusting)
+  };
+
   // red bounding-box helpers + the green/cyan player table & hand boxes —
   // all hidden unless DEBUG is toggled on.
   showDebugBoxes = false;
@@ -64,6 +94,7 @@ export class MgGame{
 
   loadGame(mgThree:MgThree, user:UserData) {
     this.mgThree=mgThree;
+    this.setupDragGuard();
 
     this.playerData = this.getPlayerByUserId(user.id)!;
 
@@ -98,35 +129,65 @@ export class MgGame{
       group.lookAt(0,0,0);
       this.mgThree.scene.add(group);
 
-      // head
-      this.mgThree.gltfLoader.load('\\assets\\heads\\suzanne.glb', (gltf) => {
-        const head: THREE.Group = gltf.scene;
+      // head — each seat shows its ANIMAL model (from the seat's "<Colour> <Animal>" name),
+      // tinted to the colour word. Missing models fall back to the monkey (suzanne), also tinted.
+      const isSelf = !!(this.playerData && this.playerData.id == playerData.id);
+      const animal = this.animalOf(playerData);
+      const tint = this.nameColor(playerData);
 
-        // let texture = this.mgThree.textureLoader.load("\\assets\\heads\\base-color.png");
-        this.mgThree.textureLoader.load("\\assets\\heads\\metallic.png",texture=>{
-          texture.flipY = false;
-          head.traverse( function( object:any ) {
-            if ( object.isMesh ) {
-              object.material.map = texture;
-              object.material.side = THREE.DoubleSide;
-              object.material.needsUpdate = true;
+      // Place any loaded model (GLB body or OBJ head, whatever its native scale/orientation):
+      // tint it, fix normals, then auto-fit to a uniform size and recentre so every animal
+      // sits the same regardless of source. isObj models are often Z-up, so tip them upright.
+      const applyHead = (root: THREE.Object3D, isObj: boolean) => {
+        root.traverse((object: any) => {
+          if (object.isMesh) {
+            if (object.geometry && !object.geometry.attributes?.normal) object.geometry.computeVertexNormals();
+            if (object.material) {
+              const mats = Array.isArray(object.material) ? object.material : [object.material];
+              mats.forEach((m: any) => {
+                m.map = null;
+                if (m.color) m.color.setHex(tint);
+                m.side = THREE.DoubleSide;
+                m.needsUpdate = true;
+              });
             }
-          } );
+          }
         });
 
-        // playerData.avatar.mesh = mesh;
-        // mesh.lookAt(0,0,0);
-        if(this.playerData && this.playerData.id == playerData.id){
-          // this is me, no need to add head
-          // mesh.position.set(playerData.avatar.position.x,playerData.avatar.position.y,playerData.avatar.position.z);
-          // this.mgThree.camera.add(mesh);
-        }else{
-          head.visible = this.showHeads;   // optional per the setup-page setting
-          this.headMeshes.push(head);
-          playerData.avatar.mesh!.add(head)
-        }
+        // Per-animal fine-tuning (rotX/rotY in DEGREES, size = fitted world height, y = lift).
+        // Defaults: OBJ heads are Z-up so tip them upright and make them smaller than the
+        // full-body GLB animals; tweak individual entries below as we see them.
+        const D = Math.PI / 180;
+        const tw = MgGame.ANIMAL_TWEAK[animal] || {};
+        const rotX = (tw.rotX !== undefined ? tw.rotX : (isObj ? -90 : 0)) * D;
+        const rotY = (tw.rotY !== undefined ? tw.rotY : 0) * D;   // face the table centre
+        const target = tw.size !== undefined ? tw.size : (isObj ? 1.9 : 2.6);
+        const yLift = tw.y !== undefined ? tw.y : (isObj ? 2.0 : 1.4);
+        root.rotation.set(rotX, rotY, 0);
 
-      });
+        // Auto-fit: scale so the largest dimension is `target`, then recentre at (0, yLift, 0).
+        root.updateWorldMatrix(true, true);
+        const box = new THREE.Box3().setFromObject(root);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        const s = target / maxDim;
+        root.scale.setScalar(s);
+        root.position.set(-center.x * s, -center.y * s + yLift, -center.z * s);
+
+        if (isSelf) return;                // you don't need to see your own head
+        root.visible = this.showHeads;     // optional per the setup-page setting
+        this.headMeshes.push(root);
+        playerData.avatar.mesh!.add(root);
+      };
+
+      // Load the animal's GLB, falling back to the monkey — both tinted & auto-fitted.
+      this.mgThree.gltfLoader.load(
+        `\\assets\\heads\\animals\\${animal}.glb`,
+        (gltf) => applyHead(gltf.scene, false),
+        undefined,
+        () => this.mgThree.gltfLoader.load('\\assets\\heads\\suzanne.glb', (gltf) => applyHead(gltf.scene, false))
+      );
 
       // table anchor for the player's table items — an empty container (no geometry, renders
       // nothing). The card items parented to it still show.
@@ -169,6 +230,50 @@ export class MgGame{
     });
 
     this.refreshDefenderBadges();
+  }
+
+  // The animal word (last token of the "<Colour> <Animal>" name) → the .glb filename to load.
+  animalOf(p: PlayerData): string {
+    const parts = (p.name || '').trim().split(/\s+/);
+    return (parts[parts.length - 1] || 'fox').toLowerCase();
+  }
+
+  // The colour to tint the head: resolve the name's colour word(s) as a CSS colour when
+  // possible (so "Chartreuse Fox" is literally chartreuse), else a stable hash of the name.
+  nameColor(p: PlayerData): number {
+    const parts = (p.name || '').trim().split(/\s+/);
+    const colorWord = parts.slice(0, -1).join('');       // everything but the animal
+    const css = this.cssColorToHex(colorWord);
+    return css !== null ? css : this.hashColor(p.name || 'x');
+  }
+
+  cssColorToHex(name: string): number | null {
+    if (!name) return null;
+    const ctx = document.createElement('canvas').getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = '#010203';                            // sentinel
+    try { ctx.fillStyle = name; } catch { return null; }
+    const v = String(ctx.fillStyle);
+    if (v === '#010203') return null;                     // unchanged → not a valid CSS colour
+    if (v[0] === '#') return parseInt(v.slice(1), 16);
+    const m = v.match(/\d+/g);
+    if (m && m.length >= 3) return (parseInt(m[0]) << 16) | (parseInt(m[1]) << 8) | parseInt(m[2]);
+    return null;
+  }
+
+  hashColor(s: string): number {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return this.hslToHex(h % 360, 65, 55);
+  }
+
+  hslToHex(h: number, s: number, l: number): number {
+    s /= 100; l /= 100;
+    const k = (n: number) => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    const to = (x: number) => Math.round(x * 255);
+    return (to(f(0)) << 16) | (to(f(8)) << 8) | to(f(4));
   }
 
   // Build a billboard text label (canvas texture) that always faces the camera.
@@ -693,10 +798,8 @@ export class MgGame{
 
 
   MeshClickFunc(event: any) {
-    // console.log(event.point);
-    // const direction = new THREE.Vector3();
-    // direction.subVectors( event.target.position, event.point ) ;
-    // console.log(direction);
+    // Ignore clicks that were really the end of a camera-orbit drag.
+    if (this._ptrMoved) { this._ptrMoved = false; return; }
 
     if (this.playerData) {
 
