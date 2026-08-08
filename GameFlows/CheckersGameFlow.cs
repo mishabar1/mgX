@@ -14,14 +14,18 @@ namespace MG.Server.GameFlows
     {
         internal class Assets
         {
-            internal static AssetData BOARD = new ObjectAssetData("chess/board.glb") { Scale = new V3(8) };
-            // One disc model reused for men, kings' crowns, and move markers (scale + tint).
-            internal static AssetData PIECE = new ObjectAssetData("ticktacktoe/hover.gltf") { Scale = new V3(1) };
+            // Wooden 8x8 checkerboard (grid + wooden frame) as a flat textured tile. Scale is
+            // applied to the board ITEM (a TOKEN renders as a 1x1 tile) → an 8x8 grid inside a
+            // 1-unit frame that carries the turn / score text.
+            internal static AssetData BOARD = new TokenAssetData("checkers/board.png");
+            // A true round disc, reused for men, kings' crowns, and move markers (scale + tint).
+            internal static AssetData PIECE = new CylinderAssetData("disc") { Scale = new V3(1) };
             internal static AssetData TURN_TEXT = new Text3dAssetData("turn");
         }
 
-        private static readonly double[] COORDS = { -3.18, -2.27, -1.36, -0.45, 0.45, 1.36, 2.27, 3.18 };
-        private const string BLACK = "0x222222";
+        // Cell centres on a clean 8x8 grid: cell = 1 world unit, board spans -4..+4.
+        private static readonly double[] COORDS = { -3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5 };
+        private const string BLACK = "0x363636"; // charcoal (not pure black) so it reads on the board
         private const string RED = "0xC0392B";
 
         public CheckersGameFlow(GameData gameData) : base(gameData)
@@ -48,7 +52,9 @@ namespace MG.Server.GameFlows
 
         protected override Task StartGame()
         {
-            addItem(Assets.BOARD).SetPosition(-3.17, 0, -3.14);
+            // Board centred at the origin, scaled to a 10-unit tile: 8x8 grid (-4..+4, matching
+            // COORDS) inside a 1-unit wooden frame where the turn / score text is drawn.
+            addItem(Assets.BOARD).SetPosition(0, 0, 0).SetScale(10, 1, 10);
             GameData.Attributes["turn"] = "black";
 
             for (int c = 0; c < 8; c++)
@@ -108,7 +114,7 @@ namespace MG.Server.GameFlows
             foreach (var m in mine)
             {
                 var mk = addItem(Assets.PIECE)
-                    .SetPosition(COORDS[m.ToC], 0.05, COORDS[m.ToR]).SetScale(0.5)
+                    .SetPosition(COORDS[m.ToC], 0.08, COORDS[m.ToR]).SetScale(0.42)
                     .AddAttribute("moveMarker", "1")
                     .AddAttribute("gx", m.ToC.ToString()).AddAttribute("gy", m.ToR.ToString());
                 foreach (var sid in seatIds) mk.AddAction(sid, CheckersMove);
@@ -141,7 +147,7 @@ namespace MG.Server.GameFlows
 
         private void ApplyCheckersMove(ItemData piece, CheckersRules.Move mv, string colorType)
         {
-            piece.SetPosition(COORDS[mv.ToC], 0.1, COORDS[mv.ToR]);
+            piece.SetPosition(COORDS[mv.ToC], 0.12, COORDS[mv.ToR]);
             piece.Attributes["gx"] = mv.ToC.ToString();
             piece.Attributes["gy"] = mv.ToR.ToString();
 
@@ -222,7 +228,7 @@ namespace MG.Server.GameFlows
         private void AddPiece(int c, int r, string colorType)
         {
             addItem(Assets.PIECE)
-                .SetPosition(COORDS[c], 0.1, COORDS[r]).SetScale(0.72)
+                .SetPosition(COORDS[c], 0.12, COORDS[r]).SetScale(0.82)
                 .AddAttribute("piece", "1")
                 .AddAttribute("color", colorType)
                 .AddAttribute("gx", c.ToString()).AddAttribute("gy", r.ToString())
@@ -278,15 +284,19 @@ namespace MG.Server.GameFlows
         private void UpdateTurnText()
         {
             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "black";
-            SetBoardText(turn.ToUpper() + " TO MOVE", turn == "black" ? BLACK : RED);
+            var pieces = getItemsByAttribute("piece");
+            int nr = pieces.Count(p => p.GetStringAttribute("color") == "red");
+            int nb = pieces.Count(p => p.GetStringAttribute("color") == "black");
+            SetBoardText(turn.ToUpper() + " TO MOVE    R:" + nr + " B:" + nb, turn == "black" ? BLACK : RED);
         }
 
         private void SetBoardText(string label, string tint)
         {
             foreach (var t in getItemsByAttribute("turnText")) removeItem(t.Id);
+            // Positioned on the wooden frame (grid ends at ±4, frame centre ≈ ±4.5).
             (double x, double z, double roll)[] sides =
             {
-                (0, -3.9, 180), (0, 3.9, 0), (-3.9, 0, -90), (3.9, 0, 90),
+                (0, -4.5, 180), (0, 4.5, 0), (-4.5, 0, -90), (4.5, 0, 90),
             };
             foreach (var s in sides)
                 addTextItem(Assets.TURN_TEXT).SetText(label)

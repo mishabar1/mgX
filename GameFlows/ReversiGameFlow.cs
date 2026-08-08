@@ -13,13 +13,16 @@ namespace MG.Server.GameFlows
     {
         internal class Assets
         {
-            internal static AssetData BOARD = new ObjectAssetData("chess/board.glb") { Scale = new V3(8) };
-            // One disc model, reused for discs and move markers (per-item scale + tint).
-            internal static AssetData DISC = new ObjectAssetData("ticktacktoe/hover.gltf") { Scale = new V3(1) };
+            // Green Othello board (grid + hoshi dots) as a flat textured tile. Scale is applied
+            // to the board ITEM (TOKENs render as a 1x1 tile), so the board is 8x8 world units.
+            internal static AssetData BOARD = new TokenAssetData("reversi/board.png");
+            // A true round disc, reused for discs and move markers (per-item scale + tint).
+            internal static AssetData DISC = new CylinderAssetData("disc") { Scale = new V3(1) };
             internal static AssetData TURN_TEXT = new Text3dAssetData("turn");
         }
 
-        private static readonly double[] COORDS = { -3.18, -2.27, -1.36, -0.45, 0.45, 1.36, 2.27, 3.18 };
+        // Cell centres on a clean 8x8 grid: cell = 1 world unit, board spans -4..+4.
+        private static readonly double[] COORDS = { -3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5 };
         private const string BLACK = "0x151515";
         private const string WHITE = "0xF2F2F2";
 
@@ -48,7 +51,10 @@ namespace MG.Server.GameFlows
 
         protected override Task StartGame()
         {
-            addItem(Assets.BOARD).SetPosition(-3.17, 0, -3.14);
+            // Board centred at the origin. The texture is a 10-unit tile: an 8x8 green grid
+            // (spanning -4..+4, matching COORDS) inside a 1-unit wooden frame on every side
+            // (the frame is where the turn / score text is drawn).
+            addItem(Assets.BOARD).SetPosition(0, 0, 0).SetScale(10, 1, 10);
             GameData.Attributes["turn"] = "black";
 
             // Standard opening four discs.
@@ -183,8 +189,8 @@ namespace MG.Server.GameFlows
         private void AddDisc(int c, int r, string colorType)
         {
             addItem(Assets.DISC)
-                .SetPosition(COORDS[c], 0.1, COORDS[r])
-                .SetScale(0.72)
+                .SetPosition(COORDS[c], 0.12, COORDS[r])
+                .SetScale(0.85)
                 .AddAttribute("disc", "1")
                 .AddAttribute("color", colorType)
                 .AddAttribute("gx", c.ToString())
@@ -207,8 +213,8 @@ namespace MG.Server.GameFlows
             foreach (var (c, r) in ReversiRules.LegalMoves(BuildBoard(), tc))
             {
                 var mk = addItem(Assets.DISC)
-                    .SetPosition(COORDS[c], 0.05, COORDS[r])
-                    .SetScale(0.45)
+                    .SetPosition(COORDS[c], 0.08, COORDS[r])
+                    .SetScale(0.40)
                     .AddAttribute("moveMarker", "1")
                     .AddAttribute("gx", c.ToString())
                     .AddAttribute("gy", r.ToString())
@@ -220,15 +226,19 @@ namespace MG.Server.GameFlows
         private void UpdateTurnText()
         {
             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "black";
-            SetBoardText(turn.ToUpper() + " TO MOVE", turn == "black" ? BLACK : WHITE);
+            var board = BuildBoard();
+            int nw = ReversiRules.Count(board, 'w');
+            int nb = ReversiRules.Count(board, 'b');
+            SetBoardText(turn.ToUpper() + " TO MOVE    W:" + nw + " B:" + nb, turn == "black" ? BLACK : WHITE);
         }
 
         private void SetBoardText(string label, string tint)
         {
             foreach (var t in getItemsByAttribute("turnText")) removeItem(t.Id);
+            // Positioned on the wooden frame (grid ends at ±4, frame centre ≈ ±4.5).
             (double x, double z, double roll)[] sides =
             {
-                (0, -3.9, 180), (0, 3.9, 0), (-3.9, 0, -90), (3.9, 0, 90),
+                (0, -4.5, 180), (0, 4.5, 0), (-4.5, 0, -90), (4.5, 0, 90),
             };
             foreach (var s in sides)
                 addTextItem(Assets.TURN_TEXT).SetText(label)

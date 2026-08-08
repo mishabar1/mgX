@@ -367,6 +367,20 @@ export class MgGame{
 
       }
 
+      if (assetType == "CYLINDER") {
+        // Procedural round disc (a flat cylinder lying on its circular face). Used for
+        // Reversi discs & move markers; the per-item "tint" attribute recolours it via
+        // applyBaseTint(). Unit size is diameter 1, thickness 0.16 — the item's scale
+        // (and the asset scale) size it to the board.
+        const geometry = new THREE.CylinderGeometry(0.5, 0.5, 0.16, 48);
+        const material = new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 0.0, roughness: 0.85});
+        const mesh = new THREE.Mesh(geometry, material);
+        let g = new Group();
+        g.add(mesh);
+        g.scale.set(asset.scale.x, asset.scale.y, asset.scale.z);
+        this.processItem(itemData, g, parentMesh);
+      }
+
 
     } else {
       const mesh: THREE.Group = new THREE.Group()
@@ -689,10 +703,12 @@ export class MgGame{
     });
   }
 
-  // Colour an item from its attributes: selected piece = bright green, move-target = bright yellow.
+  // Colour an item from its attributes: selected piece = bright green, checked king = red,
+  // move-target = bright yellow.
   refreshItemHighlight(item: ItemData) {
     const a = item.attributes || {};
     if (a['selected'] == '1') this.applyEmissive(item, 0x33ff44);
+    else if (a['check'] == '1') this.applyEmissive(item, 0xEE2222);
     else if (a['moveMarker'] || a['captureTarget'] == '1') this.applyEmissive(item, 0xffe000);
     else this.applyEmissive(item, null);
   }

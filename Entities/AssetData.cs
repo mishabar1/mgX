@@ -9,6 +9,7 @@ namespace MG.Server.Entities
     [JsonDerivedType(typeof(SoundAssetData), typeDiscriminator: AssetTypeEnum.SOUND)]
     [JsonDerivedType(typeof(Text3dAssetData), typeDiscriminator: AssetTypeEnum.TEXT3D)]
     [JsonDerivedType(typeof(TextBlockAssetData), typeDiscriminator: AssetTypeEnum.TEXTBLOCK)]
+    [JsonDerivedType(typeof(CylinderAssetData), typeDiscriminator: AssetTypeEnum.CYLINDER)]
     public class AssetData : BaseData<AssetData>
     {
         public string? FrontURL { get; set; }
@@ -78,13 +79,25 @@ namespace MG.Server.Entities
         }
     }
 
+    // A procedural round disc (Three.js CylinderGeometry) — no model file needed.
+    // Used for Reversi/Othello discs; the per-item "tint" attribute colours it (black/white).
+    public class CylinderAssetData : AssetData
+    {
+        public CylinderAssetData() { }
+        public CylinderAssetData(string key = "disc") : base(AssetTypeEnum.CYLINDER)
+        {
+            Name = "cylinder:" + key;
+        }
+    }
+
     public class AssetTypeEnum
     {
         public const string TOKEN = "TOKEN"; // some "box" with very small height and 2 sides - front and back
         public const string OBJECT = "OBJECT"; // stl, gbl or obj file to load a 3d model
-        public const string SOUND = "SOUND"; // mp3 sound - can be played on demand        
+        public const string SOUND = "SOUND"; // mp3 sound - can be played on demand
         public const string TEXT3D = "TEXT3D"; // 3d text
-        public const string TEXTBLOCK = "TEXTBLOCK"; // 3d text      
+        public const string TEXTBLOCK = "TEXTBLOCK"; // 3d text
+        public const string CYLINDER = "CYLINDER"; // procedural round disc (radius/height), tinted per-item
 
     }
 
