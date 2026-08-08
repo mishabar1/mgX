@@ -122,23 +122,22 @@ export class MgGame{
 
       });
 
-      //table (green) — a debug anchor for the player's table items
-      const playerTable = new Mesh(new BoxGeometry(0.1, 0.01, 0.1), new MeshBasicMaterial({color: 0x00ff00, transparent: true, opacity: this.showDebugBoxes ? 1 : 0}));
+      // table anchor for the player's table items — an empty container (no geometry, renders
+      // nothing). The card items parented to it still show.
+      const playerTable = new Group();
       playerTable.name = "PLAYER TABLE";
       playerData.avatar.mesh?.add(playerTable);
       playerTable.position.set(0,-1.5,1.5);
-      this.debugPlanes.push(playerTable);
 
       this.tableMeshes[playerData.id] = playerTable;
       this.createItem(playerData.table,playerTable);
 
-      //hand (cyan) — a debug anchor for the player's hand items
-      const playerHand = new Mesh(new BoxGeometry(0.1, 0.01, 0.1), new MeshBasicMaterial({color: 0x00ffff, transparent: true, opacity: this.showDebugBoxes ? 1 : 0}));
+      // hand anchor for the player's hand items — empty container (see note above).
+      const playerHand = new Group();
       playerHand.name = "PLAYER HAND";
       playerData.avatar.mesh?.add(playerHand);
       playerHand.rotation.x = -Math.PI / 2;
       playerHand.position.set(0,0,1.5);
-      this.debugPlanes.push(playerHand);
 
       this.handMeshes[playerData.id] = playerHand;
       this.createItem(playerData.hand, playerHand);

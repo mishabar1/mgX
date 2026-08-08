@@ -3,6 +3,7 @@ using MG.Server.Controllers;
 using MG.Server.Database;
 using MG.Server.Entities;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using System.Linq;
 using System.Reflection;
 using static MG.Server.GameFlows.TikTakToeGameFlow;
 
@@ -13,6 +14,15 @@ namespace MG.Server.GameFlows
 
         public GameData GameData { get; set; }
         public List<GameData> HistoryGameData { get; set; }
+
+        // How many seats must be occupied (HUMAN or AI) before the game may start. By default
+        // EVERY seat the game creates is mandatory; a game with optional seats can override this.
+        public virtual int MinPlayers => GameData.Players?.Count ?? 0;
+
+        // Seats currently taken by a human or an AI (EMPTY_SEAT doesn't count).
+        public int OccupiedSeats => GameData.Players?.Count(p => p.Type != PlayerTypeEnum.EMPTY_SEAT) ?? 0;
+
+        public bool CanStart => OccupiedSeats >= MinPlayers;
 
 
         public static GameData CreateGame(string gameType, string userId)
@@ -65,7 +75,8 @@ namespace MG.Server.GameFlows
         {
             this.GameData.Players = new List<PlayerData>();
             await Create();
-
+            // Publish the required-seat count so the client can gate Start.
+            this.GameData.MinPlayers = this.MinPlayers;
         }
         protected abstract Task Create();
 
@@ -106,6 +117,10 @@ namespace MG.Server.GameFlows
 
         public async Task RunStartFlow()
         {
+            // Safety net (the client also gates the Start button): never start until every
+            // mandatory seat is occupied by a human or an AI.
+            this.GameData.MinPlayers = this.MinPlayers;
+            if (!CanStart) return;
 
             this.GameData.GameStatus = GameStatusEnum.PLAY;
 

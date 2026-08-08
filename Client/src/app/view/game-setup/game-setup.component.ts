@@ -56,6 +56,17 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
   get canOpen(): boolean { const s = String(this.gameData?.gameStatus); return s === 'PLAY' || s === 'ENDED'; }
   get isStarted(): boolean { return String(this.gameData?.gameStatus) === 'PLAY'; }
 
+  // Seat occupancy — a game can only start once all mandatory seats are taken (by a
+  // human or an AI). EMPTY_SEAT doesn't count.
+  get occupiedSeats(): number {
+    return (this.gameData?.players || []).filter(p => p.type !== 'EMPTY_SEAT').length;
+  }
+  get minPlayers(): number {
+    return this.gameData?.minPlayers ?? (this.gameData?.players?.length || 0);
+  }
+  get seatsReady(): boolean { return this.occupiedSeats >= this.minPlayers; }
+  seatEmpty(player: PlayerData): boolean { return player.type === 'EMPTY_SEAT'; }
+
   constructor(public signalRService: SignalrService,
               private router: Router,
               private unsubscriberService: UnsubscriberService,
@@ -140,6 +151,7 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
 
   start() {
     if (this.isStarted) return; // already running — use Restart instead
+    if (!this.seatsReady) return; // not all mandatory seats are filled yet
     // Once started, jump straight into the game (same as clicking Open).
     const go = () => this.router.navigate([RouteNames.GamePlay, this.gameId]);
     const status = String(this.gameData?.gameStatus);

@@ -17,6 +17,7 @@ export class GameData {
   gameType!: number;
   players!: PlayerData[];
   winners?: PlayerData[];
+  minPlayers?: number;   // required occupied seats before the game can start
 
   observer!:LocationData;
 

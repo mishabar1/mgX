@@ -15,6 +15,10 @@ namespace MG.Server.Entities
         public string CurrentTurnId { get; set; }
         public List<PlayerData> Winners { get; set; }
 
+        // Minimum occupied seats (HUMAN or AI) required before the game can start. Set from the
+        // game flow's MinPlayers at creation; the client uses it to gate the Start button.
+        public int MinPlayers { get; set; }
+
         public LocationData Observer { get; set; }
 
         [JsonIgnore] public BaseGameFlow GameFlow { get; set; }

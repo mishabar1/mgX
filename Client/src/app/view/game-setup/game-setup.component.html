@@ -7,13 +7,21 @@
     </div>
 
     <div class="mg-row-center" style="gap: 10px;">
-      <p-button (onClick)="setup()" severity="secondary" label="Setup" icon="pi pi-cog"></p-button>
-      <p-button (onClick)="start()" severity="warn" label="Start" icon="pi pi-play" [disabled]="isStarted"></p-button>
+      <p-button (onClick)="start()" severity="warn" label="Start" icon="pi pi-play" [disabled]="isStarted || !seatsReady"></p-button>
       @if (isStarted) {
         <p-button (onClick)="restart()" severity="warn" label="Restart" icon="pi pi-refresh"></p-button>
       }
       <p-button (onClick)="open()" severity="success" label="Open" icon="pi pi-external-link" [disabled]="!canOpen"></p-button>
     </div>
+
+    @if (!isStarted && !seatsReady) {
+      <div class="mg-row-center" style="margin-top:8px;">
+        <span style="color:#ef4444;font-weight:600;">
+          <i class="pi pi-exclamation-triangle" style="margin-right:6px;"></i>
+          {{ occupiedSeats }} / {{ minPlayers }} seats filled — fill every seat to start
+        </span>
+      </div>
+    }
 
     <div class="mg-section">Players</div>
     @for (player of gameData.players; track player) {
@@ -28,6 +36,9 @@
             <span style="color: var(--mg-muted); font-weight: 400; margin-left: 8px;">
               {{ player.user?.name || '… click Join to take this seat …' }}
             </span>
+            @if (seatEmpty(player)) {
+              <span style="color:#ef4444; font-weight:600; margin-left:8px;">(required — empty)</span>
+            }
           }
         </div>
         <div class="mg-spacer"></div>
