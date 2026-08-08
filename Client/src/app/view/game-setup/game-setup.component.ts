@@ -24,9 +24,12 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
   gameData!: GameData;
   user!:UserData;
 
-  // Show/hide the player avatar heads in the 3D scene (persisted, read on game load).
-  get showHeads(): boolean { return localStorage.getItem('mg.showHeads') !== 'false'; }
-  set showHeads(v: boolean) { localStorage.setItem('mg.showHeads', v ? 'true' : 'false'); }
+  // Show/hide the player avatar heads in the 3D scene. Now saved ON THE GAME (shared,
+  // survives reload) — default shown when the setting is absent.
+  get showHeads(): boolean { return this.gameData?.attributes?.['showHeads'] !== '0'; }
+  setShowHeads(enabled: boolean) {
+    this.dalService.setShowHeads(this.gameId!, enabled).subscribe();
+  }
 
   // Voice-chat settings (stored on the game, shared by everyone).
   get allowVoice(): boolean { return !!this.gameData?.attributes?.['allowVoice']; }

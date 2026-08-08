@@ -66,4 +66,9 @@ export class DALService{
   setVoice(gameId: string, enabled: boolean, spectators: boolean): Observable<any> {
     return this.http.post<any>(this.baseGameUrl + `/SetVoice`, {gameId, enabled, spectators});
   }
+
+  // Toggle the game's "show player heads" setting (saved on the game).
+  setShowHeads(gameId: string, enabled: boolean): Observable<any> {
+    return this.http.post<any>(this.baseGameUrl + `/SetShowHeads`, {gameId, enabled});
+  }
 }

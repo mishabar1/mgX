@@ -61,7 +61,8 @@ export class MgGame{
     this.playerData = this.getPlayerByUserId(user.id)!;
 
     // Heads-visibility preference set on the game setup page (default: shown).
-    this.showHeads = localStorage.getItem('mg.showHeads') !== 'false';
+    // Read the "show heads" preference from the saved game state (default shown).
+    this.showHeads = this.gameData.attributes?.['showHeads'] !== '0';
 
     console.log("loadGame");
     // console.log(gameData, dayjs().startOf('month').add(1, 'day').set('year', 2018).format('YYYY-MM-DD HH:mm:ss'));

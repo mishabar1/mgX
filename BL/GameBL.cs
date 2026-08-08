@@ -137,6 +137,21 @@ namespace MG.Server.BL
             return new { ok = true };
         }
 
+        // Persist the "show heads" setting on the game and broadcast. Stored explicitly as
+        // "1"/"0" so absence can still default to shown.
+        internal async Task<object?> SetShowHeads(SetShowHeadsData data)
+        {
+            var game = _dataRepository.Games.FirstOrDefault(x => x.Id == data.gameId);
+            if (game != null)
+            {
+                game.Attributes["showHeads"] = data.enabled ? "1" : "0";
+                await DataRepository.Singleton.HubGameUpdated(game);
+            }
+
+            await _dataRepository.Save();
+            return new { ok = true };
+        }
+
         internal async Task<object?> JoinGame(JoinGameData data)
         {
             // find game in db

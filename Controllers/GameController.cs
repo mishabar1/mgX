@@ -80,6 +80,14 @@ namespace MG.Server.Controllers
             return Ok(await _gameBL.SetVoice(data));
         }
 
+        // Toggle the per-game "show player heads" setting (stored on the game, broadcast to all).
+        [HttpPost("SetShowHeads")]
+        public async Task<IActionResult> SetShowHeads(SetShowHeadsData data)
+        {
+            _logger.LogTrace("SetShowHeads");
+            return Ok(await _gameBL.SetShowHeads(data));
+        }
+
 
         //[HttpPost("ExecuteAction")]
         //public async Task<IActionResult> ExecuteAction(ExecuteActionData data)
@@ -113,6 +121,11 @@ namespace MG.Server.Controllers
         public string gameId { get; set; }
         public bool enabled { get; set; }    // voice chat allowed at all
         public bool spectators { get; set; } // if true, spectators may join too (else players only)
+    }
+    public class SetShowHeadsData
+    {
+        public string gameId { get; set; }
+        public bool enabled { get; set; }    // show player avatar heads in the 3D scene
     }
     public class CreateGameData
     {       
