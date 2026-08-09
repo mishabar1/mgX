@@ -25,6 +25,18 @@ namespace MG.Server.GameFlows
         public bool CanStart => OccupiedSeats >= MinPlayers;
 
 
+        private static string PrettyName(string type) => type switch
+        {
+            GameTypeEnum.TIK_TAK_TOE => "Tic-Tac-Toe",
+            GameTypeEnum.CHESS => "Chess",
+            GameTypeEnum.DND => "D&D",
+            GameTypeEnum.GOMOKU => "Gomoku",
+            GameTypeEnum.REVERSI => "Reversi",
+            GameTypeEnum.CHECKERS => "Checkers",
+            GameTypeEnum.DURAK => "Durak",
+            _ => type
+        };
+
         public static GameData CreateGame(string gameType, string userId)
         {
             var game = new GameData();
@@ -58,6 +70,11 @@ namespace MG.Server.GameFlows
 
             game.GameStatus = GameStatusEnum.CREATED;
             game.CreatorId = userId;
+
+            // Friendly name: game type + an auto number (e.g. "Chess 2"), instead of the
+            // random "Colour Animal" default.
+            int seq = (DataRepository.Singleton?.Games?.Count(g => g.GameType == game.GameType) ?? 0) + 1;
+            game.Name = PrettyName(game.GameType) + " " + seq;
 
             _ = game.GameFlow.RunCreateFlow();
 

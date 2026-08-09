@@ -10,6 +10,7 @@ namespace MG.Server.Entities
     [JsonDerivedType(typeof(Text3dAssetData), typeDiscriminator: AssetTypeEnum.TEXT3D)]
     [JsonDerivedType(typeof(TextBlockAssetData), typeDiscriminator: AssetTypeEnum.TEXTBLOCK)]
     [JsonDerivedType(typeof(CylinderAssetData), typeDiscriminator: AssetTypeEnum.CYLINDER)]
+    [JsonDerivedType(typeof(ArrowAssetData), typeDiscriminator: AssetTypeEnum.ARROW)]
     public class AssetData : BaseData<AssetData>
     {
         public string? FrontURL { get; set; }
@@ -90,6 +91,17 @@ namespace MG.Server.Entities
         }
     }
 
+    // A flat "last move" arrow (shaft + cone head) built procedurally in the client.
+    // The item's "len" attribute is the length; rotation.y aims it; "tint" colours it.
+    public class ArrowAssetData : AssetData
+    {
+        public ArrowAssetData() { }
+        public ArrowAssetData(string key = "arrow") : base(AssetTypeEnum.ARROW)
+        {
+            Name = "arrow:" + key;
+        }
+    }
+
     public class AssetTypeEnum
     {
         public const string TOKEN = "TOKEN"; // some "box" with very small height and 2 sides - front and back
@@ -98,6 +110,7 @@ namespace MG.Server.Entities
         public const string TEXT3D = "TEXT3D"; // 3d text
         public const string TEXTBLOCK = "TEXTBLOCK"; // 3d text
         public const string CYLINDER = "CYLINDER"; // procedural round disc (radius/height), tinted per-item
+        public const string ARROW = "ARROW";       // procedural flat "last move" arrow (shaft + head)
 
     }
 

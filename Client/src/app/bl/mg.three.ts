@@ -48,6 +48,14 @@ export class MgThree{
   selectedObject: any;
   interactionObjects: any = [];
   selectedObjectDistance: any;
+
+  // Meshes currently gliding to a new position (smooth piece movement).
+  movers: { mesh: THREE.Object3D; target: THREE.Vector3 }[] = [];
+  animateTo(mesh: THREE.Object3D, target: THREE.Vector3) {
+    const existing = this.movers.find(m => m.mesh === mesh);
+    if (existing) existing.target.copy(target);
+    else this.movers.push({ mesh, target: target.clone() });
+  }
   objectUnselectedColor = "red";
   objectSelectedColor = "blue";
 
@@ -307,6 +315,16 @@ export class MgThree{
   }
 
   animationLoop(){
+    // Glide any moving pieces toward their target (smooth movement, no "jump").
+    for (let i = this.movers.length - 1; i >= 0; i--) {
+      const mv = this.movers[i];
+      mv.mesh.position.lerp(mv.target, 0.25);
+      if (mv.mesh.position.distanceTo(mv.target) < 0.02) {
+        mv.mesh.position.copy(mv.target);
+        this.movers.splice(i, 1);
+      }
+    }
+
     if (this.animationMixers.length ){
       let delta = this.clock.getDelta();
       forEach(this.animationMixers,mixer=>{

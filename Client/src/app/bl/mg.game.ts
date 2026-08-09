@@ -586,6 +586,23 @@ export class MgGame{
         this.processItem(itemData, g, parentMesh);
       }
 
+      if (assetType == "ARROW") {
+        // Flat "last move" arrow: a shaft + cone head pointing along +X from the item's
+        // origin. Length comes from the "len" attribute; rotation.y aims it; tint colours it.
+        const len = parseFloat((itemData.attributes && itemData.attributes['len']) || '1');
+        const headLen = 0.42, headR = 0.17, shaftW = 0.1;
+        const shaftLen = Math.max(0.02, len - headLen);
+        const mat = new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 0.0, roughness: 0.9});
+        const shaft = new THREE.Mesh(new THREE.BoxGeometry(shaftLen, 0.06, shaftW), mat);
+        shaft.position.x = shaftLen / 2;
+        const head = new THREE.Mesh(new THREE.ConeGeometry(headR, headLen, 16), mat);
+        head.rotation.z = -Math.PI / 2; // cone points +Y by default → aim it +X
+        head.position.x = shaftLen + headLen / 2;
+        const g = new Group();
+        g.add(shaft); g.add(head);
+        this.processItem(itemData, g, parentMesh);
+      }
+
 
     } else {
       const mesh: THREE.Group = new THREE.Group()
@@ -681,10 +698,16 @@ export class MgGame{
     //console.log("updateItemPosition", item, position);
 
     item.position = position;
-    // Set directly (was a TWEEN.Tween that stopped advancing after the tween.js v25 bump,
-    // so pieces updated in data but never moved on screen). Direct set is reliable.
-    item.mesh!.position.set(position.x, position.y, position.z);
+    if (!item.mesh) return;
 
+    const target = new THREE.Vector3(position.x, position.y, position.z);
+    // If it's essentially where it already is, snap (avoids needless work); otherwise
+    // glide there smoothly via the render loop (so opponent moves animate, not jump).
+    if (item.mesh.position.distanceTo(target) < 0.001) {
+      item.mesh.position.copy(target);
+    } else {
+      this.mgThree.animateTo(item.mesh, target);
+    }
   }
 
   updateItemScale(item: ItemData, scale: V3) {

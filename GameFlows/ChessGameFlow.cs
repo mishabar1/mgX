@@ -36,6 +36,9 @@ namespace MG.Server.GameFlows
 
             // 3D text used for the "whose turn" labels around the board edges.
             internal static AssetData TURN_TEXT = new Text3dAssetData("turn");
+
+            // "Last move" arrow (from → to), shown until the next move.
+            internal static AssetData ARROW = new ArrowAssetData("move");
         }
 
         // Cell centres on a clean 8x8 grid: cell = 1 world unit, board spans -4..+4.
@@ -61,6 +64,7 @@ namespace MG.Server.GameFlows
             addAsset(Assets.BISHOP_B); addAsset(Assets.KNIGHT_B); addAsset(Assets.PAWN_B);
             addAsset(Assets.MARKER);
             addAsset(Assets.TURN_TEXT);
+            addAsset(Assets.ARROW);
 
             GameData.Observer.Position.Set(0, 10, 0);
 
@@ -411,7 +415,24 @@ namespace MG.Server.GameFlows
             Console.WriteLine($"CHESS: {moverColor} {moverPiece} {Square(fromC, fromR)}->{Square(tc, tr)}{tag}  |  {GameData.Attributes["turn"]} to move");
 
             UpdateTurnText();  // refresh the board-edge "whose turn" labels
+            DrawMoveArrow(fromC, fromR, tc, tr); // last-move arrow
             ClearSelection(); // un-highlight + remove markers
+        }
+
+        // Blue arrow from the moved piece's old square to its new one; replaced each move.
+        private void DrawMoveArrow(int fromC, int fromR, int toC, int toR)
+        {
+            foreach (var a in getItemsByAttribute("movearrow")) removeItem(a.Id);
+            double x1 = COORDS[fromC], z1 = COORDS[fromR], x2 = COORDS[toC], z2 = COORDS[toR];
+            double dxw = x2 - x1, dzw = z2 - z1;
+            double len = Math.Sqrt(dxw * dxw + dzw * dzw);
+            double ang = Math.Atan2(-dzw, dxw) * 180.0 / Math.PI;
+            addItem(Assets.ARROW)
+                .SetPosition(x1, 0.35, z1)
+                .SetRotation(0, ang, 0)
+                .AddAttribute("movearrow", "1")
+                .AddAttribute("len", len.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .AddAttribute("tint", "0x2F80ED");
         }
 
         // Board coordinate → algebraic square name, e.g. (4,0) → "e1".
