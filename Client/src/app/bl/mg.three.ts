@@ -165,6 +165,9 @@ export class MgThree{
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setSize(this.rendererContainerElement.clientWidth, this.rendererContainerElement.clientHeight);
     this.rendererContainerElement.appendChild(this.renderer.domElement);
+    // Let the canvas consume touch gestures (orbit/zoom + tap-to-select) instead of the
+    // browser scrolling/zooming the page — needed for phones/tablets.
+    (this.renderer.domElement.style as any).touchAction = 'none';
 
     // Refresh the canvas whenever the window resizes.
     window.addEventListener('resize', this.onWindowResize);

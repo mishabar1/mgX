@@ -112,9 +112,37 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
           this.endMessage = '';
         }
         this.lastStatus = status;
+        this.computeHud(data);
       });
     });
 
+  }
+
+  // Captured/score readout for chess & checkers (top-centre HUD).
+  hud = '';
+  private computeHud(data: any) {
+    const type = String(data?.gameType);
+    if (type !== 'CHESS' && type !== 'CHECKERS') { this.hud = ''; return; }
+
+    const byColor: { [c: string]: any[] } = {};
+    const walk = (it: any) => {
+      if (!it) return;
+      const a = it.attributes || {};
+      if (a['piece'] && a['color']) (byColor[a['color']] = byColor[a['color']] || []).push(it);
+      (it.items || []).forEach(walk);
+    };
+    walk(data?.table);
+
+    if (type === 'CHESS') {
+      const val: any = { pawn: 1, knight: 3, bishop: 3, rook: 5, queen: 9, king: 0 };
+      const mat = (c: string) => (byColor[c] || []).reduce((s, it) => s + (val[it.attributes.piece] || 0), 0);
+      const w = mat('white'), b = mat('black'), d = w - b;
+      const adv = d > 0 ? `White +${d}` : d < 0 ? `Black +${-d}` : 'even';
+      this.hud = `White ${w}  ·  Black ${b}   (${adv})`;
+    } else { // CHECKERS
+      const bk = (byColor['black'] || []).length, rd = (byColor['red'] || []).length;
+      this.hud = `Black ${bk}  ·  Red ${rd}`;
+    }
   }
 
   backToList() {
@@ -157,6 +185,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       this.endMessage = this.lastStatus === 'ENDED'
         ? ((game.attributes?.result) || 'Game over')
         : '';
+      this.computeHud(game);
 
       this.mgThree=new MgThree();
       this.mgThree.initThree(this.rendererContainer.nativeElement,()=>{

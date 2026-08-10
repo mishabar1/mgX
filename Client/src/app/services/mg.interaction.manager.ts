@@ -371,6 +371,9 @@ export class InteractionManager {
   };
 
   onMouseClick = (mouseEvent: MouseEvent) => {
+    // Raycast at the click/tap point. Essential for touch: a tap synthesises a click with
+    // no preceding mousemove, so without this the ray would use a stale position.
+    this.mapPositionToPoint(this.mouse, mouseEvent.clientX, mouseEvent.clientY);
     this.update();
     this.dispatchToClosest(new InteractiveEvent('click', mouseEvent));
   };

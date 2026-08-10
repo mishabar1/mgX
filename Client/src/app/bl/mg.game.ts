@@ -650,8 +650,35 @@ export class MgGame{
     this.handleItemVisibility(old_item);
   }
 
+  // --- sound effects (Web Audio, no asset files) -----------------------------
+  private audioCtx?: AudioContext;
+  private movedThisUpdate = false;
+  private playTone(freq: number, dur: number, gain = 0.06, type: OscillatorType = 'triangle') {
+    try {
+      if (!this.audioCtx) this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const ctx = this.audioCtx;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(gain, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(); o.stop(ctx.currentTime + dur);
+    } catch {}
+  }
+  private playMove() { this.playTone(320, 0.08, 0.05, 'triangle'); }
+  private playCapture() { this.playTone(150, 0.15, 0.09, 'sawtooth'); }
+  // A "real" board piece/card (not a marker, label, arrow, button…).
+  private static REAL = ['piece', 'disc', 'stone', 'item', 'card', 'fieldAtt', 'fieldDef'];
+  private static CAPTURABLE = ['piece', 'disc', 'stone', 'item'];
+  private hasAny(it: ItemData, keys: string[]) { const a = it.attributes || {}; return keys.some(k => a[k] != null); }
+
   updateGame(new_game: GameData) {
     //console.log("updateGame",new_game);
+
+    // Snapshot before the diff, to tell a move from a capture for the sound cue.
+    const prevRealIds = new Set(Object.keys(this.allItems).filter(id => this.hasAny(this.allItems[id], MgGame.REAL)));
+    const prevCapturable = Object.values(this.allItems).filter(it => this.hasAny(it, MgGame.CAPTURABLE)).length;
+    this.movedThisUpdate = false;
 
     //mark all items to delete - and each item that updated - will be mrked "not"
     forEach(this.allItems, (item, key) => {
@@ -690,6 +717,14 @@ export class MgGame{
 
     // keep debug frames in sync with the rebuilt item set (no-op when debug is off)
     if (this.showDebugBoxes) this.rebuildDebugBoxes();
+
+    // Sound cue: fewer capturable pieces than before ⇒ a capture; otherwise if any real
+    // item changed or a piece glided ⇒ a move. (No sound on a no-op update.)
+    const nowRealIds = Object.keys(this.allItems).filter(id => this.hasAny(this.allItems[id], MgGame.REAL));
+    const nowCapturable = Object.values(this.allItems).filter(it => this.hasAny(it, MgGame.CAPTURABLE)).length;
+    let realChanged = nowRealIds.length !== prevRealIds.size || nowRealIds.some(id => !prevRealIds.has(id));
+    if (nowCapturable < prevCapturable) this.playCapture();
+    else if (realChanged || this.movedThisUpdate) this.playMove();
   }
 
 
@@ -706,6 +741,7 @@ export class MgGame{
     if (item.mesh.position.distanceTo(target) < 0.001) {
       item.mesh.position.copy(target);
     } else {
+      this.movedThisUpdate = true; // a piece actually moved (for the move sound)
       this.mgThree.animateTo(item.mesh, target);
     }
   }
