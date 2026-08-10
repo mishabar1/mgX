@@ -1,131 +1,266 @@
-﻿using MG.Server.Controllers;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using MG.Server.Controllers;
 using MG.Server.Entities;
 
 namespace MG.Server.GameFlows
 {
+    // D&D — a DM-driven virtual tabletop (not a win/lose game). Seat 0 is the Dungeon Master
+    // (mandatory) + 2..6 players. Players see nothing until the DM acts. The DM sees a floating
+    // control panel (visible only to them) to: load a scene (a map shown to everyone), place
+    // each player's character, add monsters, and (Stage 2) ask a player to roll a die. The DM
+    // can select any character/monster and click the scene to reposition it.
     public class DnDGameFlow : BaseGameFlow
     {
         internal class Assets
         {
-            internal static AssetData MAP_1_0 = new TokenAssetData("dnd/map_1_0.png");
-            internal static AssetData MAP_1_1 = new TokenAssetData("dnd/map_1_1.png");
-            internal static AssetData SKELETON = new ObjectAssetData("dnd/skeleton.stl");
-            internal static AssetData angel = new ObjectAssetData("dnd/angel.stl");
-
-            internal static AssetData flytrap = new ObjectAssetData("dnd/flytrap.glb");
-            internal static AssetData rover = new ObjectAssetData("dnd/rover.glb");
-
-            internal static AssetData Card1 = new TokenAssetData("dnd/card1.png", "dnd/cardBack.png");
-            internal static AssetData Card2 = new TokenAssetData("dnd/card2.png", "dnd/cardBack.png");
-            internal static AssetData Card3 = new TokenAssetData("dnd/card3.png", "dnd/cardBack.png");
-            internal static AssetData Card4 = new TokenAssetData("dnd/card4.png", "dnd/cardBack.png");
-            internal static AssetData Card5 = new TokenAssetData("dnd/card5.png", "dnd/cardBack.png");
+            internal static AssetData TEXT = new Text3dAssetData("dnd");
+            internal static AssetData BUTTON = new TokenAssetData("common/suits/button_bg.png", "common/suits/button_bg.png");
+            internal static AssetData PAWN = new CylinderAssetData("pawn"); // a player's character token
         }
+
+        // Selectable scenes (map images) and monster models.
+        private static readonly (string label, string url)[] SCENES =
+        {
+            ("Scene 1", "dnd/map_1_0.png"), ("Scene 2", "dnd/map_1_1.png"),
+            ("Scene 3", "dnd/map_1_2.png"), ("Scene 4", "dnd/map_1_3.png"), ("Scene 5", "dnd/map2.jpg"),
+        };
+        private static readonly (string label, string url)[] MONSTERS =
+        {
+            ("Skeleton", "dnd/skeleton.stl"), ("Knight", "dnd/death_knight.stl"),
+            ("Angel", "dnd/angel.stl"), ("Flytrap", "dnd/flytrap.glb"), ("Rover", "dnd/rover.glb"),
+        };
+        private static readonly string[] CHAR_COLORS =
+        { "0xE03131", "0x1971C2", "0x2F9E44", "0xF08C00", "0x9C36B5", "0x0CA678" };
+
+        private const double BOARD = 16; // scene plane size (world units), so the grid spans ±8
+
+        public override int MinPlayers => 3; // DM + at least 2 players
 
         public DnDGameFlow(GameData gameData) : base(gameData)
         {
             gameData.GameType = GameTypeEnum.DND;
         }
 
-        protected override async Task Create()
+        protected override Task Create()
         {
-            Console.WriteLine("DnDGameFlow Create ");
+            addAsset(Assets.TEXT);
+            addAsset(Assets.BUTTON);
+            addAsset(Assets.PAWN);
 
-            addAsset(Assets.MAP_1_0);
-            addAsset(Assets.MAP_1_1);
-            addAsset(Assets.SKELETON);
-            addAsset(Assets.angel);
+            GameData.Observer.Position.Set(0, 24, 0);
 
-            addAsset(Assets.flytrap);
-            addAsset(Assets.rover);
-
-
-            addAsset(Assets.Card1);
-            addAsset(Assets.Card2);
-            addAsset(Assets.Card3);
-            addAsset(Assets.Card4);
-            addAsset(Assets.Card5);
-
-            GameData.Observer.Position.Set(0, 12, 0);
-
+            // Seat 0 = DM, looking straight down for a full overview. The DM owns the near (-z)
+            // edge of the table — the control panel lives there. Players sit around the FAR
+            // half of the ring (angles 90..270), so no one sits under the DM's panel.
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
-                .AddAttribute("type", "DungeonMaster")
-                .SetCameraPosition(-6, 2, 3)
-                .SetAvatarPosition(-6, 2, 3);
+                .AddAttribute("type", "dm")
+                .SetCameraPosition(0, 24, 1)
+                .SetAvatarPosition(0, 3, -17); // the DM's side, just behind the panel
 
-            new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
-                .AddAttribute("type", "Paladin")
-                .SetCameraPosition(0, 2, -6)
-                .SetAvatarPosition(0, 2, -6);
+            for (int i = 0; i < 6; i++)
+            {
+                double deg = 90 + i * 36.0; // 90..270 → right side, around the far edge, to left side
+                double t = deg * Math.PI / 180.0;
+                int cx = (int)Math.Round(15 * Math.Sin(t));
+                int cz = (int)Math.Round(-15 * Math.Cos(t));
+                new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
+                    .AddAttribute("type", "p" + (i + 1))
+                    .SetCameraPosition(cx, 12, cz)
+                    .SetAvatarPosition((int)Math.Round(11 * Math.Sin(t)), 2, (int)Math.Round(-11 * Math.Cos(t)));
+            }
 
-            new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
-                .AddAttribute("type", "Wizard")
-                .SetCameraPosition(8, 2, 0)
-                .SetAvatarPosition(8, 2, 0);
-
-
-
+            return Task.CompletedTask;
         }
 
-        protected override async Task Setup()
+        protected override Task Setup() => Task.CompletedTask;
+
+        protected override Task StartGame()
         {
-            Console.WriteLine("DnDGameFlow Setup ");
-            // Board, tokens and cards are placed in StartGame (which always runs on START),
-            // so the scene appears reliably even if SETUP is skipped.
+            GameData.Attributes["die"] = "20"; // (used in Stage 2)
+            BuildControlPanel();
+            return Task.CompletedTask;
         }
 
-        protected override async Task StartGame()
+        protected override Task EndGame() => Task.CompletedTask;
+        protected override Task<bool> IsEndGame() => Task.FromResult(false); // DM ends the session manually
+        protected override List<PlayerData> GetGameWinners() => new List<PlayerData>();
+
+        // ============================ DM control panel ============================
+        private string? DmId() => getPlayerByAttribute("type", "dm")?.Id;
+
+        private void BuildControlPanel()
         {
-            Console.WriteLine("DnDGameFlow StartGame " + this.GameData);
+            string? dm = DmId();
+            if (dm == null) return;
 
-            //set the map — the map is the surface you click to move the selected token
-            makeMoveSurface(addItem(Assets.MAP_1_0).SetPosition(0, 0, 0).SetScale(10));
-            // tokens are movable: click a token to pick it up, then click the map to place it
-            makeMovable(addItem(Assets.SKELETON).SetPosition(0, 0, 0));
-            makeMovable(addItem(Assets.angel).SetPosition(1, 0, 1));
+            foreach (var p in getItemsByAttribute("panel")) removeItem(p.Id);
 
-            makeMovable(addItem(Assets.rover).SetPosition(3, 0, -3).SetAnimation(2));
-            makeMovable(addItem(Assets.rover).SetPosition(4, 0, -3).SetAnimation(3));
-            makeMovable(addItem(Assets.flytrap).SetPosition(3, 0, 3));
-            makeMovable(addItem(Assets.flytrap).SetPosition(4, 0, 3));
+            // Panel rows stacked just above the board (tight enough to all stay in the DM's
+            // top-down view). Scenes farthest, dice/roll nearest the board.
+            var players = GameData.Players
+                .Where(p => p.Type != PlayerTypeEnum.EMPTY_SEAT && p.GetStringAttribute("type") != "dm")
+                .ToList();
 
-            // give players cards
-            var p = getPlayerByAttribute("type", "DungeonMaster");
-            addItemToPlayerTable(p, Assets.Card1);
-            addItemToPlayerTable(p, Assets.Card2);
-            addItemToPlayerHand(p, Assets.Card3);
-            addItemToPlayerHand(p, Assets.Card4);
+            LayoutRow(SCENES.Length, -14.3, (i, x) =>
+                AddButton(SCENES[i].label, x, -14.3, dm, nameof(LoadScene), "sceneUrl", SCENES[i].url));
 
-            p = getPlayerByAttribute("type", "Paladin");
-            addItemToPlayerTable(p, Assets.Card5);
+            LayoutRow(MONSTERS.Length, -13.1, (i, x) =>
+                AddButton(MONSTERS[i].label, x, -13.1, dm, nameof(AddMonster), "monsterUrl", MONSTERS[i].url));
 
-            p = getPlayerByAttribute("type", "Wizard");
-            addItemToPlayerTable(p, Assets.Card4);
+            LayoutRow(players.Count, -11.9, (i, x) =>
+                AddButton("Place: " + PlayerDisplayName(players[i]), x, -11.9, dm, nameof(PlaceCharacter), "seat", players[i].Id));
+
+            // Die selector (active one highlighted green).
+            string die = GameData.Attributes.TryGetValue("die", out var dv) ? dv : "20";
+            AddButton("d6", -1.3, -10.7, dm, nameof(SetDie), "sides", "6", die == "6" ? "0x2F9E44" : null);
+            AddButton("d20", 1.3, -10.7, dm, nameof(SetDie), "sides", "20", die == "20" ? "0x2F9E44" : null);
+
+            // "Ask to roll" — one per seated player; uses the selected die.
+            LayoutRow(players.Count, -9.5, (i, x) =>
+                AddButton("Roll: " + PlayerDisplayName(players[i]), x, -9.5, dm, nameof(AskRoll), "seat", players[i].Id));
+        }
+
+        // Evenly space `count` items across the board width at depth z, calling place(i, x).
+        private void LayoutRow(int count, double z, Action<int, double> place)
+        {
+            if (count <= 0) return;
+            double span = BOARD - 2;
+            for (int i = 0; i < count; i++)
+            {
+                double x = count == 1 ? 0 : -span / 2 + span * i / (count - 1);
+                place(i, x);
+            }
+        }
+
+        private void AddButton(string label, double x, double z, string dmId, string action, string attrKey, string attrVal, string? tint = null)
+        {
+            var plate = addItem(Assets.BUTTON)
+                .SetPosition(x, 0.05, z).SetScale(1.9, 1, 1.1)
+                .AddAttribute("panel", "1")
+                .AddAttribute(attrKey, attrVal);
+            if (tint != null) plate.AddAttribute("tint", tint); // highlight (e.g. active die)
+            plate.ClickActions[dmId] = action;
+            plate.Visible[dmId] = true;
+
+            var text = addTextItem(Assets.TEXT).SetText(label)
+                .SetPosition(x, 0.14, z).SetScale(0.32).SetRotation(-90, 0, 0)
+                .AddAttribute("panel", "1")
+                .AddAttribute("textColor", "ffffff");
+            text.Visible[dmId] = true;
+        }
+
+        // ============================ DM actions ============================
+        [GameAction]
+        public async Task LoadScene(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            string url = data.Item!.GetStringAttribute("sceneUrl");
+            GameData.Attributes["scene"] = url;
+
+            foreach (var s in getItemsByAttribute("scene")) removeItem(s.Id);
+            var board = addItem(SceneAsset(url)).SetPosition(0, -0.05, 0).SetScale(BOARD, 1, BOARD).AddAttribute("scene", "1");
+            // The scene is the move surface: DM clicks it to drop the selected piece there.
+            board.AddAction(data.Player!.Id, MoveHere);
+            await Task.CompletedTask;
         }
 
         [GameAction]
-        public async Task MapClick(ExecuteActionData data)
+        public async Task AddMonster(ExecuteActionData data)
         {
-            Console.WriteLine(data.point);
-
-            //addItem("X").SetPosition(data.point);
-
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            string url = data.Item!.GetStringAttribute("monsterUrl");
+            // Asset scale (1.6) sizes the normalized model; leave item scale at 1.
+            var m = addItem(MonsterAsset(url)).SetPosition(0, 0.1, 0).AddAttribute("monster", "1");
+            m.AddAction(data.Player!.Id, SelectPiece); // DM can select & move it
+            await Task.CompletedTask;
         }
 
-        protected override async Task EndGame()
+        [GameAction]
+        public async Task PlaceCharacter(ExecuteActionData data)
         {
-            Console.WriteLine("DnDGameFlow EndGame " + this.GameData);
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            string seat = data.Item!.GetStringAttribute("seat");
+            var owner = GameData.Players.Find(p => p.Id == seat);
+            if (owner == null) { await Task.CompletedTask; return; }
 
+            int idx = GameData.Players.Where(p => p.GetStringAttribute("type") != "dm").ToList().FindIndex(p => p.Id == seat);
+            string color = CHAR_COLORS[Math.Max(0, idx) % CHAR_COLORS.Length];
+
+            var pawn = addItem(Assets.PAWN).SetPosition(0, 0.15, 0).SetScale(0.9)
+                .AddAttribute("char", "1").AddAttribute("owner", seat).AddAttribute("tint", color);
+            pawn.AddAction(data.Player!.Id, SelectPiece);
+            await Task.CompletedTask;
         }
-        protected override async Task<bool> IsEndGame()
+
+        // ============================ dice (d6 / d20) ============================
+        private readonly Random _rnd = new Random();
+
+        [GameAction]
+        public async Task SetDie(ExecuteActionData data)
         {
-            return false;
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            GameData.Attributes["die"] = data.Item!.GetStringAttribute("sides");
+            BuildControlPanel(); // refresh the highlight
+            await Task.CompletedTask;
         }
 
-        protected override List<PlayerData> GetGameWinners()
+        // DM asks a player to roll: a die appears that only that player can click.
+        [GameAction]
+        public async Task AskRoll(ExecuteActionData data)
         {
-            return new List<PlayerData>();
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            string seat = data.Item!.GetStringAttribute("seat");
+            int sides = (GameData.Attributes.TryGetValue("die", out var d) ? d : "20") == "6" ? 6 : 20;
+
+            RemoveDieFor(seat); // one pending die per player
+
+            var plate = addItem(Assets.BUTTON)
+                .SetPosition(0, 1.5, 0).SetScale(2.2, 1, 1.4)
+                .AddAttribute("dieItem", "1").AddAttribute("owner", seat)
+                .AddAttribute("sides", sides.ToString()).AddAttribute("tint", "0xF1C40F");
+            plate.ClickActions[seat] = nameof(RollDice);
+            plate.Visible[seat] = true;
+
+            var text = addTextItem(Assets.TEXT).SetText("ROLL d" + sides)
+                .SetPosition(0, 1.62, 0).SetScale(0.4).SetRotation(-90, 0, 0)
+                .AddAttribute("dieItem", "1").AddAttribute("owner", seat).AddAttribute("textColor", "000000");
+            text.Visible[seat] = true;
+            await Task.CompletedTask;
         }
 
+        // The prompted player clicks their die → roll, remove it, show the result to everyone.
+        [GameAction]
+        public async Task RollDice(ExecuteActionData data)
+        {
+            var item = data.Item;
+            if (item == null || !item.HaveAttribute("dieItem")) { await Task.CompletedTask; return; }
+            string seat = item.GetStringAttribute("owner");
+            if (data.Player?.Id != seat) { await Task.CompletedTask; return; } // only the prompted player
+
+            int sides = item.GetIntAttribute("sides");
+            int roll = _rnd.Next(1, sides + 1);
+            RemoveDieFor(seat);
+
+            foreach (var r in getItemsByAttribute("rollResult")) removeItem(r.Id);
+            var who = PlayerDisplayName(GameData.Players.Find(p => p.Id == seat));
+            addTextItem(Assets.TEXT).SetText(who + " rolled d" + sides + " → " + roll)
+                .SetPosition(0, 0.3, 9).SetScale(0.6).SetRotation(-90, 0, 0)
+                .AddAttribute("rollResult", "1").AddAttribute("textColor", "ffd166");
+            await Task.CompletedTask;
+        }
+
+        private void RemoveDieFor(string seat)
+        {
+            foreach (var d in getItemsByAttribute("dieItem").Where(x => x.GetStringAttribute("owner") == seat).ToList())
+                removeItem(d.Id);
+        }
+
+        // ============================ helpers ============================
+        private bool IsDm(ExecuteActionData data) => data.Player != null && data.Player.Id == DmId();
+
+        private AssetData SceneAsset(string url) => addAsset(new TokenAssetData(url, url));
+        private AssetData MonsterAsset(string url) => addAsset(new ObjectAssetData(url) { Scale = new V3(1.6) });
     }
 }
