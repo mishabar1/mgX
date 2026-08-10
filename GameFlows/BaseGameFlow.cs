@@ -227,11 +227,19 @@ namespace MG.Server.GameFlows
                 }
                 while (_undo.Count > 0 && CurrentTurnPlayer()?.Type == PlayerTypeEnum.AI);
 
+                // Let games that render from their own state (e.g. Durak, whose hands live in
+                // player.Hand, not GameData.Table) rebuild the scene from the restored attributes.
+                AfterUndo();
+
                 await DataRepository.Singleton.HubGameUpdated(GameData);
                 await DataRepository.Singleton.HubGamesUpdated(GameData);
             }
             finally { _turnLock.Release(); }
         }
+
+        // Hook: rebuild the scene after an undo restore. Board games keep everything in
+        // GameData.Table (restored above) so they don't need it; Durak overrides to Render().
+        protected virtual void AfterUndo() { }
 
         // Dispatch a single action by name to a [GameAction]-marked method (no broadcast).
         private async Task DispatchAction(ExecuteActionData data)

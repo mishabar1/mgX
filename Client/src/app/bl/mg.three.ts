@@ -79,8 +79,9 @@ export class MgThree{
   private magElement?: HTMLCanvasElement;
   private magCloseBtn?: HTMLDivElement;    // ✕ to hide the loupe
   private magShowBtn?: HTMLDivElement;     // 🔍 to bring it back
+  private magZoomBar?: HTMLDivElement;     // x2 / x4 / … zoom-level buttons
   private magSize = 280;                    // on-screen size of the loupe (css px)
-  private magZoom = 3;                      // magnification factor
+  private magZoom = 4;                      // magnification factor (chosen via the zoom bar)
   private magMouse: { x: number, y: number } | null = null;
   magEnabled = true;
   private magMouseMove = (e: MouseEvent) => {
@@ -116,6 +117,7 @@ export class MgThree{
       this.magElement?.remove();
       this.magCloseBtn?.remove();
       this.magShowBtn?.remove();
+      this.magZoomBar?.remove();
     } catch {}
   }
 
@@ -405,16 +407,44 @@ export class MgThree{
     this.rendererContainerElement.appendChild(showBtn);
     this.magShowBtn = showBtn;
 
+    // Zoom-level bar (x2 / x4 / x6 / x8 / x10) under the loupe.
+    const zoomBar = document.createElement('div');
+    Object.assign(zoomBar.style, {
+      position: 'absolute', top: (12 + size + 6) + 'px', left: '12px',
+      width: size + 'px', display: 'flex', gap: '4px', justifyContent: 'center',
+      zIndex: '21', userSelect: 'none',
+    } as any);
+    const levels = [2, 4, 6, 8, 10];
+    const zoomBtns: HTMLDivElement[] = [];
+    const refreshZoom = () => zoomBtns.forEach((b, i) =>
+      b.style.background = this.magZoom === levels[i] ? 'rgba(59,130,246,0.95)' : 'rgba(0,0,0,0.55)');
+    levels.forEach(lv => {
+      const b = document.createElement('div');
+      b.textContent = 'x' + lv;
+      Object.assign(b.style, {
+        padding: '3px 9px', borderRadius: '6px', color: '#fff',
+        font: 'bold 12px sans-serif', cursor: 'pointer', background: 'rgba(0,0,0,0.55)',
+      } as any);
+      b.addEventListener('click', () => { this.magZoom = lv; refreshZoom(); });
+      zoomBar.appendChild(b);
+      zoomBtns.push(b);
+    });
+    this.rendererContainerElement.appendChild(zoomBar);
+    this.magZoomBar = zoomBar;
+    refreshZoom();
+
     closeBtn.addEventListener('click', () => {
       this.magEnabled = false;
       canvas.style.display = 'none';
       closeBtn.style.display = 'none';
+      zoomBar.style.display = 'none';
       showBtn.style.display = 'block';
     });
     showBtn.addEventListener('click', () => {
       this.magEnabled = true;
       showBtn.style.display = 'none';
       closeBtn.style.display = 'block';   // ✕ back; the loupe canvas reappears on next mouse move
+      zoomBar.style.display = 'flex';
     });
   }
 

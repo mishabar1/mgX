@@ -76,8 +76,32 @@ namespace MG.Server.GameFlows
 
         protected override Task Setup() => Task.CompletedTask;
 
+        // Reposition the OCCUPIED seats evenly around the ring (360/N apart), so 2, 3, … players
+        // are spread across the table instead of clustered in the fixed 6-slot layout. Updates
+        // each seat's camera, avatar and "angle" (which drives its hand/buttons/status placement).
+        private void RespaceSeats()
+        {
+            var occ = GameData.Players.Where(p => p.Type != PlayerTypeEnum.EMPTY_SEAT).ToList();
+            int n = occ.Count;
+            if (n == 0) return;
+            const int Ra = 9;   // avatar ring radius
+            const int Rc = 12;  // camera ring radius
+            for (int i = 0; i < n; i++)
+            {
+                double deg = i * (360.0 / n);
+                double t = deg * Math.PI / 180.0;
+                int ax = (int)Math.Round(Ra * Math.Sin(t));
+                int az = (int)Math.Round(-Ra * Math.Cos(t));
+                int cx = (int)Math.Round(Rc * Math.Sin(t));
+                int cz = (int)Math.Round(-Rc * Math.Cos(t));
+                occ[i].SetCameraPosition(cx, 9, cz).SetAvatarPosition(ax, 2, az);
+                occ[i].Attributes["angle"] = ((int)Math.Round(deg)).ToString(CultureInfo.InvariantCulture);
+            }
+        }
+
         protected override Task StartGame()
         {
+            RespaceSeats(); // spread the actual players evenly around the ring
             var rnd = new Random();
             var deck = DurakRules.BuildDeck();
             DurakRules.Shuffle(deck, rnd);
@@ -124,6 +148,10 @@ namespace MG.Server.GameFlows
         protected override Task EndGame() => Task.CompletedTask;
         protected override Task<bool> IsEndGame() => Task.FromResult(GameData.Attributes.ContainsKey("over"));
 
+        // Undo restores our attributes (hands/deck/field/roles); re-render so the scene —
+        // including each player's hand — reflects the reverted state.
+        protected override void AfterUndo() => Render();
+
         protected override List<PlayerData> GetGameWinners()
         {
             var ids = GameData.Attributes.GetValueOrDefault("winnerIds", "");
@@ -145,6 +173,14 @@ namespace MG.Server.GameFlows
         {
             if (GameData.Attributes.ContainsKey("over")) return false;
             return Undefended().Count > 0 ? player.Id == Defender : player.Id == Attacker;
+        }
+
+        // Whose turn is it (the defender when there's a card to beat, otherwise the attacker)?
+        // Used by undo to rewind past AI moves back to a human.
+        protected override PlayerData? CurrentTurnPlayer()
+        {
+            string id = Undefended().Count > 0 ? Defender : Attacker;
+            return GameData.Players.FirstOrDefault(p => p.Id == id);
         }
 
         public override async Task<bool> PlayAI(PlayerData player, Random rnd)
@@ -200,6 +236,7 @@ namespace MG.Server.GameFlows
                 var ranks = field.SelectMany(p => p.def == null ? new[] { p.att.Rank } : new[] { p.att.Rank, p.def.Value.Rank }).ToHashSet();
                 if (!ranks.Contains(card.Rank)) return;          // throw-in must match a rank on the table
             }
+            SaveUndoPoint();
             hand.RemoveAll(c => c.Code == code);
             field.Add((card, null));
             SetHand(actorId, hand);
@@ -217,6 +254,7 @@ namespace MG.Server.GameFlows
             var card = ParseCode(code);
             if (!hand.Any(c => c.Code == code)) return;
             if (!DurakRules.Beats(card, field[idx].att, Trump)) return;   // illegal defense
+            SaveUndoPoint();
             hand.RemoveAll(c => c.Code == code);
             field[idx] = (field[idx].att, card);
             SetHand(Defender, hand);
@@ -229,6 +267,7 @@ namespace MG.Server.GameFlows
             if (actorId != Defender) return;
             var field = GetField();
             if (field.Count == 0) return;
+            SaveUndoPoint();
             var oldAtt = Attacker; var oldDef = Defender;
             var hand = GetHand(oldDef);
             foreach (var (att, def) in field) { hand.Add(att); if (def != null) hand.Add(def.Value); }
@@ -248,6 +287,7 @@ namespace MG.Server.GameFlows
             if (actorId != Attacker) return;
             var field = GetField();
             if (field.Count == 0 || field.Any(p => p.def == null)) return; // only when all beaten
+            SaveUndoPoint();
             int discarded = int.Parse(GameData.Attributes.GetValueOrDefault("discard", "0"));
             discarded += field.Count * 2;
             GameData.Attributes["discard"] = discarded.ToString();
