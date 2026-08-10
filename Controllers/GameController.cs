@@ -65,6 +65,13 @@ namespace MG.Server.Controllers
             return Ok(await _gameBL.DeleteGame(data));
         }
 
+        [HttpPost("UndoGame")]
+        public async Task<IActionResult> UndoGame(StartGameData data)
+        {
+            _logger.LogTrace("UndoGame");
+            return Ok(await _gameBL.UndoGame(data));
+        }
+
         [HttpPost("JoinGame")]
         public async Task<IActionResult> JoinGame(JoinGameData data)
         {

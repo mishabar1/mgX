@@ -382,7 +382,7 @@ export class MgThree{
     closeBtn.textContent = '✕';
     closeBtn.title = 'Hide magnifier';
     Object.assign(closeBtn.style, {
-      position: 'absolute', top: '16px', left: (12 + size - 28) + 'px',
+      position: 'absolute', top: '16px', left: (15) + 'px',
       width: '22px', height: '22px', lineHeight: '22px', textAlign: 'center',
       borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff',
       font: 'bold 14px sans-serif', cursor: 'pointer', zIndex: '21',

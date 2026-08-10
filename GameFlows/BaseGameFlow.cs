@@ -177,10 +177,60 @@ namespace MG.Server.GameFlows
         protected abstract Task<bool> IsEndGame();
         protected abstract List<PlayerData> GetGameWinners();
 
+        // Serializes all state mutations for THIS game (human actions, AI turns, undo) so a
+        // background AI-timer tick can't interleave with a SignalR action and corrupt state.
+        private readonly System.Threading.SemaphoreSlim _turnLock = new(1, 1);
+
+        // Snapshots taken just before each real move, for undo/takeback. The full history is
+        // kept so you can undo repeatedly, all the way back to the start of the game.
+        private readonly List<GameData> _undo = new();
+        protected void SaveUndoPoint()
+        {
+            _undo.Add(GameData.DeepCopy());
+        }
+
         public async Task ExecuteAction(ExecuteActionData data)
         {
-            await DispatchAction(data);
-            await AfterAction();
+            await _turnLock.WaitAsync();
+            try
+            {
+                await DispatchAction(data);
+                await AfterAction();
+            }
+            finally { _turnLock.Release(); }
+        }
+
+        // Whose turn is it right now? Default uses CurrentTurnId; games that track turn via
+        // an attribute (chess/checkers/…) override this. Used by undo to rewind to a human.
+        protected virtual PlayerData? CurrentTurnPlayer()
+            => GameData.Players?.FirstOrDefault(p => p.Id == GameData.CurrentTurnId);
+
+        // Revert to the last HUMAN turn: pop snapshots (restoring board/attributes/turn — the
+        // seat list is kept so AI agents stay valid) past any AI moves, so undoing in a vs-AI
+        // game takes back both the AI's reply and your move, and the AI won't just replay.
+        public async Task UndoLastMove()
+        {
+            await _turnLock.WaitAsync();
+            try
+            {
+                if (_undo.Count == 0) return;
+                do
+                {
+                    var snap = _undo[_undo.Count - 1];
+                    _undo.RemoveAt(_undo.Count - 1);
+
+                    GameData.Table = snap.Table;
+                    GameData.Attributes = snap.Attributes;
+                    GameData.Winners = snap.Winners;
+                    GameData.CurrentTurnId = snap.CurrentTurnId;
+                    GameData.GameStatus = snap.GameStatus;
+                }
+                while (_undo.Count > 0 && CurrentTurnPlayer()?.Type == PlayerTypeEnum.AI);
+
+                await DataRepository.Singleton.HubGameUpdated(GameData);
+                await DataRepository.Singleton.HubGamesUpdated(GameData);
+            }
+            finally { _turnLock.Release(); }
         }
 
         // Dispatch a single action by name to a [GameAction]-marked method (no broadcast).
@@ -238,8 +288,13 @@ namespace MG.Server.GameFlows
         /// <summary>Play the AI's move (if any) and broadcast the result.</summary>
         public async Task RunAITurn(PlayerData player, Random rnd)
         {
-            if (await PlayAI(player, rnd))
-                await AfterAction();
+            await _turnLock.WaitAsync();
+            try
+            {
+                if (await PlayAI(player, rnd))
+                    await AfterAction();
+            }
+            finally { _turnLock.Release(); }
         }
 
         /// <summary>Make one AI move. Returns true if a move was made.

@@ -96,6 +96,7 @@ namespace MG.Server.GameFlows
 
         private void PlaceDiscAt(int c, int r, string colorType)
         {
+            SaveUndoPoint();
             var board = BuildBoard();
             char cc = colorType == "black" ? 'b' : 'w';
             var flips = ReversiRules.Flips(board, c, r, cc);
@@ -157,6 +158,10 @@ namespace MG.Server.GameFlows
             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "black";
             return player.GetStringAttribute("type") == turn;
         }
+
+        // Turn is tracked via the "turn" attribute → resolve the seat (for undo's AI-skip).
+        protected override PlayerData? CurrentTurnPlayer()
+            => GameData.Attributes.TryGetValue("turn", out var t) ? getPlayerByAttribute("type", t) : null;
 
         public override async Task<bool> PlayAI(PlayerData player, Random rnd)
         {

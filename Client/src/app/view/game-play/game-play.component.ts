@@ -105,10 +105,11 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       // SignalR fires outside Angular's zone — run inside so the overlay renders.
       this.zone.run(() => {
         const status = String(data.gameStatus);
-        // Only pop the overlay when the game FIRST ends — not on every later update
-        // (otherwise it re-appears on each click after the user dismissed it).
+        // Pop the overlay when the game FIRST ends; clear it if we leave ENDED (e.g. undo).
         if (status === 'ENDED' && this.lastStatus !== 'ENDED') {
           this.endMessage = data.attributes?.result || 'Game over';
+        } else if (status !== 'ENDED') {
+          this.endMessage = '';
         }
         this.lastStatus = status;
       });
@@ -118,6 +119,10 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
 
   backToList() {
     this.router.navigate([RouteNames.GamesList]);
+  }
+
+  undo() {
+    this.dalService.undoGame(this.gameId!).subscribe();
   }
 
   // Reset the same game (Setup + Start) and keep playing. The fresh board arrives via

@@ -168,6 +168,7 @@ namespace MG.Server.GameFlows
 
             string type = current.GetStringAttribute("type"); // whose turn it is: "x" or "o"
 
+            SaveUndoPoint();
             var a = addItem(type == "x" ? Assets.X : Assets.O);
             a.AddAttribute("item");
             a.AddAttribute(type); // x or o

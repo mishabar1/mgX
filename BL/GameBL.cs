@@ -117,6 +117,14 @@ namespace MG.Server.BL
             return new { x = "TODO !!! DeleteGame" };
         }
 
+        internal async Task<object> UndoGame(StartGameData data)
+        {
+            var game = _dataRepository.Games.Where(x => x.Id == data.gameId).FirstOrDefault();
+            if (game == null) return new { error = "game not found", gameId = data.gameId };
+            await game.GameFlow.UndoLastMove(); // restores state + re-broadcasts (which saves)
+            return new { ok = true };
+        }
+
         // Persist the per-game voice settings on the game's Attributes and broadcast so
         // every connected client (setup + in-game) sees the change.
         internal async Task<object?> SetVoice(SetVoiceData data)

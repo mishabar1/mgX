@@ -103,6 +103,7 @@ namespace MG.Server.GameFlows
         // Core placement, shared by the human action and the AI.
         private void PlaceStoneAt(int gx, int gy, string mark)
         {
+            SaveUndoPoint();
             char c = mark == "X" ? 'b' : 'w'; // engine uses b/w internally (X→b, O→w)
 
             if (BuildStoneMap().ContainsKey((gx, gy))) return; // occupied
@@ -146,6 +147,10 @@ namespace MG.Server.GameFlows
             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "X";
             return player.GetStringAttribute("type") == turn;
         }
+
+        // Turn is tracked via the "turn" attribute → resolve the seat (for undo's AI-skip).
+        protected override PlayerData? CurrentTurnPlayer()
+            => GameData.Attributes.TryGetValue("turn", out var t) ? getPlayerByAttribute("type", t) : null;
 
         public override async Task<bool> PlayAI(PlayerData player, Random rnd)
         {

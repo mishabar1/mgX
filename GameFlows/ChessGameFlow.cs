@@ -350,6 +350,7 @@ namespace MG.Server.GameFlows
         // Shared by human moves (ChessMove) and the AI (PlayAI).
         private void ApplyMove(ItemData piece, int fromC, int fromR, ChessRules.Move m)
         {
+            SaveUndoPoint();
             var (_, items) = BuildBoard();
             int tc = m.ToC, tr = m.ToR;
 
@@ -447,6 +448,10 @@ namespace MG.Server.GameFlows
             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "white";
             return player.GetStringAttribute("type") == turn; // seat's "type" is "white"/"black"
         }
+
+        // Turn is tracked via the "turn" attribute → resolve the seat (for undo's AI-skip).
+        protected override PlayerData? CurrentTurnPlayer()
+            => GameData.Attributes.TryGetValue("turn", out var t) ? getPlayerByAttribute("type", t) : null;
 
         public override async Task<bool> PlayAI(PlayerData player, Random rnd)
         {

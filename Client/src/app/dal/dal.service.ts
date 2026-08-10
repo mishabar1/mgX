@@ -47,6 +47,9 @@ export class DALService{
   deleteGame(gameId:string): Observable<GameData> {
     return this.http.post<GameData>(this.baseGameUrl + `/DeleteGame`, {gameId});
   }
+  undoGame(gameId:string): Observable<any> {
+    return this.http.post<any>(this.baseGameUrl + `/UndoGame`, {gameId});
+  }
 
 
 

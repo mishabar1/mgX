@@ -149,6 +149,7 @@ namespace MG.Server.GameFlows
 
         private void ApplyCheckersMove(ItemData piece, CheckersRules.Move mv, string colorType)
         {
+            SaveUndoPoint();
             piece.SetPosition(COORDS[mv.ToC], 0.12, COORDS[mv.ToR]);
             piece.Attributes["gx"] = mv.ToC.ToString();
             piece.Attributes["gy"] = mv.ToR.ToString();
@@ -209,6 +210,10 @@ namespace MG.Server.GameFlows
             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "black";
             return player.GetStringAttribute("type") == turn;
         }
+
+        // Turn is tracked via the "turn" attribute → resolve the seat (for undo's AI-skip).
+        protected override PlayerData? CurrentTurnPlayer()
+            => GameData.Attributes.TryGetValue("turn", out var t) ? getPlayerByAttribute("type", t) : null;
 
         public override async Task<bool> PlayAI(PlayerData player, Random rnd)
         {
