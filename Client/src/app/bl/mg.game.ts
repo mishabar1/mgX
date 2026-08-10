@@ -887,17 +887,14 @@ export class MgGame{
   }
 
   MeshMouseOverFunc(event: any) {
-    // event.target.userData['c'] = event.target.material.clone().color;
-    // event.target.material.color.set(0xff0000);
+    // Just a hover cue. We no longer touch OrbitControls here: pieces move by click-to-
+    // select + click-destination (not drag), so there's no camera-vs-piece gesture conflict,
+    // and the camera stays fully controllable (rotate/pan/zoom) from anywhere on screen.
     document.body.style.cursor = 'pointer';
-    this.mgThree.orbitControls.enabled = false;
   }
 
   MeshMouseOutFunc(event: any) {
-    // let c: any = event.target.userData['c'];
-    // event.target.material.color.set(c.r, c.g, c.b);
     document.body.style.cursor = 'default';
-    this.mgThree.orbitControls.enabled = true;
   }
 
   onMeshClickFunc = this.MeshClickFunc.bind(this);
