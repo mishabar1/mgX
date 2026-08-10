@@ -51,17 +51,17 @@ namespace MG.Server.GameFlows
 
             GameData.Observer.Position.Set(0, 24, 0);
 
-            // Seat 0 = DM, looking straight down for a full overview. The DM owns the near (-z)
-            // edge of the table — the control panel lives there. Players sit around the FAR
-            // half of the ring (angles 90..270), so no one sits under the DM's panel.
+            // Seat 0 = DM, looking straight down for a full overview. The DM owns the +z edge
+            // (bottom of the top-down view) — the control panel lives there. Players sit around
+            // the opposite half of the ring, so no one sits under the DM's console.
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
                 .AddAttribute("type", "dm")
                 .SetCameraPosition(0, 24, 1)
-                .SetAvatarPosition(0, 3, -17); // the DM's side, just behind the panel
+                .SetAvatarPosition(0, 0, 17); // the DM sits behind the console, on the +z edge
 
             for (int i = 0; i < 6; i++)
             {
-                double deg = 90 + i * 36.0; // 90..270 → right side, around the far edge, to left side
+                double deg = 90 - i * 36.0; // 90..-90 → right side, across the -z (far) edge, to left side
                 double t = deg * Math.PI / 180.0;
                 int cx = (int)Math.Round(15 * Math.Sin(t));
                 int cz = (int)Math.Round(-15 * Math.Cos(t));
@@ -90,6 +90,22 @@ namespace MG.Server.GameFlows
         // ============================ DM control panel ============================
         private string? DmId() => getPlayerByAttribute("type", "dm")?.Id;
 
+        // ---- panel geometry (world space, on the DM's near edge; players sit on the far half) ----
+        private const double ROW_HDR = -11.0;  // header-label column X (left of the buttons)
+        private const double ROW_SCENES   = 14.3;
+        private const double ROW_MONSTERS = 13.0;
+        private const double ROW_PLACE    = 11.7;
+        private const double ROW_DICE     = 10.4;
+        private const double ROW_ROLL     = 9.1;
+
+        // Group colours (plate tints) so each control band reads at a glance.
+        private const string C_SCENES   = "0x1971C2"; // blue
+        private const string C_MONSTERS = "0xC0392B"; // red
+        private const string C_PLACE    = "0x2F9E44"; // green
+        private const string C_DICE     = "0x7048E8"; // purple
+        private const string C_ROLL     = "0xE8590C"; // orange
+        private const string C_ACTIVE   = "0xFFC300"; // selected die
+
         private void BuildControlPanel()
         {
             string? dm = DmId();
@@ -97,33 +113,43 @@ namespace MG.Server.GameFlows
 
             foreach (var p in getItemsByAttribute("panel")) removeItem(p.Id);
 
-            // Panel rows stacked just above the board (tight enough to all stay in the DM's
-            // top-down view). Scenes farthest, dice/roll nearest the board.
             var players = GameData.Players
                 .Where(p => p.Type != PlayerTypeEnum.EMPTY_SEAT && p.GetStringAttribute("type") != "dm")
                 .ToList();
 
-            LayoutRow(SCENES.Length, -14.3, (i, x) =>
-                AddButton(SCENES[i].label, x, -14.3, dm, nameof(LoadScene), "sceneUrl", SCENES[i].url));
+            // A dark backing mat frames the whole console so it reads as the DM's control panel
+            // rather than buttons floating on the grass.
+            addItem(Assets.BUTTON)
+                .SetPosition(-1.0, 0.02, (ROW_SCENES + ROW_ROLL) / 2).SetScale(24, 1, 7.2)
+                .AddAttribute("panel", "1").AddAttribute("tint", "0x11151F")
+                .Visible[dm] = true;
 
-            LayoutRow(MONSTERS.Length, -13.1, (i, x) =>
-                AddButton(MONSTERS[i].label, x, -13.1, dm, nameof(AddMonster), "monsterUrl", MONSTERS[i].url));
+            AddHeader("SCENES", ROW_SCENES, dm);
+            LayoutRow(SCENES.Length, (i, x) =>
+                AddButton(SCENES[i].label, x, ROW_SCENES, dm, nameof(LoadScene), "sceneUrl", SCENES[i].url, C_SCENES));
 
-            LayoutRow(players.Count, -11.9, (i, x) =>
-                AddButton("Place: " + PlayerDisplayName(players[i]), x, -11.9, dm, nameof(PlaceCharacter), "seat", players[i].Id));
+            AddHeader("MONSTERS", ROW_MONSTERS, dm);
+            LayoutRow(MONSTERS.Length, (i, x) =>
+                AddButton(MONSTERS[i].label, x, ROW_MONSTERS, dm, nameof(AddMonster), "monsterUrl", MONSTERS[i].url, C_MONSTERS));
 
-            // Die selector (active one highlighted green).
+            AddHeader("PLACE", ROW_PLACE, dm);
+            LayoutRow(players.Count, (i, x) =>
+                AddButton(PlayerDisplayName(players[i]), x, ROW_PLACE, dm, nameof(PlaceCharacter), "seat", players[i].Id, C_PLACE));
+
+            // Die selector (the active die glows).
             string die = GameData.Attributes.TryGetValue("die", out var dv) ? dv : "20";
-            AddButton("d6", -1.3, -10.7, dm, nameof(SetDie), "sides", "6", die == "6" ? "0x2F9E44" : null);
-            AddButton("d20", 1.3, -10.7, dm, nameof(SetDie), "sides", "20", die == "20" ? "0x2F9E44" : null);
+            AddHeader("DICE", ROW_DICE, dm);
+            AddButton("d6", -1.3, ROW_DICE, dm, nameof(SetDie), "sides", "6", die == "6" ? C_ACTIVE : C_DICE);
+            AddButton("d20", 1.3, ROW_DICE, dm, nameof(SetDie), "sides", "20", die == "20" ? C_ACTIVE : C_DICE);
 
             // "Ask to roll" — one per seated player; uses the selected die.
-            LayoutRow(players.Count, -9.5, (i, x) =>
-                AddButton("Roll: " + PlayerDisplayName(players[i]), x, -9.5, dm, nameof(AskRoll), "seat", players[i].Id));
+            AddHeader("ROLL", ROW_ROLL, dm);
+            LayoutRow(players.Count, (i, x) =>
+                AddButton(PlayerDisplayName(players[i]), x, ROW_ROLL, dm, nameof(AskRoll), "seat", players[i].Id, C_ROLL));
         }
 
-        // Evenly space `count` items across the board width at depth z, calling place(i, x).
-        private void LayoutRow(int count, double z, Action<int, double> place)
+        // Evenly space `count` items across the board width, calling place(i, x).
+        private void LayoutRow(int count, Action<int, double> place)
         {
             if (count <= 0) return;
             double span = BOARD - 2;
@@ -134,18 +160,28 @@ namespace MG.Server.GameFlows
             }
         }
 
+        // A small caption at the left of a row naming the control band.
+        private void AddHeader(string label, double z, string dmId)
+        {
+            var text = addTextItem(Assets.TEXT).SetText(label)
+                .SetPosition(ROW_HDR, 0.16, z).SetScale(0.26).SetRotation(-90, 0, 0)
+                .AddAttribute("panel", "1").AddAttribute("textColor", "9BB4D4");
+            text.Visible[dmId] = true;
+        }
+
+        // One panel button: a coloured plate + white caption lying flat on the console mat.
         private void AddButton(string label, double x, double z, string dmId, string action, string attrKey, string attrVal, string? tint = null)
         {
             var plate = addItem(Assets.BUTTON)
-                .SetPosition(x, 0.05, z).SetScale(1.9, 1, 1.1)
+                .SetPosition(x, 0.06, z).SetScale(2.0, 1, 1.05)
                 .AddAttribute("panel", "1")
                 .AddAttribute(attrKey, attrVal);
-            if (tint != null) plate.AddAttribute("tint", tint); // highlight (e.g. active die)
+            if (tint != null) plate.AddAttribute("tint", tint);
             plate.ClickActions[dmId] = action;
             plate.Visible[dmId] = true;
 
             var text = addTextItem(Assets.TEXT).SetText(label)
-                .SetPosition(x, 0.14, z).SetScale(0.32).SetRotation(-90, 0, 0)
+                .SetPosition(x, 0.16, z).SetScale(0.38).SetRotation(-90, 0, 0)
                 .AddAttribute("panel", "1")
                 .AddAttribute("textColor", "ffffff");
             text.Visible[dmId] = true;

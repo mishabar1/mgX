@@ -1,4 +1,4 @@
-import {AfterViewInit, Component, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild, ChangeDetectionStrategy} from '@angular/core';
+import {AfterViewInit, Component, OnChanges, OnDestroy, OnInit, SimpleChanges, ViewChild, ChangeDetectionStrategy, NgZone} from '@angular/core';
 import {GameData} from '../../entities/game.data';
 import {RouteNames} from '../../app-routing.module';
 import {SignalrService} from '../../services/SignalrService';
@@ -67,13 +67,23 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
   get seatsReady(): boolean { return this.occupiedSeats >= this.minPlayers; }
   seatEmpty(player: PlayerData): boolean { return player.type === 'EMPTY_SEAT'; }
 
+  // Tracks the last-seen status so we only auto-open on the transition INTO play (not when
+  // opening the setup page of an already-running game to tweak it).
+  private lastStatus = '';
+
   constructor(public signalRService: SignalrService,
               private router: Router,
+              private zone: NgZone,
               private unsubscriberService: UnsubscriberService,
               private activatedRoute: ActivatedRoute,
               private generalService: GeneralService,
               private dalService: DALService) {
 
+  }
+
+  // Is the current user sitting in an actual seat (not a spectator / empty seat)?
+  private isSeatedPlayer(game: GameData): boolean {
+    return (game?.players || []).some(p => p.type !== 'EMPTY_SEAT' && p.user?.id === this.user?.id);
   }
 
   ngOnInit(): void {
@@ -86,8 +96,16 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
     this.signalRService.hubConnection.on('GameUpdated', data => {
       console.log('GameUpdated', data);
       //this.iterate(this.gameData,data);
+      const wasStarted = this.lastStatus === 'PLAY';
+      const nowStarted = String(data.gameStatus) === 'PLAY';
       this.gameData = data;
+      this.lastStatus = String(data.gameStatus);
 
+      // The game just started while I'm still on the setup page → open it for me,
+      // exactly as if I'd clicked Open (only for seated players, not spectators).
+      if (nowStarted && !wasStarted && this.isSeatedPlayer(data)) {
+        this.zone.run(() => this.router.navigate([RouteNames.GamePlay, this.gameId]));
+      }
     });
     // this.signalRService.hubConnection.off('GamesUpdated');
     // this.signalRService.hubConnection.on('GamesUpdated', data => {
@@ -97,8 +115,10 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
     this.signalRService.hubConnection.off('GameDeleted');
     this.signalRService.hubConnection.on('GameDeleted', data => {
       console.log('GameDeleted', data);
-      debugger;
-      // TODO !!!
+      // This game was deleted out from under us → send everyone back to the list.
+      if (String(data) === String(this.gameId)) {
+        this.zone.run(() => this.router.navigate([RouteNames.GamesList]));
+      }
     });
 
 
@@ -122,6 +142,8 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
       }else{
         this.iterate(this.gameData,game);
       }
+      // Seed the status baseline so we don't treat an already-running game as a fresh start.
+      this.lastStatus = String(this.gameData.gameStatus);
     });
   }
 

@@ -98,6 +98,15 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     this.gameId = this.activatedRoute.snapshot.paramMap.get('id');
     console.log("ngOnInit", this.gameId);
 
+    this.signalRService.hubConnection.off('GameDeleted');
+    this.signalRService.hubConnection.on('GameDeleted', data => {
+      console.log('GameDeleted', data);
+      // The game we're playing was deleted → return to the games list.
+      if (String(data) === String(this.gameId)) {
+        this.zone.run(() => this.router.navigate([RouteNames.GamesList]));
+      }
+    });
+
     this.signalRService.hubConnection.off('GameUpdated');
     this.signalRService.hubConnection.on('GameUpdated', data => {
       console.log('GameUpdated', data);
@@ -165,6 +174,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
 
   ngOnDestroy(): void {
     this.signalRService.hubConnection.off('GameUpdated');
+    this.signalRService.hubConnection.off('GameDeleted');
     this.voice.leave();   // drop out of the voice call when leaving the game view
     this.mgThree?.dispose();
   }
