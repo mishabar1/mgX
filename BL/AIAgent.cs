@@ -44,9 +44,11 @@ namespace MG.Server.BL
             
             //Debug.WriteLine("STOP timer" + player.Name);
 
-            // Game over → stop the agent for good.
+            // Not in play (game over, or between setup/start) → idle, but KEEP polling so the
+            // agent resumes if the game returns to PLAY (e.g. after an undo or a restart).
             if (this.gameData.GameStatus != GameStatusEnum.PLAY)
             {
+                timer.Start();
                 return;
             }
 
@@ -73,6 +75,12 @@ namespace MG.Server.BL
             timer.Start();
 
 
+        }
+
+        // Permanently stop this agent (on restart replacement, seat change, or game delete).
+        public void Stop()
+        {
+            try { timer.Stop(); timer.Dispose(); } catch { }
         }
 
 
