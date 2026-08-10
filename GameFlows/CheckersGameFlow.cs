@@ -10,7 +10,7 @@ namespace MG.Server.GameFlows
     // captures are forced and chain (multi-jump); men crown on the far row. Click a piece
     // to see its legal destinations, click one to move (the whole jump chain applies at once).
     // Material minimax AI.
-    public class CheckersGameFlow : BaseGameFlow
+    public class CheckersGameFlow : BoardGameFlow
     {
         internal class Assets
         {
@@ -73,17 +73,6 @@ namespace MG.Server.GameFlows
         }
 
         protected override Task EndGame() => Task.CompletedTask;
-        protected override Task<bool> IsEndGame() => Task.FromResult(GameData.Attributes.ContainsKey("over"));
-
-        protected override List<PlayerData> GetGameWinners()
-        {
-            if (GameData.Attributes.TryGetValue("winnerColor", out var wc) && !string.IsNullOrEmpty(wc))
-            {
-                var p = getPlayerByAttribute("type", wc);
-                if (p != null) return new List<PlayerData> { p };
-            }
-            return new List<PlayerData>();
-        }
 
         // ------------------------------------------------------------------
         // Select a piece → show its legal destinations (forced captures respected).
@@ -211,10 +200,6 @@ namespace MG.Server.GameFlows
             return player.GetStringAttribute("type") == turn;
         }
 
-        // Turn is tracked via the "turn" attribute → resolve the seat (for undo's AI-skip).
-        protected override PlayerData? CurrentTurnPlayer()
-            => GameData.Attributes.TryGetValue("turn", out var t) ? getPlayerByAttribute("type", t) : null;
-
         public override async Task<bool> PlayAI(PlayerData player, Random rnd)
         {
             if (GameData.Attributes.ContainsKey("over")) { await Task.CompletedTask; return false; }
@@ -327,7 +312,5 @@ namespace MG.Server.GameFlows
                     .SetPosition(s.x, 0.12, s.z).SetScale(0.5).SetRotation(-90, 0, s.roll)
                     .AddAttribute("turnText", "1").AddAttribute("tint", tint);
         }
-
-        private static string Cap(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s.Substring(1);
     }
 }

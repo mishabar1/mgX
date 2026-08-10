@@ -9,7 +9,7 @@ namespace MG.Server.GameFlows
     // Reversi / Othello on the 8x8 board. Place a disc to flank and flip the opponent's
     // discs; most discs at the end wins. Black moves first. If a player has no legal move
     // they pass; if neither can move the game ends. Strong positional minimax AI.
-    public class ReversiGameFlow : BaseGameFlow
+    public class ReversiGameFlow : BoardGameFlow
     {
         internal class Assets
         {
@@ -67,17 +67,6 @@ namespace MG.Server.GameFlows
         }
 
         protected override Task EndGame() => Task.CompletedTask;
-        protected override Task<bool> IsEndGame() => Task.FromResult(GameData.Attributes.ContainsKey("over"));
-
-        protected override List<PlayerData> GetGameWinners()
-        {
-            if (GameData.Attributes.TryGetValue("winnerColor", out var wc) && !string.IsNullOrEmpty(wc))
-            {
-                var p = getPlayerByAttribute("type", wc);
-                if (p != null) return new List<PlayerData> { p };
-            }
-            return new List<PlayerData>();
-        }
 
         // ------------------------------------------------------------------
         [GameAction]
@@ -158,10 +147,6 @@ namespace MG.Server.GameFlows
             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "black";
             return player.GetStringAttribute("type") == turn;
         }
-
-        // Turn is tracked via the "turn" attribute → resolve the seat (for undo's AI-skip).
-        protected override PlayerData? CurrentTurnPlayer()
-            => GameData.Attributes.TryGetValue("turn", out var t) ? getPlayerByAttribute("type", t) : null;
 
         public override async Task<bool> PlayAI(PlayerData player, Random rnd)
         {
@@ -250,7 +235,5 @@ namespace MG.Server.GameFlows
                     .SetPosition(s.x, 0.12, s.z).SetScale(0.45).SetRotation(-90, 0, s.roll)
                     .AddAttribute("turnText", "1").AddAttribute("tint", tint);
         }
-
-        private static string Cap(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s.Substring(1);
     }
 }

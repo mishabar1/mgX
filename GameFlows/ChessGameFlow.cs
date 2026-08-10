@@ -8,7 +8,7 @@ namespace MG.Server.GameFlows
     // destinations (blocking, captures, castling, en passant, promotion, and moves
     // that would leave your own king in check are excluded). Turns alternate
     // white → black. Move legality is computed by the pure ChessRules engine.
-    public class ChessGameFlow : BaseGameFlow
+    public class ChessGameFlow : BoardGameFlow
     {
         internal class Assets
         {
@@ -211,8 +211,6 @@ namespace MG.Server.GameFlows
             }
             return new List<PlayerData>();
         }
-
-        private static string Cap(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s.Substring(1);
 
         // ------------------------------------------------------------------
         // Selecting a piece → show only its legal moves as yellow markers.
@@ -448,10 +446,6 @@ namespace MG.Server.GameFlows
             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "white";
             return player.GetStringAttribute("type") == turn; // seat's "type" is "white"/"black"
         }
-
-        // Turn is tracked via the "turn" attribute → resolve the seat (for undo's AI-skip).
-        protected override PlayerData? CurrentTurnPlayer()
-            => GameData.Attributes.TryGetValue("turn", out var t) ? getPlayerByAttribute("type", t) : null;
 
         public override async Task<bool> PlayAI(PlayerData player, Random rnd)
         {

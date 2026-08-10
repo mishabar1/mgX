@@ -11,7 +11,7 @@ namespace MG.Server.GameFlows
     // The grid is built from white tiles that abut into a continuous grid and auto-expand
     // around the played area, so you can always keep playing outward in any direction.
     // Freestyle rules: five OR MORE in a row wins. X moves first.
-    public class GomokuGameFlow : BaseGameFlow
+    public class GomokuGameFlow : BoardGameFlow
     {
         internal class Assets
         {
@@ -69,18 +69,6 @@ namespace MG.Server.GameFlows
         }
 
         protected override Task EndGame() => Task.CompletedTask;
-
-        protected override Task<bool> IsEndGame() => Task.FromResult(GameData.Attributes.ContainsKey("over"));
-
-        protected override List<PlayerData> GetGameWinners()
-        {
-            if (GameData.Attributes.TryGetValue("winnerColor", out var wc) && !string.IsNullOrEmpty(wc))
-            {
-                var p = getPlayerByAttribute("type", wc);
-                if (p != null) return new List<PlayerData> { p };
-            }
-            return new List<PlayerData>();
-        }
 
         // ------------------------------------------------------------------
         // Placing a mark (human clicks an empty intersection tile).
@@ -147,10 +135,6 @@ namespace MG.Server.GameFlows
             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "X";
             return player.GetStringAttribute("type") == turn;
         }
-
-        // Turn is tracked via the "turn" attribute → resolve the seat (for undo's AI-skip).
-        protected override PlayerData? CurrentTurnPlayer()
-            => GameData.Attributes.TryGetValue("turn", out var t) ? getPlayerByAttribute("type", t) : null;
 
         public override async Task<bool> PlayAI(PlayerData player, Random rnd)
         {
