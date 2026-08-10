@@ -143,13 +143,14 @@ namespace MG.Server.GameFlows
 
             await StartGame();
 
-            // create AI agents
+            // (Re)create AI agents — exactly one per current AI seat. Stop any prior agent first
+            // so a restart, or a seat that changed to/from AI, can't leave a duplicate ticking.
             foreach (var player in this.GameData.Players)
             {
+                player.AIAgent?.Stop();
+                player.AIAgent = null;
                 if (player.Type == PlayerTypeEnum.AI)
-                {
                     player.AIAgent = new AIAgent(this.GameData, player);
-                }
             }
 
             HistoryGameData.Add(GameData.DeepCopy());

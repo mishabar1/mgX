@@ -107,6 +107,7 @@ namespace MG.Server.BL
             game.GameStatus = GameStatusEnum.ENDED;
             await game.GameFlow.RunEndGameFlow();
 
+            foreach (var p in game.Players) p.AIAgent?.Stop(); // stop AI timers for the deleted game
             _dataRepository.Games.Remove(game);
             await DataRepository.Singleton.HubGameDeleted(data.gameId);
 
