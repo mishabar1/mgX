@@ -51,17 +51,18 @@ namespace MG.Server.GameFlows
 
             GameData.Observer.Position.Set(0, 24, 0);
 
-            // Seat 0 = DM, looking straight down for a full overview. The DM owns the +z edge
-            // (bottom of the top-down view) — the control panel lives there. Players sit around
-            // the opposite half of the ring, so no one sits under the DM's console.
+            // Seat 0 = DM. A close 3/4 "tabletop" angle (not straight-down) so the board fills
+            // the view and the console — which hugs the near (+z) edge — sits in the foreground.
             new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
                 .AddAttribute("type", "dm")
-                .SetCameraPosition(0, 24, 1)
-                .SetAvatarPosition(0, 0, 17); // the DM sits behind the console, on the +z edge
+                .SetCameraPosition(0, 14, 15)
+                .SetAvatarPosition(0, 0, 18); // behind the camera; the DM never sees their own token
 
+            // Player seats are (re)placed evenly across the far edge at StartGame (RespaceDnDSeats)
+            // once we know how many actually joined; give them sane defaults meanwhile.
             for (int i = 0; i < 6; i++)
             {
-                double deg = 90 - i * 36.0; // 90..-90 → right side, across the -z (far) edge, to left side
+                double deg = -60 + 120.0 * i / 5.0;
                 double t = deg * Math.PI / 180.0;
                 int cx = (int)Math.Round(15 * Math.Sin(t));
                 int cz = (int)Math.Round(-15 * Math.Cos(t));
@@ -79,8 +80,27 @@ namespace MG.Server.GameFlows
         protected override Task StartGame()
         {
             GameData.Attributes["die"] = "20"; // (used in Stage 2)
+            RespaceDnDSeats();
             BuildControlPanel();
             return Task.CompletedTask;
+        }
+
+        // Spread the players who actually joined evenly across the FAR edge (an arc centred on
+        // -z), so 2 players don't clump on one side and 6 fan out neatly. The DM keeps its seat.
+        private void RespaceDnDSeats()
+        {
+            var players = GameData.Players
+                .Where(p => p.Type != PlayerTypeEnum.EMPTY_SEAT && p.GetStringAttribute("type") != "dm")
+                .ToList();
+            int n = players.Count;
+            for (int i = 0; i < n; i++)
+            {
+                double deg = n == 1 ? 0 : -65 + 130.0 * i / (n - 1);
+                double t = deg * Math.PI / 180.0;
+                players[i]
+                    .SetCameraPosition((int)Math.Round(15 * Math.Sin(t)), 12, (int)Math.Round(-15 * Math.Cos(t)))
+                    .SetAvatarPosition((int)Math.Round(11 * Math.Sin(t)), 2, (int)Math.Round(-11 * Math.Cos(t)));
+            }
         }
 
         protected override Task EndGame() => Task.CompletedTask;
@@ -91,12 +111,12 @@ namespace MG.Server.GameFlows
         private string? DmId() => getPlayerByAttribute("type", "dm")?.Id;
 
         // ---- panel geometry (world space, on the DM's near edge; players sit on the far half) ----
-        private const double ROW_HDR = -11.0;  // header-label column X (left of the buttons)
-        private const double ROW_SCENES   = 14.3;
-        private const double ROW_MONSTERS = 13.0;
-        private const double ROW_PLACE    = 11.7;
-        private const double ROW_DICE     = 10.4;
-        private const double ROW_ROLL     = 9.1;
+        private const double ROW_HDR = -10.2;  // header-label column X (left of the buttons)
+        private const double ROW_SCENES   = 11.9;
+        private const double ROW_MONSTERS = 11.1;
+        private const double ROW_PLACE    = 10.3;
+        private const double ROW_DICE     = 9.5;
+        private const double ROW_ROLL     = 8.7;
 
         // Group colours (plate tints) so each control band reads at a glance.
         private const string C_SCENES   = "0x1971C2"; // blue
@@ -120,7 +140,7 @@ namespace MG.Server.GameFlows
             // A dark backing mat frames the whole console so it reads as the DM's control panel
             // rather than buttons floating on the grass.
             addItem(Assets.BUTTON)
-                .SetPosition(-1.0, 0.02, (ROW_SCENES + ROW_ROLL) / 2).SetScale(24, 1, 7.2)
+                .SetPosition(-1.5, 0.02, (ROW_SCENES + ROW_ROLL) / 2).SetScale(20, 1, 4.6)
                 .AddAttribute("panel", "1").AddAttribute("tint", "0x11151F")
                 .Visible[dm] = true;
 
@@ -164,7 +184,7 @@ namespace MG.Server.GameFlows
         private void AddHeader(string label, double z, string dmId)
         {
             var text = addTextItem(Assets.TEXT).SetText(label)
-                .SetPosition(ROW_HDR, 0.16, z).SetScale(0.26).SetRotation(-90, 0, 0)
+                .SetPosition(ROW_HDR, 0.16, z).SetScale(0.22).SetRotation(-90, 0, 0)
                 .AddAttribute("panel", "1").AddAttribute("textColor", "9BB4D4");
             text.Visible[dmId] = true;
         }
@@ -173,7 +193,7 @@ namespace MG.Server.GameFlows
         private void AddButton(string label, double x, double z, string dmId, string action, string attrKey, string attrVal, string? tint = null)
         {
             var plate = addItem(Assets.BUTTON)
-                .SetPosition(x, 0.06, z).SetScale(2.0, 1, 1.05)
+                .SetPosition(x, 0.06, z).SetScale(1.7, 1, 0.68)
                 .AddAttribute("panel", "1")
                 .AddAttribute(attrKey, attrVal);
             if (tint != null) plate.AddAttribute("tint", tint);
@@ -181,7 +201,7 @@ namespace MG.Server.GameFlows
             plate.Visible[dmId] = true;
 
             var text = addTextItem(Assets.TEXT).SetText(label)
-                .SetPosition(x, 0.16, z).SetScale(0.38).SetRotation(-90, 0, 0)
+                .SetPosition(x, 0.16, z).SetScale(0.30).SetRotation(-90, 0, 0)
                 .AddAttribute("panel", "1")
                 .AddAttribute("textColor", "ffffff");
             text.Visible[dmId] = true;
