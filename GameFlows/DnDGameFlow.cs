@@ -52,6 +52,14 @@ namespace MG.Server.GameFlows
             ("Monk",    "heroes/glTF/Monk.gltf"),
         };
 
+        // Music (loop) + one-shot SFX the DM can play for everyone. Files under assets/games.
+        private static readonly (string label, string url, bool loop)[] SOUNDS =
+        {
+            ("Deutschland", "dnd/deutschland.mp3", true),
+            ("Du Hast",     "dnd/duhast.mp3",      true),
+            ("Ta-da!",      "dnd/tada.mp3",        false),
+        };
+
         private const double BOARD = 32; // scene plane size (world units) — big enough that hero
                                           // tokens (~2u) match the map's grid squares. Spans ±16.
         private const double TRAY_Z = 19; // the hero tray sits just past the board's near (+z) edge
@@ -105,6 +113,7 @@ namespace MG.Server.GameFlows
             // Publish the catalog so the DM's HTML console can populate its dropdowns ("label|url;…").
             GameData.Attributes["dndScenes"] = string.Join(";", SCENES.Select(s => s.label + "|" + s.url));
             GameData.Attributes["dndMonsters"] = string.Join(";", MONSTERS.Select(m => m.label + "|" + m.url));
+            GameData.Attributes["dndSounds"] = string.Join(";", SOUNDS.Select(s => s.label + "|" + s.url + "|" + (s.loop ? "1" : "0")));
             RespaceDnDSeats();
             BuildControlPanel();
             FillHeroTray();
@@ -440,8 +449,37 @@ namespace MG.Server.GameFlows
             await Task.CompletedTask;
         }
 
+        // ============================ music / sounds (DM) ============================
+        // Play a track for everyone. loop=1 → music (replaces the current music); loop=0 → a
+        // one-shot SFX (replaces any previous SFX so rapid clicks don't pile up).
+        [GameAction]
+        public async Task PlaySound(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            string url = Arg(data, "soundUrl");
+            if (string.IsNullOrEmpty(url)) { await Task.CompletedTask; return; }
+            bool loop = Arg(data, "loop") == "1";
+            string kind = loop ? "music" : "sfx";
+
+            foreach (var s in getItemsByAttribute(kind).ToList()) removeItem(s.Id); // replace same kind
+            playSound(SoundAsset(url), loop ? "LOOP" : "ONCE")
+                .SetPosition(0, 2, 0)
+                .AddAttribute("sound", "1").AddAttribute(kind, "1");
+            await Task.CompletedTask;
+        }
+
+        // Stop everything currently playing (music + SFX).
+        [GameAction]
+        public async Task StopSound(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            foreach (var s in getItemsByAttribute("sound").ToList()) removeItem(s.Id);
+            await Task.CompletedTask;
+        }
+
         // ============================ helpers ============================
         private bool IsDm(ExecuteActionData data) => data.Player != null && data.Player.Id == DmId();
+        private AssetData SoundAsset(string url) => addAsset(new SoundAssetData(url));
 
         // Read an action parameter from the HTML console's args, falling back to a clicked
         // 3D item's attribute (so both UIs work during the transition).

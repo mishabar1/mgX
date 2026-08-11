@@ -224,6 +224,9 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const scenes = this.parseCatalog(g.attributes?.['dndScenes']);
     const monsters = this.parseCatalog(g.attributes?.['dndMonsters']);
+    const sounds = (g.attributes?.['dndSounds'] || '').split(';').filter(Boolean).map((p: string) => {
+      const a = p.split('|'); return {label: a[0], url: a[1], loop: a[2] === '1'};
+    });
 
     // A picture tile: scenes use their map PNG directly; monsters/heroes get a data-thumb the
     // model is rendered into after mount. Clicking a tile performs its action.
@@ -231,6 +234,8 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       `<div class="tile" data-act="LoadScene" data-url="${s.url}"><img src="/assets/games/${s.url}"><span>${s.label}</span></div>`;
     const monsterTile = (m: any) =>
       `<div class="tile" data-act="AddMonster" data-url="${m.url}"><img data-thumb="${m.url}"><span>${m.label}</span></div>`;
+    const soundBtn = (s: any) =>
+      `<button class="dmbtn" data-act="PlaySound" data-url="${s.url}" data-loop="${s.loop ? '1' : '0'}">${s.loop ? '🎵' : '🔊'} ${s.label}</button>`;
 
     const el = document.createElement('div');
     el.style.pointerEvents = 'auto';   // a docked HUD panel on the screen's right edge
@@ -258,6 +263,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
         <div class="row" id="dmSelected"></div>
         <div class="row"><div class="lbl">Scene</div><div class="pick">${scenes.map(sceneTile).join('')}</div></div>
         <div class="row"><div class="lbl">Add monster</div><div class="pick">${monsters.map(monsterTile).join('')}</div></div>
+        <div class="row"><div class="lbl">Sound</div><div class="pick">${sounds.map(soundBtn).join('')}<button class="dmbtn" data-act="StopSound">⏹ Stop</button></div></div>
       </div>`;
 
     el.addEventListener('click', (ev: any) => {
@@ -268,6 +274,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       const args: any = {};
       if (act === 'LoadScene') args.sceneUrl = t.getAttribute('data-url');
       if (act === 'AddMonster') args.monsterUrl = t.getAttribute('data-url');
+      if (act === 'PlaySound') { args.soundUrl = t.getAttribute('data-url'); args.loop = t.getAttribute('data-loop'); }
       if (act === 'AskRoll') args.seat = t.getAttribute('data-seat');
       if (act === 'SetDie') {
         args.sides = t.getAttribute('data-sides');

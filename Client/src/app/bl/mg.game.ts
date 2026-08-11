@@ -204,7 +204,8 @@ export class MgGame{
       // seated avatar. Everyone else shows the tinted animal, falling back to the monkey.
       const heroUrl = playerData.attributes?.['heroUrl'];
       if (heroUrl) {
-        this.mgThree.gltfLoader.load('\\assets\\games\\' + heroUrl, (gltf) => applyHead(gltf.scene, false, true));
+        // D&D: the player is represented by their character token in the tray, not by a seated
+        // avatar around the table — so draw no seated figure here (avoids the duplicate).
       } else {
         this.mgThree.gltfLoader.load(
           `\\assets\\heads\\animals\\${animal}.glb`,
@@ -235,8 +236,8 @@ export class MgGame{
       this.createItem(playerData.hand, playerHand);
 
       // Floating name label + a DEFENDING badge above each OTHER player's head (you know your
-      // own seat, and you get the "YOU DEFENDING" status line instead).
-      if (!(this.playerData && this.playerData.id === playerData.id)) {
+      // own seat). Skipped for D&D seats (heroUrl) — they have no seated figure to label.
+      if (!(this.playerData && this.playerData.id === playerData.id) && !playerData.attributes?.['heroUrl']) {
         const disp = playerData.user?.name || playerData.name || (playerData.type === 'AI' ? 'AI' : 'open');
         const nameSpr = this.makeTextSprite(disp, 'rgba(18,28,38,0.75)', '#ffffff');
         nameSpr.position.set(0, 3.3, 0);
@@ -574,6 +575,7 @@ export class MgGame{
           sound.setBuffer(buffer);
           sound.setLoop(itemData.playType == "LOOP");
           sound.setVolume(1);
+          sound.setRefDistance(80);   // ambient: stay audible across the board / as the camera moves
           sound.play();
           // sound.stop()
         });
