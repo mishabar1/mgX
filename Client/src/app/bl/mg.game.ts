@@ -362,13 +362,15 @@ export class MgGame{
         if (frontURL.toLowerCase().endsWith("glb") || frontURL.toLowerCase().endsWith("gltf")) {
           this.mgThree.gltfLoader.load(frontURL, (gltf) => {
             const group:Group = gltf.scene;
-            // console.log(gltf.animations.length);
-            // debugger;
 
-            if(gltf.animations && gltf.animations.length && itemData.animationIdx!=null && itemData.animationIdx >= 0) {
-              let mixer = new THREE.AnimationMixer(group);
-              mixer.clipAction(gltf.animations[itemData.animationIdx]).play();
+            // Keep a mixer + the clip list so the DM can switch animations live (CycleAnim).
+            let mixer: any = null;
+            if (gltf.animations && gltf.animations.length) {
+              mixer = new THREE.AnimationMixer(group);
               this.mgThree.animationMixers.push(mixer);
+              if (itemData.animationIdx != null && itemData.animationIdx >= 0) {
+                mixer.clipAction(gltf.animations[itemData.animationIdx % gltf.animations.length]).play();
+              }
             }
 
             // scale to 1
@@ -386,7 +388,8 @@ export class MgGame{
             group.scale.set(scaleX,scaleY,scaleZ);
             let g = new Group();
             g.add(group);
-
+            g.userData['mixer'] = mixer;                    // for live animation swaps
+            g.userData['clips'] = gltf.animations || [];
 
             this.processItem(itemData, g, parentMesh);
           });
@@ -638,6 +641,12 @@ export class MgGame{
     old_item.visible = new_item.visible;
     old_item.hoverActions = new_item.hoverActions;
     old_item.attributes = new_item.attributes;
+
+    // Swap the playing animation live if the DM changed it (CycleAnim).
+    if (new_item.animationIdx !== old_item.animationIdx) {
+      old_item.animationIdx = new_item.animationIdx;
+      this.applyAnimation(old_item);
+    }
 
     // colour the selected piece / move-target markers from their attributes
     this.refreshItemHighlight(old_item);
@@ -927,6 +936,16 @@ export class MgGame{
 
   // Tint every material in an item's mesh to `hex` (sets base colour + emissive so it's
   // clearly visible regardless of the model's material); null reverts to the original.
+  // Play the model's clip at item.animationIdx (wrapped to the clip count); idx < 0 = stop/static.
+  applyAnimation(item: ItemData) {
+    const mesh: any = item.mesh; if (!mesh) return;
+    const mixer = mesh.userData?.['mixer']; const clips = mesh.userData?.['clips'];
+    if (!mixer || !clips || !clips.length) return;
+    mixer.stopAllAction();
+    const idx: any = (item as any).animationIdx;
+    if (idx != null && idx >= 0) mixer.clipAction(clips[idx % clips.length]).reset().play();
+  }
+
   applyEmissive(item: ItemData, hex: number | null) {
     if (!item.mesh) return;
     item.mesh.traverse((o: any) => {

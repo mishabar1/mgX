@@ -122,6 +122,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         this.lastStatus = status;
         this.computeHud(data);
+        this.updateDmSelected(data);   // refresh the console's contextual section
       });
     });
 
@@ -223,8 +224,6 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const scenes = this.parseCatalog(g.attributes?.['dndScenes']);
     const monsters = this.parseCatalog(g.attributes?.['dndMonsters']);
-    const players = (g.players || []).filter((p: any) => p.type !== 'EMPTY_SEAT' && p.attributes?.['type'] !== 'dm');
-    const die = g.attributes?.['die'] || '20';
 
     // A picture tile: scenes use their map PNG directly; monsters/heroes get a data-thumb the
     // model is rendered into after mount. Clicking a tile performs its action.
@@ -232,8 +231,6 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       `<div class="tile" data-act="LoadScene" data-url="${s.url}"><img src="/assets/games/${s.url}"><span>${s.label}</span></div>`;
     const monsterTile = (m: any) =>
       `<div class="tile" data-act="AddMonster" data-url="${m.url}"><img data-thumb="${m.url}"><span>${m.label}</span></div>`;
-    const rollTile = (p: any) =>
-      `<div class="tile" data-act="AskRoll" data-seat="${p.id}"><img data-thumb="${p.attributes?.['heroUrl'] || ''}"><span>${p.attributes?.['hero'] || this.pname(p)}</span></div>`;
 
     const el = document.createElement('div');
     el.style.pointerEvents = 'auto';   // a docked HUD panel on the screen's right edge
@@ -258,17 +255,14 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       </style>
       <div class="dmc">
         <h3>🎲 DM Console</h3>
+        <div class="row" id="dmSelected"></div>
         <div class="row"><div class="lbl">Scene</div><div class="pick">${scenes.map(sceneTile).join('')}</div></div>
         <div class="row"><div class="lbl">Add monster</div><div class="pick">${monsters.map(monsterTile).join('')}</div></div>
-        <div class="row dmdice"><div class="lbl">Die</div>
-          <button data-act="SetDie" data-sides="6" class="dmbtn ${die === '6' ? 'on' : ''}">d6</button>
-          <button data-act="SetDie" data-sides="20" class="dmbtn ${die === '20' ? 'on' : ''}">d20</button></div>
-        <div class="row"><div class="lbl">Ask to roll</div><div class="pick">${players.map(rollTile).join('')}</div></div>
       </div>`;
 
     el.addEventListener('click', (ev: any) => {
       const t = ev.target.closest('[data-act]');
-      if (!t) return;
+      if (!t || t.tagName === 'SELECT') return;   // selects fire via 'change', not click
       const act = t.getAttribute('data-act');
       if (!act) return;
       const args: any = {};
@@ -283,8 +277,24 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       this.signalRService.executeActionArgs(this.gameId!, dmSeatId, act, args);
     });
 
+    // Dropdowns (animation picker, ask-roll die picker) fire 'change', not 'click'.
+    el.addEventListener('change', (ev: any) => {
+      const s = ev.target.closest('select[data-act]');
+      if (!s) return;
+      const act = s.getAttribute('data-act');
+      if (act === 'SetAnim') {
+        this.signalRService.executeActionArgs(this.gameId!, dmSeatId, 'SetAnim', { idx: s.value });
+      } else if (act === 'AskRoll' && s.value) {
+        this.signalRService.executeActionArgs(this.gameId!, dmSeatId, 'AskRoll', { seat: s.getAttribute('data-seat'), sides: s.value });
+        s.value = '';   // reset so the DM can ask again
+      }
+    });
+
     // Dock into the screen-anchored "onscreen" holder — stays fixed on the right as the camera moves.
     this.mgThree.onscreenHolder?.appendChild(el);
+    this.dmConsoleEl = el;
+    this.dmConsoleSeat = dmSeatId;
+    this.updateDmSelected(g);   // fill the contextual section for any current selection
 
     // Render the model thumbnails (monsters + heroes) into their tiles, one by one.
     setTimeout(async () => {
@@ -304,5 +314,56 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
   private pname(p: any) { return p.user?.name || p.name || (p.type === 'AI' ? 'AI' : 'open'); }
+
+  // ---- contextual "selected item" section of the DM console ----------------
+  private dmConsoleEl?: HTMLElement;
+  private dmConsoleSeat = '';
+
+  private findSelectedItem(item: any): any {
+    if (!item) return null;
+    if (item.attributes?.['selected'] === '1') return item;
+    for (const c of (item.items || [])) { const r = this.findSelectedItem(c); if (r) return r; }
+    return null;
+  }
+
+  private lastSelKey = '';
+
+  // Refresh the console's contextual block for the selected piece. Guarded by a key so unrelated
+  // game updates don't rebuild it (which would snap an open dropdown shut).
+  private updateDmSelected(g: any) {
+    if (!this.dmConsoleEl) return;
+    const box = this.dmConsoleEl.querySelector('#dmSelected') as HTMLElement | null;
+    if (!box) return;
+    const sel = this.findSelectedItem(g?.table);
+    const key = sel ? `${sel.id}:${sel.animationIdx}` : '';
+    if (key === this.lastSelKey) return;   // nothing relevant changed
+    this.lastSelKey = key;
+    if (!sel) { box.innerHTML = ''; return; }
+
+    const isHero = sel.attributes?.['char'] === '1';
+    const owner = sel.attributes?.['owner'];
+    const ownerP = (g.players || []).find((p: any) => p.id === owner);
+    const name = isHero ? (ownerP?.attributes?.['hero'] || this.pname(ownerP)) : 'Monster';
+
+    const dd = 'font:600 15px system-ui;padding:8px;border-radius:10px;border:1px solid #2a3a55;background:#0e1626;color:#e8edf5;margin:2px 6px 2px 0;';
+
+    // Ask-to-roll: a die dropdown (asks THIS hero's player to roll the chosen die).
+    const dieOpts = ['<option value="">🎲 Ask to roll…</option>']
+      .concat([4, 6, 8, 10, 12, 20, 100].map(s => `<option value="${s}">d${s}</option>`)).join('');
+
+    // Animation: a dropdown of the model's actual clips.
+    const clips: any[] = (this.mgGame as any)?.allItems?.[sel.id]?.mesh?.userData?.['clips'] || [];
+    const curIdx = sel.animationIdx ?? -1;
+    const animOpts = ['<option value="-1">🎬 none</option>']
+      .concat(clips.map((c: any, i: number) => `<option value="${i}" ${i === curIdx ? 'selected' : ''}>${c.name || ('Clip ' + i)}</option>`)).join('');
+
+    box.innerHTML = `
+      <div class="lbl">Selected — ${name}</div>
+      <div class="pick" style="align-items:center;gap:8px;">
+        ${isHero && owner ? `<select data-act="AskRoll" data-seat="${owner}" style="${dd}">${dieOpts}</select>` : ''}
+        ${clips.length ? `<select data-act="SetAnim" style="${dd}">${animOpts}</select>` : ''}
+        <button class="dmbtn" data-act="RemoveSelected">🗑 Remove</button>
+      </div>`;
+  }
 
 }

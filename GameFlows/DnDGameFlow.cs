@@ -363,7 +363,9 @@ namespace MG.Server.GameFlows
             if (!IsDm(data)) { await Task.CompletedTask; return; }
             string seat = Arg(data, "seat");
             if (string.IsNullOrEmpty(seat)) { await Task.CompletedTask; return; }
-            int sides = (GameData.Attributes.TryGetValue("die", out var d) ? d : "20") == "6" ? 6 : 20;
+            // Die size from the ask-roll dropdown (d4..d100), falling back to the game default.
+            int sides = int.TryParse(Arg(data, "sides"), out var sv) && sv > 0 ? sv
+                        : (GameData.Attributes.TryGetValue("die", out var d) && d == "6" ? 6 : 20);
 
             RemoveDieFor(seat); // one pending die per player
 
@@ -408,6 +410,34 @@ namespace MG.Server.GameFlows
         {
             foreach (var d in getItemsByAttribute("dieItem").Where(x => x.GetStringAttribute("owner") == seat).ToList())
                 removeItem(d.Id);
+        }
+
+        // ============================ selected-item actions (DM) ============================
+        // Set the selected model's animation to a specific clip index (-1 = none/static). The DM
+        // picks it from a dropdown of the model's clips; the client swaps the playing clip live.
+        [GameAction]
+        public async Task SetAnim(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            if (GameData.Attributes.TryGetValue("selectedItem", out var id) && !string.IsNullOrEmpty(id))
+            {
+                var it = GameData.FindItem(id);
+                if (it != null && int.TryParse(Arg(data, "idx"), out var idx)) it.AnimationIdx = idx;
+            }
+            await Task.CompletedTask;
+        }
+
+        // Remove the selected item (a placed hero returns to nothing; a monster is deleted).
+        [GameAction]
+        public async Task RemoveSelected(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            if (GameData.Attributes.TryGetValue("selectedItem", out var id) && !string.IsNullOrEmpty(id))
+            {
+                removeItem(id);
+                ClearSelection();
+            }
+            await Task.CompletedTask;
         }
 
         // ============================ helpers ============================
