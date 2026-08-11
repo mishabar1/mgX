@@ -163,6 +163,10 @@ namespace MG.Server.Controllers
         public string? dragTargetItemId { get; set; }
         public V3 point { get; set; }
 
+        // Optional key/value params for actions invoked from a UI (the DM's HTML console),
+        // where there is no clicked 3D item carrying attributes.
+        public Dictionary<string, string>? args { get; set; }
+
         [JsonIgnore]public PlayerData? Player { get; set; }
         [JsonIgnore] public ItemData? Item { get; set; }
         [JsonIgnore] public ItemData? DragTargetItem { get; set; }

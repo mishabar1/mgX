@@ -45,6 +45,12 @@ export class SignalrService {
     // this.hubConnection.invoke("ExecuteAction", data);
   }
 
+  // Invoke an action from a UI (the DM console) with key/value params instead of a clicked
+  // 3D item — server reads these from ExecuteActionData.args.
+  executeActionArgs(gameId: string, playerId: string, actionId: string, args: {[k: string]: string}) {
+    this.hubConnection.send("ExecuteAction", { gameId, playerId, itemId: '', actionId, args });
+  }
+
   // ---- voice chat (WebRTC) signaling ----
   joinVoice(gameId: string, userName: string) {
     this.hubConnection.send('JoinVoice', gameId, userName);

@@ -61,6 +61,12 @@ export class DALService{
     return this.http.post<any>(this.baseGameUrl + `/ExecuteAction`, data);
   }
 
+  // Invoke a game action from a UI (the DM's HTML console) with key/value params instead of a
+  // clicked 3D item. `args` is sent as `Args` and read server-side from ExecuteActionData.args.
+  executeActionArgs(GameId: string, PlayerId: string, ActionId: string, Args: {[k: string]: string}): Observable<any> {
+    return this.http.post<any>(this.baseGameUrl + `/ExecuteAction`, { GameId, PlayerId, ActionId, ItemId: '', Args });
+  }
+
   joinGame(gameId: string, playerId: string, user: UserData|null, type: string) {
     return this.http.post<GameData>(this.baseGameUrl + `/JoinGame`, {gameId,playerId,user,type});
   }

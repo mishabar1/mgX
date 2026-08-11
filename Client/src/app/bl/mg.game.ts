@@ -102,6 +102,8 @@ export class MgGame{
   setHeadsVisible(on: boolean) {
     this.showHeads = on;
     this.headMeshes.forEach(h => h.visible = on);
+    // The floating name tags belong to the avatar — hide them along with the heads.
+    forEach(this.nameSprites, (spr: THREE.Sprite) => { spr.visible = on; });
   }
 
   getPlayerByUserId(userId: string): PlayerData | null | undefined {
@@ -154,15 +156,16 @@ export class MgGame{
       // Place any loaded model (GLB body or OBJ head, whatever its native scale/orientation):
       // tint it, fix normals, then auto-fit to a uniform size and recentre so every animal
       // sits the same regardless of source. isObj models are often Z-up, so tip them upright.
-      const applyHead = (root: THREE.Object3D, isObj: boolean) => {
+      // keepTex = leave the model's own textures/colours alone (used for D&D hero models);
+      // otherwise the model is recoloured to the seat's tint (used for the animal avatars).
+      const applyHead = (root: THREE.Object3D, isObj: boolean, keepTex = false) => {
         root.traverse((object: any) => {
           if (object.isMesh) {
             if (object.geometry && !object.geometry.attributes?.normal) object.geometry.computeVertexNormals();
             if (object.material) {
               const mats = Array.isArray(object.material) ? object.material : [object.material];
               mats.forEach((m: any) => {
-                m.map = null;
-                if (m.color) m.color.setHex(tint);
+                if (!keepTex) { m.map = null; if (m.color) m.color.setHex(tint); }
                 m.side = THREE.DoubleSide;
                 m.needsUpdate = true;
               });
@@ -197,13 +200,19 @@ export class MgGame{
         playerData.avatar.mesh!.add(root);
       };
 
-      // Load the animal's GLB, falling back to the monkey — both tinted & auto-fitted.
-      this.mgThree.gltfLoader.load(
-        `\\assets\\heads\\animals\\${animal}.glb`,
-        (gltf) => applyHead(gltf.scene, false),
-        undefined,
-        () => this.mgThree.gltfLoader.load('\\assets\\heads\\suzanne.glb', (gltf) => applyHead(gltf.scene, false))
-      );
+      // D&D seats carry a "heroUrl" — render that hero model (keeping its own textures) as the
+      // seated avatar. Everyone else shows the tinted animal, falling back to the monkey.
+      const heroUrl = playerData.attributes?.['heroUrl'];
+      if (heroUrl) {
+        this.mgThree.gltfLoader.load('\\assets\\games\\' + heroUrl, (gltf) => applyHead(gltf.scene, false, true));
+      } else {
+        this.mgThree.gltfLoader.load(
+          `\\assets\\heads\\animals\\${animal}.glb`,
+          (gltf) => applyHead(gltf.scene, false),
+          undefined,
+          () => this.mgThree.gltfLoader.load('\\assets\\heads\\suzanne.glb', (gltf) => applyHead(gltf.scene, false))
+        );
+      }
 
       // table anchor for the player's table items — an empty container (no geometry, renders
       // nothing). The card items parented to it still show.
@@ -231,6 +240,7 @@ export class MgGame{
         const disp = playerData.user?.name || playerData.name || (playerData.type === 'AI' ? 'AI' : 'open');
         const nameSpr = this.makeTextSprite(disp, 'rgba(18,28,38,0.75)', '#ffffff');
         nameSpr.position.set(0, 3.3, 0);
+        nameSpr.visible = this.showHeads;   // hide the name too when avatars are hidden
         playerData.avatar.mesh!.add(nameSpr);
         this.nameSprites[playerData.id] = nameSpr;
 
@@ -355,7 +365,7 @@ export class MgGame{
             // console.log(gltf.animations.length);
             // debugger;
 
-            if(gltf.animations && gltf.animations.length && itemData.animationIdx!=null) {
+            if(gltf.animations && gltf.animations.length && itemData.animationIdx!=null && itemData.animationIdx >= 0) {
               let mixer = new THREE.AnimationMixer(group);
               mixer.clipAction(gltf.animations[itemData.animationIdx]).play();
               this.mgThree.animationMixers.push(mixer);
@@ -924,9 +934,12 @@ export class MgGame{
         const mats = Array.isArray(o.material) ? o.material : [o.material];
         mats.forEach((m: any) => {
           if (!m) return;
+          if (!m.userData) m.userData = {};
           if (hex != null) {
-            if (!o.userData.hl) {
-              o.userData.hl = {
+            // Save this material's originals ONCE (per material, so multi-part models revert
+            // every part — not just the first).
+            if (!m.userData.hl) {
+              m.userData.hl = {
                 color: m.color ? m.color.clone() : null,
                 emissive: m.emissive ? m.emissive.clone() : null
               };
@@ -934,10 +947,10 @@ export class MgGame{
             if (m.color) m.color.setHex(hex);
             if (m.emissive) m.emissive.setHex(hex);
             m.needsUpdate = true;
-          } else if (o.userData.hl) {
-            if (m.color && o.userData.hl.color) m.color.copy(o.userData.hl.color);
-            if (m.emissive && o.userData.hl.emissive) m.emissive.copy(o.userData.hl.emissive);
-            o.userData.hl = null;
+          } else if (m.userData.hl) {
+            if (m.color && m.userData.hl.color) m.color.copy(m.userData.hl.color);
+            if (m.emissive && m.userData.hl.emissive) m.emissive.copy(m.userData.hl.emissive);
+            m.userData.hl = null;
             m.needsUpdate = true;
           }
         });

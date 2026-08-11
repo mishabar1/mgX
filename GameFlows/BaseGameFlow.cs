@@ -247,7 +247,9 @@ namespace MG.Server.GameFlows
         {
             data.Item = GameData.FindItem(data.itemId);
             data.Player = GameData.FindPlayer(data.playerId);
-            if (data.Item != null && data.Player != null)
+            // Item may be null for UI-driven actions (the DM console posts args, not a clicked
+            // item); actions that need an item null-check it themselves. Player is still required.
+            if (data.Player != null)
             {
                 // SECURITY (C1): dispatch by client-supplied action name, but ONLY to methods
                 // explicitly marked [GameAction]. Previously this invoked ANY method named by the
@@ -465,6 +467,15 @@ namespace MG.Server.GameFlows
         [GameAction]
         public async Task SelectPiece(ExecuteActionData data)
         {
+            // Toggle: clicking the piece that's already selected unselects it.
+            if (GameData.Attributes.TryGetValue("selectedItem", out var curSel)
+                && !string.IsNullOrEmpty(curSel) && curSel == data.itemId)
+            {
+                ClearSelection();
+                await Task.CompletedTask;
+                return;
+            }
+
             // Drop any previously-selected piece and clear its markers.
             ClearSelection();
 
@@ -503,7 +514,8 @@ namespace MG.Server.GameFlows
                     piece.Position.Y = 0; // drop it back down
                 }
             }
-            ClearSelection();
+            // Keep the piece SELECTED so every subsequent board click moves it again. The user
+            // unselects by clicking the piece itself (SelectPiece toggles it off).
             await Task.CompletedTask;
         }
 

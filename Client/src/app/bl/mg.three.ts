@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {Group} from 'three/src/objects/Group.js';
 import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
+import {CSS3DRenderer, CSS3DObject} from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {STLLoader} from 'three/examples/jsm/loaders/STLLoader.js';
 import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -18,6 +19,15 @@ import {forEach} from 'lodash';
 export class MgThree{
 
   scene!: THREE.Scene;
+
+  // CSS3D layer: real HTML panels transformed into the 3D scene.
+  css3dRenderer?: CSS3DRenderer;
+  css3dScene?: THREE.Scene;
+
+  // "Onscreen" holder: a screen-anchored HUD layer (like hand/table, but fixed to the viewport
+  // side, not the world) — stays put when the camera moves. Panels appended here get their own
+  // pointer-events; the empty column around them stays click-through to the canvas.
+  onscreenHolder?: HTMLDivElement;
   cameraGroup!: Group;
   camera!: THREE.PerspectiveCamera;
   audioListener!: THREE.AudioListener;
@@ -103,8 +113,55 @@ export class MgThree{
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+    this.css3dRenderer?.setSize(w, h);
     this.renderer.render(this.scene, this.camera);
   };
+
+  // Mount an HTML element into the 3D scene as a CSS3D panel. Returns the object so the caller
+  // can reposition/remove it. `scale` converts CSS pixels → world units (e.g. 0.02).
+  mountCssPanel(element: HTMLElement, pos: THREE.Vector3, rot: THREE.Euler, scale: number): CSS3DObject | null {
+    if (!this.css3dScene) return null;
+    const obj = new CSS3DObject(element);
+    obj.position.copy(pos);
+    obj.rotation.copy(rot);
+    obj.scale.setScalar(scale);
+    this.css3dScene.add(obj);
+    return obj;
+  }
+
+  removeCssPanel(obj: CSS3DObject | null | undefined) {
+    if (obj && this.css3dScene) this.css3dScene.remove(obj);
+  }
+
+  // Render a single framed snapshot of a glb/gltf model to a PNG data URL — used for the DM
+  // console's thumbnails. Reuses one small offscreen renderer; returns '' on failure.
+  private _thumbRenderer?: THREE.WebGLRenderer;
+  async renderModelThumbnail(assetRelUrl: string, size = 150): Promise<string> {
+    try {
+      const url = '\\assets\\games\\' + assetRelUrl;
+      const gltf: any = await new Promise((res, rej) => this.gltfLoader.load(url, res, undefined, rej));
+      const model = gltf.scene;
+      const scene = new THREE.Scene();
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x555566, 1.3));
+      const dir = new THREE.DirectionalLight(0xffffff, 1.1); dir.position.set(3, 6, 5); scene.add(dir);
+      scene.add(model);
+
+      const box = new THREE.Box3().setFromObject(model);
+      const sphere = box.getBoundingSphere(new THREE.Sphere());
+      const r = sphere.radius || 1;
+      const fov = 35;
+      const dist = (r / Math.sin((fov / 2) * Math.PI / 180)) * 1.1;
+      const cam = new THREE.PerspectiveCamera(fov, 1, 0.01, 2000);
+      cam.position.set(sphere.center.x + dist * 0.25, sphere.center.y + dist * 0.3, sphere.center.z + dist);
+      cam.lookAt(sphere.center);
+
+      if (!this._thumbRenderer) this._thumbRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+      this._thumbRenderer.setSize(size, size);
+      this._thumbRenderer.setClearColor(0x000000, 0);
+      this._thumbRenderer.render(scene, cam);
+      return this._thumbRenderer.domElement.toDataURL('image/png');
+    } catch { return ''; }
+  }
 
   // Tear down when leaving the view so old renderers stop drawing / listening.
   dispose() {
@@ -168,6 +225,28 @@ export class MgThree{
     // Let the canvas consume touch gestures (orbit/zoom + tap-to-select) instead of the
     // browser scrolling/zooming the page — needed for phones/tablets.
     (this.renderer.domElement.style as any).touchAction = 'none';
+
+    // CSS3D overlay: renders HTML panels (the DM console) transformed with the camera, layered
+    // over the WebGL canvas. pointer-events:none so it never blocks orbit/zoom; the panel itself
+    // re-enables pointer-events. It has no depth vs the WebGL scene (always drawn on top).
+    this.css3dScene = new THREE.Scene();
+    this.css3dRenderer = new CSS3DRenderer();
+    this.css3dRenderer.setSize(this.rendererContainerElement.clientWidth, this.rendererContainerElement.clientHeight);
+    const cssEl = this.css3dRenderer.domElement;
+    cssEl.style.position = 'absolute';
+    cssEl.style.top = '0';
+    cssEl.style.left = '0';
+    cssEl.style.pointerEvents = 'none';
+    if (!this.rendererContainerElement.style.position) this.rendererContainerElement.style.position = 'relative';
+    this.rendererContainerElement.appendChild(cssEl);
+
+    // Screen-anchored HUD holder on the right edge. The column is click-through (pointer-events
+    // none); panels added into it opt back in, so the board behind stays draggable/zoomable.
+    this.onscreenHolder = document.createElement('div');
+    this.onscreenHolder.style.cssText =
+      'position:absolute;top:0;right:0;height:100%;z-index:20;pointer-events:none;' +
+      'display:flex;flex-direction:column;justify-content:center;align-items:flex-end;padding:14px;';
+    this.rendererContainerElement.appendChild(this.onscreenHolder);
 
     // Refresh the canvas whenever the window resizes.
     window.addEventListener('resize', this.onWindowResize);
@@ -348,6 +427,7 @@ export class MgThree{
     this.orbitControls.update();
     this.interactionManager.update();
     this.renderer.render(this.scene, this.camera);
+    if (this.css3dRenderer && this.css3dScene) this.css3dRenderer.render(this.css3dScene, this.camera);
     this.updateMagnifier();
 
     TWEEN.update();

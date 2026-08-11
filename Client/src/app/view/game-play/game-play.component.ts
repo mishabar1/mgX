@@ -200,6 +200,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       this.mgThree=new MgThree();
       this.mgThree.initThree(this.rendererContainer.nativeElement,()=>{
         this.mgGame.loadGame(this.mgThree,this.generalService.User!);
+        this.setupDmConsole();   // DM-only HTML control panel, mounted into the 3D scene
       });
     });
   }
@@ -208,5 +209,100 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     this.mgThree.startVr();
   }
 
+  // ---- DM console (CSS3D in-scene HTML panel) ------------------------------
+  private dmPanelObj: any = null;
+
+  private setupDmConsole() {
+    const g: any = this.mgGame?.gameData;
+    if (!g || String(g.gameType) !== 'DND') return;
+
+    const me = this.generalService.User?.id;
+    const dmSeat = (g.players || []).find((p: any) => p.attributes?.['type'] === 'dm' && p.user?.id === me);
+    if (!dmSeat) return;                       // only the DM gets the console
+    const dmSeatId = dmSeat.id;
+
+    const scenes = this.parseCatalog(g.attributes?.['dndScenes']);
+    const monsters = this.parseCatalog(g.attributes?.['dndMonsters']);
+    const players = (g.players || []).filter((p: any) => p.type !== 'EMPTY_SEAT' && p.attributes?.['type'] !== 'dm');
+    const die = g.attributes?.['die'] || '20';
+
+    // A picture tile: scenes use their map PNG directly; monsters/heroes get a data-thumb the
+    // model is rendered into after mount. Clicking a tile performs its action.
+    const sceneTile = (s: any) =>
+      `<div class="tile" data-act="LoadScene" data-url="${s.url}"><img src="/assets/games/${s.url}"><span>${s.label}</span></div>`;
+    const monsterTile = (m: any) =>
+      `<div class="tile" data-act="AddMonster" data-url="${m.url}"><img data-thumb="${m.url}"><span>${m.label}</span></div>`;
+    const rollTile = (p: any) =>
+      `<div class="tile" data-act="AskRoll" data-seat="${p.id}"><img data-thumb="${p.attributes?.['heroUrl'] || ''}"><span>${p.attributes?.['hero'] || this.pname(p)}</span></div>`;
+
+    const el = document.createElement('div');
+    el.style.pointerEvents = 'auto';   // a docked HUD panel on the screen's right edge
+    el.innerHTML = `
+      <style>
+        .dmc{width:340px;max-height:92vh;overflow-y:auto;font:600 16px system-ui,sans-serif;color:#e8edf5;
+             background:linear-gradient(180deg,rgba(19,30,51,.97),rgba(10,17,32,.97));border:1px solid #2a3a55;
+             border-radius:18px;padding:16px 18px;box-shadow:0 12px 48px rgba(0,0,0,.55);}
+        .dmc h3{margin:0 0 12px;font-size:20px;}
+        .dmc .row{margin-bottom:14px;}
+        .dmc .lbl{font-size:12px;letter-spacing:.09em;color:#8aa0c0;text-transform:uppercase;margin-bottom:6px;}
+        .dmc .pick{display:flex;gap:8px;flex-wrap:wrap;}
+        .dmc .tile{width:78px;cursor:pointer;background:#0e1626;border:2px solid #2a3a55;border-radius:12px;
+             padding:5px;text-align:center;transition:border-color .12s,transform .12s;}
+        .dmc .tile:hover{border-color:#4a86e8;transform:translateY(-2px);}
+        .dmc .tile img{width:66px;height:66px;object-fit:contain;border-radius:8px;display:block;background:#0a0f1a;}
+        .dmc .tile span{display:block;font-size:12px;margin-top:4px;color:#cdd8ea;}
+        .dmc .dmbtn{font:600 16px system-ui;color:#fff;background:#25406b;border:0;border-radius:10px;
+             padding:8px 16px;margin:2px 6px 2px 0;cursor:pointer;}
+        .dmc .dmbtn:hover{background:#31538c;}
+        .dmc .dmbtn.on{background:#c99a00;color:#151515;}
+      </style>
+      <div class="dmc">
+        <h3>🎲 DM Console</h3>
+        <div class="row"><div class="lbl">Scene</div><div class="pick">${scenes.map(sceneTile).join('')}</div></div>
+        <div class="row"><div class="lbl">Add monster</div><div class="pick">${monsters.map(monsterTile).join('')}</div></div>
+        <div class="row dmdice"><div class="lbl">Die</div>
+          <button data-act="SetDie" data-sides="6" class="dmbtn ${die === '6' ? 'on' : ''}">d6</button>
+          <button data-act="SetDie" data-sides="20" class="dmbtn ${die === '20' ? 'on' : ''}">d20</button></div>
+        <div class="row"><div class="lbl">Ask to roll</div><div class="pick">${players.map(rollTile).join('')}</div></div>
+      </div>`;
+
+    el.addEventListener('click', (ev: any) => {
+      const t = ev.target.closest('[data-act]');
+      if (!t) return;
+      const act = t.getAttribute('data-act');
+      if (!act) return;
+      const args: any = {};
+      if (act === 'LoadScene') args.sceneUrl = t.getAttribute('data-url');
+      if (act === 'AddMonster') args.monsterUrl = t.getAttribute('data-url');
+      if (act === 'AskRoll') args.seat = t.getAttribute('data-seat');
+      if (act === 'SetDie') {
+        args.sides = t.getAttribute('data-sides');
+        el.querySelectorAll('.dmdice .dmbtn').forEach((b: any) => b.classList.remove('on'));
+        t.classList.add('on');
+      }
+      this.signalRService.executeActionArgs(this.gameId!, dmSeatId, act, args);
+    });
+
+    // Dock into the screen-anchored "onscreen" holder — stays fixed on the right as the camera moves.
+    this.mgThree.onscreenHolder?.appendChild(el);
+
+    // Render the model thumbnails (monsters + heroes) into their tiles, one by one.
+    setTimeout(async () => {
+      const imgs = Array.from(el.querySelectorAll('img[data-thumb]')) as HTMLImageElement[];
+      for (const img of imgs) {
+        const u = img.getAttribute('data-thumb'); if (!u) continue;
+        const data = await this.mgThree.renderModelThumbnail(u);
+        if (data) img.src = data;
+      }
+    }, 0);
+  }
+
+  private parseCatalog(s: string): {label: string, url: string}[] {
+    return (s || '').split(';').filter(Boolean).map(pair => {
+      const i = pair.indexOf('|');
+      return {label: pair.slice(0, i), url: pair.slice(i + 1)};
+    });
+  }
+  private pname(p: any) { return p.user?.name || p.name || (p.type === 'AI' ? 'AI' : 'open'); }
 
 }

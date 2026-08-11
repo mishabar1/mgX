@@ -17,7 +17,7 @@ namespace MG.Server.Entities
         public Dictionary<string, string> HoverActions { get; set; } // player id - action name
 
         public string Text { get; set; }
-        public int AnimationIdx { get; set; }
+        public int AnimationIdx { get; set; } = -1; // -1 = no animation (default). >=0 plays that clip.
         public string PlayType { get; set; }
         
 
