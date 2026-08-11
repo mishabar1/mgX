@@ -6,12 +6,58 @@
 </div>
 
 <div style="position: absolute;bottom: 0;right: 0;">
-  <button (click)="onVrClick()" style="width: 100px;height: 30px">VR</button>
+
 </div>
 
 <div style="position:absolute;bottom:10px;left:10px;display:flex;gap:8px;z-index:10;">
   <p-button label="Games list" icon="pi pi-list" severity="secondary" (onClick)="backToList()"></p-button>
   <p-button label="Undo" icon="pi pi-undo" severity="secondary" (onClick)="undo()"></p-button>
+  @if (voiceAllowed) {
+    <div class="voice-panel1">
+
+      @if (voice.joined && voice.captionsOn && voice.transcript.length) {
+        <div class="voice-transcript">
+          @for (line of voice.transcript.slice(-6); track $index) {
+            <div class="tline"><b>{{ line.name }}:</b> {{ line.text }}</div>
+          }
+        </div>
+      }
+
+      <div class="voice-controls">
+        @if (!voice.joined) {
+          <button class="voice-btn join" (click)="joinVoice()">
+            <i class="pi pi-microphone"></i> Join voice
+          </button>
+        } @else {
+          <!-- who's in the call; the ring lights up on whoever is talking -->
+          <span class="voice-chip" [class.speaking]="voice.selfSpeaking" [class.muted]="voice.muted">
+          <i class="pi pi-user"></i> You
+        </span>
+          @for (p of voice.participants; track p.id) {
+            <span class="voice-chip" [class.speaking]="p.speaking">{{ p.name }}</span>
+          }
+
+          <button class="voice-btn" (click)="toggleMute()" [class.muted]="voice.muted">
+            <i class="pi" [ngClass]="voice.muted ? 'pi-volume-off' : 'pi-microphone'"></i>
+            {{ voice.muted ? 'Unmute' : 'Mute' }}
+          </button>
+          @if (voice.transcriptSupported) {
+            <button class="voice-btn cc" (click)="voice.toggleCaptions()" [class.on]="voice.captionsOn" title="Live captions">
+              <i class="pi pi-align-left"></i> CC
+            </button>
+          }
+          <button class="voice-btn leave" (click)="leaveVoice()">
+            <i class="pi pi-phone"></i> Leave
+          </button>
+        }
+      </div>
+
+      @if (voice.error) {
+        <div class="voice-error">{{ voice.error }}</div>
+      }
+    </div>
+  }
+  <p-button label="VR" (click)="onVrClick()" severity="secondary"></p-button>
 </div>
 
 @if (hud) {
@@ -20,51 +66,7 @@
               font:600 14px sans-serif;white-space:nowrap;">{{ hud }}</div>
 }
 
-@if (voiceAllowed) {
-  <div class="voice-panel">
 
-    @if (voice.joined && voice.captionsOn && voice.transcript.length) {
-      <div class="voice-transcript">
-        @for (line of voice.transcript.slice(-6); track $index) {
-          <div class="tline"><b>{{ line.name }}:</b> {{ line.text }}</div>
-        }
-      </div>
-    }
-
-    <div class="voice-controls">
-      @if (!voice.joined) {
-        <button class="voice-btn join" (click)="joinVoice()">
-          <i class="pi pi-microphone"></i> Join voice
-        </button>
-      } @else {
-        <!-- who's in the call; the ring lights up on whoever is talking -->
-        <span class="voice-chip" [class.speaking]="voice.selfSpeaking" [class.muted]="voice.muted">
-          <i class="pi pi-user"></i> You
-        </span>
-        @for (p of voice.participants; track p.id) {
-          <span class="voice-chip" [class.speaking]="p.speaking">{{ p.name }}</span>
-        }
-
-        <button class="voice-btn" (click)="toggleMute()" [class.muted]="voice.muted">
-          <i class="pi" [ngClass]="voice.muted ? 'pi-volume-off' : 'pi-microphone'"></i>
-          {{ voice.muted ? 'Unmute' : 'Mute' }}
-        </button>
-        @if (voice.transcriptSupported) {
-          <button class="voice-btn cc" (click)="voice.toggleCaptions()" [class.on]="voice.captionsOn" title="Live captions">
-            <i class="pi pi-align-left"></i> CC
-          </button>
-        }
-        <button class="voice-btn leave" (click)="leaveVoice()">
-          <i class="pi pi-phone"></i> Leave
-        </button>
-      }
-    </div>
-
-    @if (voice.error) {
-      <div class="voice-error">{{ voice.error }}</div>
-    }
-  </div>
-}
 
 @if (mgThree && mgGame && mgGame.gameData) {
   <app-debug-view
