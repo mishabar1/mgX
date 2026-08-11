@@ -123,6 +123,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
         this.lastStatus = status;
         this.computeHud(data);
         this.updateDmSelected(data);   // refresh the console's contextual section
+        this.updateRollUi(data);       // dice-roll prompt / result toast
       });
     });
 
@@ -190,6 +191,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
 
       this.mgGame = new MgGame();
       this.mgGame.gameData = game;
+      this.lastRollNonce = game.attributes?.['rollResult'] || '';   // don't replay last roll on load
 
       // If opening an already-finished game (e.g. to analyse it), show the result once.
       this.lastStatus = String(game.gameStatus);
@@ -371,6 +373,85 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
         ${clips.length ? `<select data-act="SetAnim" style="${dd}">${animOpts}</select>` : ''}
         <button class="dmbtn" data-act="RemoveSelected">🗑 Remove</button>
       </div>`;
+  }
+
+  // ---- player dice-roll prompt + result toast (onscreen) -------------------
+  private rollEl?: HTMLElement;
+  private rolling = false;
+  private myRollFinal: number | null = null;
+  private lastRollNonce = '';
+
+  private mySeatId(): string { return (this.mgGame as any)?.playerData?.id || ''; }
+
+  private updateRollUi(g: any) {
+    const host = this.rendererContainer?.nativeElement;
+    if (!host || !g) return;
+    const seat = this.mySeatId();
+
+    // Pending roll prompt for ME?
+    const pending = seat ? g.attributes?.['roll:' + seat] : null;
+    if (pending && !this.rollEl && !this.rolling) this.showRollPrompt(parseInt(pending, 10) || 20);
+    else if (!pending && this.rollEl && !this.rolling) this.hideRollPrompt();
+
+    // A roll result (for everyone). Nonce-prefixed so repeats still fire. Announce + settle mine.
+    const rr = g.attributes?.['rollResult'];
+    if (rr && rr !== this.lastRollNonce) {
+      this.lastRollNonce = rr;
+      const parts = String(rr).split('|');   // nonce|seat|who|sides|result
+      const rseat = parts[1], who = parts[2], sides = parts[3], result = parts[4];
+      this.showRollToast(`${who} rolled d${sides} → ${result}`);
+      if (rseat === seat) this.myRollFinal = parseInt(result, 10);
+    }
+  }
+
+  private showRollPrompt(sides: number) {
+    const host = this.rendererContainer.nativeElement as HTMLElement;
+    const el = document.createElement('div');
+    el.style.cssText = 'position:absolute;left:50%;bottom:9%;transform:translateX(-50%);z-index:40;pointer-events:auto;'
+      + 'font:600 20px system-ui,sans-serif;color:#e8edf5;text-align:center;'
+      + 'background:linear-gradient(180deg,rgba(19,30,51,.97),rgba(10,17,32,.97));border:1px solid #2a3a55;'
+      + 'border-radius:18px;padding:18px 28px;box-shadow:0 12px 48px rgba(0,0,0,.6);';
+    el.innerHTML = `
+      <div style="font-size:14px;color:#8aa0c0;letter-spacing:.06em;margin-bottom:8px;">THE DM ASKS YOU TO ROLL</div>
+      <div class="rollnum" style="font-size:64px;font-weight:800;line-height:1;margin-bottom:14px;color:#ffd166;">d${sides}</div>
+      <button class="rollbtn" style="font:700 20px system-ui;color:#151515;background:#ffd166;border:0;border-radius:12px;padding:12px 32px;cursor:pointer;">🎲 Roll d${sides}</button>`;
+    el.querySelector('.rollbtn')!.addEventListener('click', () => this.startRoll(sides));
+    host.appendChild(el);
+    this.rollEl = el;
+  }
+
+  private startRoll(sides: number) {
+    if (!this.rollEl || this.rolling) return;
+    this.rolling = true;
+    const numEl = this.rollEl.querySelector('.rollnum') as HTMLElement;
+    const btn = this.rollEl.querySelector('.rollbtn') as HTMLElement;
+    if (btn) btn.style.display = 'none';
+    const spin = setInterval(() => { numEl.textContent = String(1 + Math.floor(Math.random() * sides)); }, 70);
+    const start = Date.now();
+    this.signalRService.executeActionArgs(this.gameId!, this.mySeatId(), 'RollDice', {});
+    const settle = setInterval(() => {
+      const done = Date.now() - start >= 900 && this.myRollFinal != null;
+      if (done || Date.now() - start > 4000) {
+        clearInterval(spin); clearInterval(settle);
+        if (this.myRollFinal != null) numEl.textContent = String(this.myRollFinal);
+        setTimeout(() => { this.hideRollPrompt(); this.rolling = false; this.myRollFinal = null; }, 1500);
+      }
+    }, 80);
+  }
+
+  private hideRollPrompt() { this.rollEl?.remove(); this.rollEl = undefined; }
+
+  private showRollToast(text: string) {
+    const host = this.rendererContainer?.nativeElement as HTMLElement;
+    if (!host) return;
+    const t = document.createElement('div');
+    t.textContent = '🎲 ' + text;
+    t.style.cssText = 'position:absolute;left:50%;top:18px;transform:translateX(-50%);z-index:45;pointer-events:none;'
+      + 'font:700 22px system-ui,sans-serif;color:#151515;background:#ffd166;border-radius:12px;padding:10px 24px;'
+      + 'box-shadow:0 8px 30px rgba(0,0,0,.45);opacity:0;transition:opacity .2s;';
+    host.appendChild(t);
+    requestAnimationFrame(() => { t.style.opacity = '1'; });
+    setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3200);
   }
 
 }
