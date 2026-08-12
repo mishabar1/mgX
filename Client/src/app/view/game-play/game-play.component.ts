@@ -85,7 +85,9 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
   get isPlayer(): boolean { return !!this.mgGame?.playerData; }
 
   // The Resistance is a pure 2D card/vote game — no 3D scene, so hide 3D-only controls (VR).
-  get isResistance(): boolean { return String(this.mgGame?.gameData?.gameType) === 'RESISTANCE'; }
+  // A full-screen server-driven panel (e.g. The Resistance) owns the whole view — hide the 3D
+  // play chrome (VR button, bottom bar). Driven by the server's panelMode, not by game type.
+  get panelFull(): boolean { return this.mgGame?.gameData?.attributes?.['panelMode'] === 'full'; }
 
   // Only the game's creator may restart it ("Play again").
   get isCreator(): boolean {
@@ -141,7 +143,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
         this.computeHud(data);
         this.updateDmSelected(data);   // refresh the console's contextual section
         this.updateRollUi(data);       // dice-roll prompt / result toast
-        this.updateResistanceConsole(data);   // The Resistance per-player panel
+        this.updateServerPanel(data);   // generic server-driven panel (any game)
       });
     });
 
@@ -222,8 +224,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       this.mgThree.initThree(this.rendererContainer.nativeElement,()=>{
         this.mgGame.loadGame(this.mgThree,this.generalService.User!);
         this.setupDmConsole();   // DM-only HTML control panel, mounted into the 3D scene
-        this.setupResistanceConsole();   // The Resistance per-player console (no-op for other games)
-        this.setupDemoConsole();   // Demo (dev reference) control panel (no-op for other games)
+        this.setupServerPanel();   // generic server-driven panel: renders PlayerData.Screen for any game
       });
     });
   }
@@ -353,322 +354,184 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     }, 0);
   }
 
-  // ==================== The Resistance console ====================
-  private resConsoleEl?: HTMLElement;
-  private resSeatId = '';
-  private lastResKey = '';
+  // ==================== Generic server-driven panel ====================
+  // The client is DUMB. The server sends this seat's ENTIRE panel as PlayerData.Screen (a UiNode
+  // tree) and this ONE renderer draws whatever it's given — for EVERY game. No game logic lives
+  // here: not the texts, not the buttons, not the layout, not the rules. Swap this framework out
+  // tomorrow and only renderNode() is rewritten; the games never change.
+  private panelEl?: HTMLElement;
+  private panelWrap?: HTMLElement;
+  private panelSeatId = '';
+  private lastPanelKey = '';
 
-  // Team size per mission (1..5) by player count — must match the server table.
-  private static RES_TEAM: { [n: number]: number[] } = {
-    5: [2, 3, 2, 3, 3], 6: [2, 3, 4, 3, 4], 7: [2, 3, 3, 4, 4],
-    8: [3, 4, 4, 5, 5], 9: [3, 4, 4, 5, 5], 10: [3, 4, 4, 5, 5],
-  };
-  private resTeamSize(n: number, mission: number): number {
-    const row = GamePlayComponent.RES_TEAM[Math.min(10, Math.max(5, n))];
-    return row[Math.min(5, Math.max(1, mission)) - 1];
-  }
-  private resImg(file: string) { return `/assets/games/resistance/${file}`; }
-
-  private setupResistanceConsole() {
-    const g: any = this.mgGame?.gameData;
-    if (!g || String(g.gameType) !== 'RESISTANCE') return;
-
+  private setupServerPanel() {
+    // One-time: build the panel shell + styles + a single delegated click handler.
     const el = document.createElement('div');
     el.style.pointerEvents = 'auto';
-    el.innerHTML = `
-      <style>
-        .resc{width:min(560px,100%);margin:0 auto 24px;box-sizing:border-box;font:600 16px system-ui,sans-serif;color:#e8edf5;
-             background:linear-gradient(180deg,rgba(22,17,14,.98),rgba(12,9,7,.98));border:1px solid #5a4632;
-             border-radius:18px;padding:16px 18px;box-shadow:0 12px 48px rgba(0,0,0,.6);}
-        .resc .topbar{display:flex;justify-content:flex-start;margin-bottom:10px;}
-        .resc .topbar .btn{background:#3a2c1e;padding:7px 14px;font-size:14px;margin:0;}
-        .resc h3{margin:0 0 4px;font-size:22px;letter-spacing:.04em;}
-        .resc .phase{color:#d9b98a;font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px;}
-        .resc .card{border-radius:10px;border:1px solid #5a4632;overflow:hidden;background:#0a0705;}
-        .resc .rolebox{display:flex;gap:12px;align-items:center;margin-bottom:12px;}
-        .resc .rolebox img{width:82px;height:auto;border-radius:8px;display:block;}
-        .resc .rname{font-size:18px;font-weight:800;}
-        .resc .res{color:#5fd08a;} .resc .spy{color:#ff6b6b;}
-        .resc .mates{font-size:13px;color:#ffb0b0;margin-top:4px;}
-        .resc .track{display:flex;gap:6px;margin:10px 0;}
-        .resc .pill{flex:1;text-align:center;padding:7px 0;border-radius:8px;background:#241a12;border:1px solid #5a4632;font-size:13px;}
-        .resc .pill.cur{outline:2px solid #d9b98a;}
-        .resc .pill.s{background:#123a20;border-color:#2f7a45;} .resc .pill.f{background:#3a1414;border-color:#7a2f2f;}
-        .resc .vt{margin:8px 0;font-size:13px;color:#cbb493;}
-        .resc .dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:4px;background:#3a2c1e;border:1px solid #5a4632;}
-        .resc .dot.on{background:#ff6b6b;border-color:#ff6b6b;}
-        .resc .lead{font-size:14px;margin:6px 0 12px;color:#e8dcc6;}
-        .resc .ctrl{margin:8px 0;}
-        .resc .btn{font:700 15px system-ui;color:#fff;background:#6a4a25;border:0;border-radius:10px;padding:10px 16px;margin:4px 8px 4px 0;cursor:pointer;}
-        .resc .btn:hover{background:#8a6431;}
-        .resc .btn.ok{background:#2f7a45;} .resc .btn.ok:hover{background:#3a9455;}
-        .resc .btn.no{background:#7a2f2f;} .resc .btn.no:hover{background:#984040;}
-        .resc .btn:disabled{opacity:.4;cursor:default;}
-        .resc .pl{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:15px;}
-        .resc .pl input{width:17px;height:17px;}
-        .resc .team{color:#ffe0a8;font-weight:700;}
-        .resc .wait{color:#b7a488;font-size:14px;font-style:italic;}
-        .resc .banner{font-size:20px;font-weight:800;text-align:center;padding:14px;border-radius:12px;margin:8px 0;}
-        .resc .log{margin-top:12px;border-top:1px solid #5a4632;padding-top:8px;max-height:180px;overflow-y:auto;
-             font:500 12px ui-monospace,monospace;color:#b7a488;white-space:pre-wrap;}
-        .resc .voteimg{height:74px;border-radius:8px;cursor:pointer;border:2px solid transparent;}
-        .resc .voteimg:hover{border-color:#d9b98a;}
-      </style>
-      <div class="resc">
-        <div class="topbar"><button class="btn" data-act="Leave">← Games</button></div>
-        <div id="resBody"></div>
-      </div>`;
+    el.innerHTML = `<style>${this.panelStyles()}</style>`
+      + `<div class="sp"><div class="sp-topbar"><button class="sp-btn ghost" data-leave="1">← Games</button></div><div id="spBody"></div></div>`;
 
+    // Clicks on buttons (SELECT/checkbox fire 'change' below instead).
     el.addEventListener('click', (ev: any) => {
-      const t = ev.target.closest('[data-act]');
-      if (!t) return;
-      const act = t.getAttribute('data-act');
-      if (act === 'Leave') { this.zone.run(() => this.router.navigate([RouteNames.GamesList])); return; }
-      if (!this.resSeatId) return;   // spectators can't act
-      const args: any = {};
-      if (act === 'ProposeTeam') {
-        const boxes = Array.from(el.querySelectorAll('input[data-seat]:checked')) as HTMLInputElement[];
-        const need = Number(t.getAttribute('data-need'));
-        if (boxes.length !== need) { window.alert(`Pick exactly ${need} players.`); return; }
-        args.team = boxes.map(b => b.getAttribute('data-seat')).join(',');
-      }
-      if (act === 'Vote') args.vote = t.getAttribute('data-vote');
-      if (act === 'Mission') args.card = t.getAttribute('data-card');
-      this.signalRService.executeActionArgs(this.gameId!, this.resSeatId, act, args);
-    });
-
-    // Phone-friendly: this game is pure cards/buttons, so the 2D panel IS the game. Mount it as a
-    // full-screen, scrollable, centered overlay that covers the 3D scene (rather than the small
-    // right-edge HUD used by the board games).
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:absolute;inset:0;z-index:30;overflow-y:auto;pointer-events:auto;'
-      + 'display:flex;justify-content:center;align-items:flex-start;box-sizing:border-box;padding:10px;'
-      + 'background:radial-gradient(circle at 50% -10%,#2a2018,#0b0806);';
-    wrap.appendChild(el);
-    this.rendererContainer.nativeElement.appendChild(wrap);
-    this.resConsoleEl = el;
-    this.updateResistanceConsole(g);
-  }
-
-  private updateResistanceConsole(g: any) {
-    if (!this.resConsoleEl || !g || String(g.gameType) !== 'RESISTANCE') return;
-    const body = this.resConsoleEl.querySelector('#resBody') as HTMLElement | null;
-    if (!body) return;
-
-    const me = this.generalService.User?.id;
-    const occ = (g.players || []).filter((p: any) => p.type !== 'EMPTY_SEAT');
-    const mySeat = occ.find((p: any) => p.user?.id === me);
-    this.resSeatId = mySeat?.id || '';
-    const a = g.attributes || {};
-
-    const phase = a['phase'] || 'reveal';
-    const mnum = Number(a['mnum'] || 1);
-    const leader = a['leader'] || '';
-    const voteTrack = Number(a['voteTrack'] || 0);
-    const results = (a['results'] || '').split(',').filter(Boolean);
-    const team = (a['team'] || '').split(',').filter(Boolean);
-    const n = occ.length;
-    const over = !!a['over'];
-
-    // rebuild only when something relevant changed (so leader's checkbox picks survive)
-    const votes = occ.filter((p: any) => a['vote:' + p.id]).length;
-    const mcards = team.filter((id: string) => a['mcard:' + id]).length;
-    const key = [phase, mnum, leader, voteTrack, results.length, team.join('|'), votes, mcards,
-                 a['ack:' + this.resSeatId] || '', a['vote:' + this.resSeatId] || '',
-                 a['mcard:' + this.resSeatId] || '', over ? a['result'] : '', (a['log'] || '').length].join('#');
-    if (key === this.lastResKey) return;
-    this.lastResKey = key;
-
-    const nameOf = (id: string) => { const p = occ.find((x: any) => x.id === id); return p ? this.pname(p) : '?'; };
-    const myRole = this.resSeatId ? (a['role:' + this.resSeatId] || 'resistance') : '';
-    const iAmSpy = myRole === 'spy';
-    const need = this.resTeamSize(n, mnum);
-
-    // --- role box ---
-    let roleHtml = '';
-    if (this.resSeatId) {
-      const card = a['card:' + this.resSeatId];
-      const spymates = iAmSpy
-        ? occ.filter((p: any) => p.id !== this.resSeatId && a['role:' + p.id] === 'spy').map((p: any) => this.pname(p))
-        : [];
-      roleHtml = `
-        <div class="rolebox">
-          ${card ? `<img class="card" src="${this.resImg(card)}">` : ''}
-          <div>
-            <div class="rname ${iAmSpy ? 'spy' : 'res'}">You are ${iAmSpy ? 'a SPY' : 'RESISTANCE'}</div>
-            ${iAmSpy ? `<div class="mates">Fellow spies: ${spymates.length ? spymates.join(', ') : '— (you work alone)'}</div>`
-                     : `<div class="mates" style="color:#8fbfa0;">Complete 3 missions to win.</div>`}
-          </div>
-        </div>`;
-    } else {
-      roleHtml = `<div class="wait" style="margin-bottom:10px;">Spectating — roles hidden.</div>`;
-    }
-
-    // --- mission track ---
-    const pills = [];
-    for (let m = 1; m <= 5; m++) {
-      const sz = this.resTeamSize(n, m);
-      const two = (m === 4 && n >= 7) ? '‼' : '';
-      let cls = 'pill';
-      if (m <= results.length) cls += results[m - 1] === 'S' ? ' s' : ' f';
-      else if (m === mnum && !over) cls += ' cur';
-      const mark = m <= results.length ? (results[m - 1] === 'S' ? '✔' : '✖') : `${sz}${two}`;
-      pills.push(`<div class="${cls}">${mark}</div>`);
-    }
-    const trackHtml = `<div class="track">${pills.join('')}</div>`;
-
-    // --- vote track ---
-    const dots = [0, 1, 2, 3, 4].map(i => `<span class="dot ${i < voteTrack ? 'on' : ''}"></span>`).join('');
-    const vtHtml = `<div class="vt">Rejected teams this round: ${dots} ${voteTrack}/5</div>`;
-
-    const leadHtml = `<div class="lead">👑 Leader: <b>${nameOf(leader)}</b>${leader === this.resSeatId ? ' (you)' : ''}</div>`;
-
-    // --- phase controls ---
-    let ctrl = '';
-    if (over) {
-      const spiesWon = a['winnerRole'] === 'spy';
-      ctrl = `<div class="banner ${spiesWon ? 'spy' : 'res'}" style="background:${spiesWon ? '#3a1414' : '#123a20'};">
-                ${a['result'] || 'Game over'}</div>`;
-    } else if (phase === 'reveal') {
-      if (!this.resSeatId) ctrl = `<div class="wait">Waiting for players to review their roles…</div>`;
-      else if (a['ack:' + this.resSeatId] === '1') {
-        const ready = occ.filter((p: any) => a['ack:' + p.id] === '1').length;
-        ctrl = `<div class="wait">Waiting for players… (${ready}/${n} ready)</div>`;
-      } else ctrl = `<div class="ctrl"><button class="btn ok" data-act="Ready">I've seen my role — Ready</button></div>`;
-    } else if (phase === 'team') {
-      if (leader === this.resSeatId) {
-        const rows = occ.map((p: any) =>
-          `<label class="pl"><input type="checkbox" data-seat="${p.id}"> ${this.pname(p)}${p.id === this.resSeatId ? ' (you)' : ''}</label>`).join('');
-        ctrl = `<div class="ctrl"><div style="margin-bottom:6px;">Pick <b>${need}</b> players for mission ${mnum}:</div>
-                  ${rows}
-                  <button class="btn ok" data-act="ProposeTeam" data-need="${need}" style="margin-top:8px;">Propose team</button></div>`;
-      } else {
-        ctrl = `<div class="wait">Waiting for <b>${nameOf(leader)}</b> to propose a team of ${need}…</div>`;
-      }
-    } else if (phase === 'vote') {
-      const teamNames = team.map(nameOf).join(', ');
-      let box = `<div class="ctrl">Proposed team: <span class="team">${teamNames}</span></div>`;
-      if (this.resSeatId && !a['vote:' + this.resSeatId]) {
-        box += `<div class="ctrl">
-                  <img class="voteimg" data-act="Vote" data-vote="approve" src="${this.resImg('support-en.jpg')}" title="Approve">
-                  <img class="voteimg" data-act="Vote" data-vote="reject" src="${this.resImg('reject-en.jpg')}" title="Reject">
-                </div>`;
-      } else if (this.resSeatId) {
-        box += `<div class="wait">You voted <b>${a['vote:' + this.resSeatId]}</b>. Waiting… (${votes}/${n} voted)</div>`;
-      } else {
-        box += `<div class="wait">Voting… (${votes}/${n})</div>`;
-      }
-      ctrl = box;
-    } else if (phase === 'mission') {
-      const teamNames = team.map(nameOf).join(', ');
-      let box = `<div class="ctrl">On mission: <span class="team">${teamNames}</span></div>`;
-      const onTeam = team.indexOf(this.resSeatId) >= 0;
-      if (onTeam && !a['mcard:' + this.resSeatId]) {
-        box += `<div class="ctrl">
-                  <img class="voteimg" data-act="Mission" data-card="success" src="${this.resImg('succeed-en.jpg')}" title="Success">
-                  ${iAmSpy ? `<img class="voteimg" data-act="Mission" data-card="fail" src="${this.resImg('fail-en.jpg')}" title="Sabotage">` : ''}
-                </div>`;
-        if (!iAmSpy) box += `<div class="wait">Resistance must support the mission.</div>`;
-      } else if (onTeam) {
-        box += `<div class="wait">Card submitted. Waiting… (${mcards}/${team.length})</div>`;
-      } else {
-        box += `<div class="wait">Mission underway… (${mcards}/${team.length} cards in)</div>`;
-      }
-      ctrl = box;
-    }
-
-    // --- log ---
-    const log = a['log'] || '';
-    const logHtml = log ? `<div class="log">${this.esc(log)}</div>` : '';
-
-    body.innerHTML = `
-      <h3>THE RESISTANCE</h3>
-      <div class="phase">Mission ${mnum} · ${this.resPhaseLabel(phase)}</div>
-      ${roleHtml}
-      ${trackHtml}
-      ${vtHtml}
-      ${leadHtml}
-      ${ctrl}
-      ${logHtml}`;
-
-    // keep the log scrolled to the newest line
-    const logEl = body.querySelector('.log') as HTMLElement | null;
-    if (logEl) logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  private resPhaseLabel(p: string) {
-    return ({ reveal: 'Review roles', team: 'Proposing team', vote: 'Vote on team', mission: 'On mission', over: 'Game over' } as any)[p] || p;
-  }
-  private esc(s: string) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]); }
-
-  // ==================== Demo (dev reference) control panel ====================
-  // Shows how to build an on-screen HTML control panel and wire its buttons to server
-  // [GameAction] methods via executeActionArgs(gameId, seatId, actionId, args). The server reads
-  // the args with its Arg(data,"key") helper — no clicked 3D item is involved. Mirror this pattern
-  // (and setupDmConsole / setupResistanceConsole) to give any game its own panel.
-  private setupDemoConsole() {
-    const g: any = this.mgGame?.gameData;
-    if (!g || String(g.gameType) !== 'DEMO') return;
-
-    // Which seat are we? Panel actions are dispatched "as" this seat. Fall back to the first
-    // occupied seat so a solo tester always has one.
-    const me = this.generalService.User?.id;
-    const occ = (g.players || []).filter((p: any) => p.type !== 'EMPTY_SEAT');
-    const seat = occ.find((p: any) => p.user?.id === me) || occ[0];
-    if (!seat) return;
-    const seatId = seat.id;
-
-    const el = document.createElement('div');
-    el.style.pointerEvents = 'auto';
-    el.innerHTML = `
-      <style>
-        .democ{width:280px;font:600 15px system-ui,sans-serif;color:#e8edf5;
-             background:linear-gradient(180deg,rgba(19,30,51,.97),rgba(10,17,32,.97));
-             border:1px solid #2a3a55;border-radius:16px;padding:14px 16px;box-shadow:0 12px 48px rgba(0,0,0,.55);}
-        .democ h3{margin:0 0 10px;font-size:18px;}
-        .democ .lbl{font-size:12px;letter-spacing:.08em;color:#8aa0c0;text-transform:uppercase;margin:10px 0 4px;}
-        .democ button{font:600 15px system-ui;color:#fff;background:#25406b;border:0;border-radius:9px;
-             padding:8px 14px;margin:2px 6px 2px 0;cursor:pointer;}
-        .democ button:hover{background:#31538c;}
-        .democ input,.democ select{width:100%;box-sizing:border-box;padding:7px;border-radius:8px;
-             border:1px solid #2a3a55;background:#0e1626;color:#e8edf5;margin-bottom:6px;}
-      </style>
-      <div class="democ">
-        <h3>🧪 Demo panel</h3>
-        <div class="lbl">Spawn a disc on the board</div>
-        <select id="demoColor">
-          <option value="">random colour</option>
-          <option value="0xE03131">red</option>
-          <option value="0x22C55E">green</option>
-          <option value="0x2563EB">blue</option>
-          <option value="0xF59E0B">amber</option>
-          <option value="0x9333EA">purple</option>
-        </select>
-        <button data-act="PanelSpawn">➕ Spawn disc</button>
-        <button data-act="PanelClear">🗑 Clear spawned</button>
-        <div class="lbl">Drop a floating label</div>
-        <input id="demoText" placeholder="type text…">
-        <button data-act="PanelSay">💬 Add label</button>
-        <div class="lbl">Music (looping sound)</div>
-        <button data-act="PlayMusic">🎵 Play</button>
-        <button data-act="StopMusic">⏹ Stop</button>
-        <div class="lbl">Turn / end</div>
-        <button data-act="EndTurn">⏭ End turn</button>
-        <button data-act="EndDemo">🏁 End game</button>
-      </div>`;
-
-    el.addEventListener('click', (ev: any) => {
+      if (ev.target.closest('[data-leave]')) { this.zone.run(() => this.router.navigate([RouteNames.GamesList])); return; }
       const t = ev.target.closest('button[data-act]');
-      if (!t) return;
+      if (!t || !this.panelSeatId) return;
+      const confirm = t.getAttribute('data-confirm');
+      if (confirm && !window.confirm(confirm)) return;
       const act = t.getAttribute('data-act');
-      const args: any = {};
-      if (act === 'PanelSpawn') args.color = (el.querySelector('#demoColor') as HTMLSelectElement).value;
-      if (act === 'PanelSay') args.text = (el.querySelector('#demoText') as HTMLInputElement).value;
-      // THE dispatch: run a server [GameAction] by name, passing a key/value bag.
-      this.signalRService.executeActionArgs(this.gameId!, seatId, act, args);
+      let args: any = {};
+      try { args = JSON.parse(t.getAttribute('data-args') || '{}'); } catch {}
+      // "checks" submit: gather the checked values in this group into the named arg key.
+      const argKey = t.getAttribute('data-argkey');
+      if (argKey) {
+        const group = t.closest('.sp-checks');
+        const vals = group ? Array.from(group.querySelectorAll('input[type=checkbox]:checked')).map((c: any) => c.getAttribute('data-val')) : [];
+        const need = Number(t.getAttribute('data-need') || 0);
+        if (need > 0 && vals.length !== need) { window.alert(`Pick exactly ${need}.`); return; }
+        args[argKey] = vals.join(',');
+      }
+      // "gather": read named input/select fields into args (keyed by their id).
+      const gather = t.getAttribute('data-gather');
+      if (gather) gather.split(',').filter(Boolean).forEach((id: string) => {
+        const f = this.panelEl!.querySelector(`[data-id="${id}"]`) as any;
+        if (f) args[id] = f.value;
+      });
+      this.signalRService.executeActionArgs(this.gameId!, this.panelSeatId, act, args);
     });
 
-    this.mgThree.onscreenHolder?.appendChild(el);   // dock into the screen-anchored HUD layer
+    // Change on an on-change select / checkbox → dispatch immediately with its value.
+    el.addEventListener('change', (ev: any) => {
+      const t = ev.target.closest('[data-act][data-onchange]');
+      if (!t || !this.panelSeatId) return;
+      if (t.tagName === 'SELECT' && !t.value) return;   // ignore the empty placeholder
+      const act = t.getAttribute('data-act');
+      let args: any = {};
+      try { args = JSON.parse(t.getAttribute('data-args') || '{}'); } catch {}
+      const argKey = t.getAttribute('data-argkey');
+      if (argKey) args[argKey] = t.type === 'checkbox' ? (t.checked ? '1' : '0') : t.value;
+      this.signalRService.executeActionArgs(this.gameId!, this.panelSeatId, act, args);
+    });
+
+    // A wrapper we re-style per update (full-screen vs docked) based on the server's panelMode.
+    this.panelWrap = document.createElement('div');
+    this.panelWrap.appendChild(el);
+    this.rendererContainer.nativeElement.appendChild(this.panelWrap);
+    this.panelEl = el;
+    this.updateServerPanel(this.mgGame?.gameData);
+  }
+
+  private updateServerPanel(g: any) {
+    if (!this.panelEl || !this.panelWrap || !g) return;
+    const me = this.generalService.User?.id;
+    const mine = (g.players || []).find((p: any) => p.user?.id === me && p.screen);
+    this.panelSeatId = mine?.id || '';
+    const screen = mine?.screen || null;
+    const mode = g.attributes?.['panelMode'] || 'side';
+
+    const wrap = this.panelWrap;
+    if (!screen) { wrap.style.display = 'none'; this.lastPanelKey = ''; return; }   // no panel for this game/seat
+    wrap.style.cssText = mode === 'full'
+      ? 'position:absolute;inset:0;z-index:30;overflow-y:auto;pointer-events:auto;display:flex;justify-content:center;align-items:flex-start;box-sizing:border-box;padding:10px;background:radial-gradient(circle at 50% -10%,#2a2018,#0b0806);'
+      : 'position:absolute;top:0;right:0;height:100%;z-index:30;overflow-y:auto;pointer-events:auto;display:flex;align-items:flex-start;padding:14px;';
+
+    // Rebuild only when the screen actually changed (so in-progress checkbox picks survive).
+    const key = mode + '#' + JSON.stringify(screen);
+    if (key === this.lastPanelKey) return;
+    this.lastPanelKey = key;
+    const body = this.panelEl.querySelector('#spBody') as HTMLElement;
+    body.innerHTML = (screen as any[]).map(n => this.renderNode(n)).join('');
+
+    // "model" nodes: the client renders the 3D model into a thumbnail image (a generic client
+    // capability — the SERVER only says "show this model as a picture").
+    setTimeout(async () => {
+      for (const img of Array.from(body.querySelectorAll('img[data-model]')) as HTMLImageElement[]) {
+        const u = img.getAttribute('data-model'); if (!u) continue;
+        const data = await this.mgThree.renderModelThumbnail(u);
+        if (data) img.src = data;
+      }
+    }, 0);
+  }
+
+  // Render one server UiNode (+ children) to HTML. Unknown types fall back to text, so a new
+  // game can never crash the client.
+  private renderNode(nd: any): string {
+    const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, (c: string) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
+    const style = (nd.color ? `color:#${nd.color};` : '') + (nd.size ? `font-size:${nd.size}px;` : '');
+    const kids = () => (nd.children || []).map((k: any) => this.renderNode(k)).join('');
+    switch (nd.type) {
+      case 'col':   return `<div class="sp-col" style="${nd.size ? `gap:${nd.size}px;` : ''}">${kids()}</div>`;
+      case 'row':   return `<div class="sp-row" style="${nd.size ? `gap:${nd.size}px;` : ''}">${kids()}</div>`;
+      case 'title': return `<h3>${esc(nd.text)}</h3>`;
+      case 'note':  return `<div class="sp-note">${esc(nd.text)}</div>`;
+      case 'banner':return `<div class="sp-banner ${nd.style || ''}">${esc(nd.text)}</div>`;
+      case 'log':   return `<div class="sp-log">${esc(nd.text)}</div>`;
+      case 'space': return `<div style="height:${nd.size || 8}px"></div>`;
+      case 'image': return `<img class="sp-img ${nd.style || ''}" src="${nd.url}"${nd.size ? ` style="height:${nd.size}px"` : ''}>`;
+      case 'model': return `<img class="sp-img sp-model ${nd.style || ''}" data-model="${nd.url}"${nd.size ? ` style="height:${nd.size}px"` : ''}>`;
+      case 'button': {
+        const icon = nd.url ? `<img src="${nd.url}">` : '';
+        const extra = (nd.confirm ? ` data-confirm="${esc(nd.confirm)}"` : '')
+                    + (nd.gather ? ` data-gather="${esc((nd.gather || []).join(','))}"` : '');
+        return `<button class="sp-btn ${nd.style || ''}" data-act="${esc(nd.action)}" data-args='${esc(JSON.stringify(nd.args || {}))}'${extra}>${icon}<span>${esc(nd.text)}</span></button>`;
+      }
+      case 'input':
+        return `<input class="sp-input" data-id="${esc(nd.id)}" placeholder="${esc(nd.placeholder || '')}">`;
+      case 'select': {
+        const opts = (nd.options || []).map((o: any) =>
+          `<option value="${esc(o.value)}" ${o.selected ? 'selected' : ''}>${esc(o.label)}</option>`).join('');
+        const act = nd.action ? ` data-act="${esc(nd.action)}"` : '';
+        const oc = nd.onChange ? ' data-onchange="1"' : '';
+        const ak = nd.argKey ? ` data-argkey="${esc(nd.argKey)}"` : '';
+        const ar = nd.args ? ` data-args='${esc(JSON.stringify(nd.args))}'` : '';
+        return `<select class="sp-input" data-id="${esc(nd.id)}"${act}${oc}${ak}${ar}>${opts}</select>`;
+      }
+      case 'check':
+        return `<label class="sp-check"><input type="checkbox" data-act="${esc(nd.action)}" data-onchange="1" data-argkey="${esc(nd.argKey)}" data-args='${esc(JSON.stringify(nd.args || {}))}' ${nd.checked ? 'checked' : ''}> ${esc(nd.text)}</label>`;
+      case 'checks': {
+        const opts = (nd.options || []).map((o: any) =>
+          `<label class="sp-check"><input type="checkbox" data-val="${esc(o.value)}" ${o.checked ? 'checked' : ''}> ${esc(o.label)}</label>`).join('');
+        return `<div class="sp-checks">${opts}<button class="sp-btn ok" data-act="${esc(nd.action)}" data-argkey="${esc(nd.argKey)}" data-need="${nd.need || 0}" data-args='${esc(JSON.stringify(nd.args || {}))}'>${esc(nd.text || 'Submit')}</button></div>`;
+      }
+      case 'text':
+      default:      return `<div class="sp-text ${nd.style || ''}" style="${style}">${esc(nd.text)}</div>`;
+    }
+  }
+
+  private panelStyles(): string {
+    return `
+      .sp{width:min(560px,100%);margin:0 auto 24px;box-sizing:border-box;font:600 16px system-ui,sans-serif;color:#e8edf5;
+           background:linear-gradient(180deg,rgba(22,17,14,.98),rgba(12,9,7,.98));border:1px solid #5a4632;
+           border-radius:18px;padding:16px 18px;box-shadow:0 12px 48px rgba(0,0,0,.6);}
+      .sp h3{margin:0 0 6px;font-size:22px;letter-spacing:.04em;}
+      .sp-topbar{display:flex;margin-bottom:10px;}
+      .sp-col{display:flex;flex-direction:column;}
+      .sp-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0;}
+      .sp-text{margin:4px 0;} .sp-text.big{font-size:19px;font-weight:800;}
+      .sp-note{color:#b7a488;font-size:14px;font-style:italic;margin:6px 0;}
+      .sp-img{border-radius:10px;border:1px solid #5a4632;display:block;margin:6px 0;} .sp-img.full{width:100%;}
+      .sp-log{margin-top:12px;border-top:1px solid #5a4632;padding-top:8px;max-height:180px;overflow-y:auto;
+           font:500 12px ui-monospace,monospace;color:#b7a488;white-space:pre-wrap;}
+      .sp-banner{font-size:20px;font-weight:800;text-align:center;padding:14px;border-radius:12px;margin:8px 0;}
+      .sp-banner.res,.sp-banner.win{background:#123a20;color:#8fffb0;}
+      .sp-banner.spy,.sp-banner.lose{background:#3a1414;color:#ff9b9b;}
+      .sp-text.pill{flex:1;text-align:center;padding:8px 0;border-radius:8px;background:#241a12;border:1px solid #5a4632;font-size:14px;margin:0;}
+      .sp-text.pill.cur{outline:2px solid #d9b98a;}
+      .sp-text.pill.s{background:#123a20;border-color:#2f7a45;} .sp-text.pill.f{background:#3a1414;border-color:#7a2f2f;}
+      .sp-text.teamrow{font-size:18px;font-weight:700;color:#ffe0a8;padding:8px 12px;background:#241a12;border:1px solid #5a4632;border-radius:9px;margin-bottom:6px;}
+      .sp-btn{font:800 16px system-ui;color:#fff;background:#6a4a25;border:0;border-radius:10px;padding:10px 16px;margin:4px 8px 4px 0;cursor:pointer;display:inline-flex;align-items:center;gap:8px;}
+      .sp-btn:hover{background:#8a6431;}
+      .sp-btn.ghost{background:#3a2c1e;padding:7px 14px;font-size:14px;margin:0;}
+      .sp-btn.big{width:100%;justify-content:center;font-size:17px;padding:14px;box-sizing:border-box;}
+      .sp-btn.ok{background:#2f7a45;} .sp-btn.ok:hover{background:#3a9455;}
+      .sp-btn.no{background:#7a2f2f;} .sp-btn.no:hover{background:#984040;}
+      .sp-btn.votebtn{flex-direction:column;gap:6px;background:#241a12;border:2px solid #5a4632;padding:10px 14px;}
+      .sp-btn.votebtn img{height:64px;border-radius:6px;}
+      .sp-checks{display:flex;flex-direction:column;gap:2px;margin:6px 0;}
+      .sp-check{display:flex;align-items:center;gap:8px;font-size:16px;padding:5px 0;cursor:pointer;}
+      .sp-check input{width:18px;height:18px;}
+      .sp-input{box-sizing:border-box;padding:8px 10px;border-radius:9px;border:1px solid #5a4632;background:#0e0b08;color:#e8edf5;font:600 15px system-ui;margin:4px 0;min-width:140px;}
+      .sp-model{width:74px;height:74px;object-fit:contain;background:#0a0705;border-radius:8px;}
+    `;
   }
 
   private parseCatalog(s: string): {label: string, url: string}[] {

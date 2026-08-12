@@ -440,6 +440,146 @@ namespace MG.Server.GameFlows
             const double W = 22.0;                 // map is 865×577 (≈3:2); keep that aspect
             addItem(MapAsset()).SetPosition(0, 0, 0).SetScale(W, 1, W * 577.0 / 865.0)
                 .AddAttribute("board", "1");
+
+            BuildScreens();                        // server-driven 2D panel (per seat)
         }
+
+        // =====================================================================================
+        // SERVER-DRIVEN PANEL. The server decides EVERYTHING the player sees — every text, image,
+        // button and its layout — and hands it to the (dumb) client as a UiNode tree per seat.
+        // =====================================================================================
+        private static string A(string file) => "/assets/games/resistance/" + file;   // asset URL for the client
+        private string Attr(string k) => GameData.Attributes.GetValueOrDefault(k, "");
+
+        private void BuildScreens()
+        {
+            GameData.Attributes["panelMode"] = "full";   // this game is a full-screen 2D panel
+            int n = Occupied().Count;
+            foreach (var seat in GameData.Players)
+                seat.Screen = seat.Type == PlayerTypeEnum.EMPTY_SEAT ? null : BuildSeatScreen(seat.Id, n);
+        }
+
+        private List<UiNode> BuildSeatScreen(string id, int n)
+        {
+            var s = new List<UiNode> { UiNode.Title("THE RESISTANCE") };
+            bool over = GameData.Attributes.ContainsKey("over");
+            string phase = Phase;
+
+            // ---------- PHASE 1: SECRET ROLE REVEAL (privacy) ----------
+            if (phase == "reveal" && !over)
+            {
+                s.Add(UiNode.Text_("Secret roles", "d9b98a"));
+                int acks = Occupied().Count(x => Attr("ack:" + x) == "1");
+                if (Attr("ack:" + id) == "1")
+                {
+                    s.Add(UiNode.Text_("✓ You've seen your role", "5fd08a", 19, "big"));
+                    s.Add(UiNode.Note($"Waiting for others… ({acks}/{n} have looked)"));
+                    s.Add(UiNode.Note("Your role is now hidden — safe to pass the screen."));
+                }
+                else
+                {
+                    bool spy = IsSpy(id);
+                    s.Add(UiNode.Row(
+                        UiNode.Image(A(Attr("card:" + id)), 120),
+                        UiNode.Col(
+                            UiNode.Text_(spy ? "You are a SPY" : "You are RESISTANCE", spy ? "ff6b6b" : "5fd08a", 18, "big"),
+                            UiNode.Text_(spy ? "Fellow spies: " + SpyMates(id) : "Complete 3 missions to win.",
+                                         spy ? "ffb0b0" : "8fbfa0")
+                        )));
+                    s.Add(UiNode.Button("I have seen my role", nameof(Ready), null, null, "ok big"));
+                    s.Add(UiNode.Note($"{acks}/{n} have looked so far."));
+                }
+                return s;
+            }
+
+            // ---------- PHASE 2+: THE GAME (map + progress on top, controls under) ----------
+            s.Add(UiNode.Text_($"Mission {MissionNum} · {PhaseLabel(phase)}", "d9b98a"));
+            s.Add(MissionTrackNode(n));
+            s.Add(UiNode.Image(A("map.png"), null, "full"));
+            s.Add(UiNode.Text_($"Rejected teams this round: {VoteTrack}/5", "cbb493"));
+            s.Add(UiNode.Text_("Leader: " + Name(Leader) + (Leader == id ? " (you)" : ""), "ffe0a8", 19, "big"));
+
+            if (over)
+            {
+                s.Add(UiNode.Banner(Attr("result"), Attr("winnerRole") == "spy" ? "spy" : "res"));
+            }
+            else if (phase == "team")
+            {
+                int need = TeamSize(n, MissionNum);
+                if (Leader == id)
+                {
+                    var opts = Occupied().Select(x => new UiOption(Name(x) + (x == id ? " (you)" : ""), x)).ToList();
+                    s.Add(new UiNode { Type = "checks", Options = opts, Need = need, Action = nameof(ProposeTeam), ArgKey = "team", Text = $"Propose team of {need}" });
+                }
+                else s.Add(UiNode.Note($"Waiting for {Name(Leader)} to propose a team of {need}…"));
+            }
+            else if (phase == "vote")
+            {
+                s.Add(UiNode.Text_("Proposed team:"));
+                s.Add(TeamListNode());
+                if (!GameData.Attributes.ContainsKey("vote:" + id))
+                    s.Add(UiNode.Row(
+                        UiNode.Button("Approve", nameof(Vote), new() { { "vote", "approve" } }, A("support-en.jpg"), "ok votebtn"),
+                        UiNode.Button("Reject", nameof(Vote), new() { { "vote", "reject" } }, A("reject-en.jpg"), "no votebtn")));
+                else
+                    s.Add(UiNode.Note($"You voted {Attr("vote:" + id)}. Waiting… ({VoteCount()}/{n} voted)"));
+            }
+            else if (phase == "mission")
+            {
+                s.Add(UiNode.Text_("On mission:"));
+                s.Add(TeamListNode());
+                bool onTeam = Team.Contains(id);
+                if (onTeam && !GameData.Attributes.ContainsKey("mcard:" + id))
+                {
+                    var btns = new List<UiNode> { UiNode.Button("Support", nameof(Mission), new() { { "card", "success" } }, A("succeed-en.jpg"), "ok votebtn") };
+                    if (IsSpy(id)) btns.Add(UiNode.Button("Sabotage", nameof(Mission), new() { { "card", "fail" } }, A("fail-en.jpg"), "no votebtn"));
+                    s.Add(UiNode.Row(btns.ToArray()));
+                }
+                else if (onTeam) s.Add(UiNode.Note($"Card submitted. Waiting… ({MissionCount()}/{Team.Count})"));
+                else s.Add(UiNode.Note($"Mission underway… ({MissionCount()}/{Team.Count} cards in)"));
+            }
+
+            string log = Attr("log");
+            if (!string.IsNullOrEmpty(log)) s.Add(UiNode.Log(log));
+            return s;
+        }
+
+        // A row of five mission "pills": done missions show ✔/✖, the current one is highlighted,
+        // upcoming ones show their required team size (with ‼ where two fails are needed).
+        private UiNode MissionTrackNode(int n)
+        {
+            var results = Results;
+            var pills = new List<UiNode>();
+            for (int m = 1; m <= 5; m++)
+            {
+                string label; string style = "pill";
+                if (m <= results.Count) { label = results[m - 1] == "S" ? "✔" : "✖"; style += results[m - 1] == "S" ? " s" : " f"; }
+                else if (m == MissionNum && !GameData.Attributes.ContainsKey("over")) { label = TeamSize(n, m).ToString(); style += " cur"; }
+                else label = TeamSize(n, m).ToString() + ((m == 4 && n >= 7) ? "‼" : "");
+                pills.Add(UiNode.Text_(label, null, null, style));
+            }
+            return UiNode.Row(pills.ToArray());
+        }
+
+        private UiNode TeamListNode()
+            => UiNode.Col(Team.Select(x => UiNode.Text_(Name(x), null, null, "teamrow")).ToArray());
+
+        private string SpyMates(string id)
+        {
+            var mates = Occupied().Where(x => x != id && IsSpy(x)).Select(Name).ToList();
+            return mates.Count > 0 ? string.Join(", ", mates) : "— (you work alone)";
+        }
+
+        private int VoteCount() => Occupied().Count(x => GameData.Attributes.ContainsKey("vote:" + x));
+        private int MissionCount() => Team.Count(x => GameData.Attributes.ContainsKey("mcard:" + x));
+
+        private string PhaseLabel(string p) => p switch
+        {
+            "reveal" => "Review roles",
+            "team" => "Proposing team",
+            "vote" => "Vote on team",
+            "mission" => "On mission",
+            _ => "Game over"
+        };
     }
 }

@@ -131,7 +131,40 @@ namespace MG.Server.GameFlows
             BuildDragDemo();        // 4) item-onto-item interaction (click source, then target)
             advanceNextTurn();      // 1) turn system: set the first seat to move
             RefreshTurnArea();      // 1) show whose turn + a token only the current seat can click
+            BuildScreens();         // the CONTROL PANEL, described by the server (client just renders it)
             return Task.CompletedTask;
+        }
+
+        // The control panel, as server-described UI. The client renders these nodes verbatim and
+        // sends button actions back — no panel logic on the client.
+        private void BuildScreens()
+        {
+            GameData.Attributes["panelMode"] = "side";   // dock on the right, keep the 3D scene visible
+            var colors = new List<UiOption> {
+                new("random colour", ""), new("red", "0xE03131"), new("green", "0x22C55E"),
+                new("blue", "0x2563EB"), new("amber", "0xF59E0B"), new("purple", "0x9333EA")
+            };
+            foreach (var seat in GameData.Players)
+            {
+                if (seat.Type == PlayerTypeEnum.EMPTY_SEAT) { seat.Screen = null; continue; }
+                seat.Screen = new List<UiNode>
+                {
+                    UiNode.Title("🧪 Demo panel"),
+                    UiNode.Text_("Spawn a disc on the board", "8aa0c0", 13),
+                    UiNode.Select("color", colors),
+                    UiNode.Row(
+                        UiNode.Button("➕ Spawn disc", nameof(PanelSpawn), gather: new() { "color" }),
+                        UiNode.Button("🗑 Clear spawned", nameof(PanelClear))),
+                    UiNode.Text_("Drop a floating label", "8aa0c0", 13),
+                    UiNode.Input("text", "type text…"),
+                    UiNode.Button("💬 Add label", nameof(PanelSay), gather: new() { "text" }),
+                    UiNode.Text_("Music (looping sound)", "8aa0c0", 13),
+                    UiNode.Row(UiNode.Button("🎵 Play", nameof(PlayMusic)), UiNode.Button("⏹ Stop", nameof(StopMusic))),
+                    UiNode.Text_("Turn / end", "8aa0c0", 13),
+                    UiNode.Row(UiNode.Button("⏭ End turn", nameof(EndTurn)),
+                               UiNode.Button("🏁 End game", nameof(EndDemo), confirm: "End the demo?")),
+                };
+            }
         }
 
         // 2) ENDING A GAME. The demo normally never ends, but the panel's "End game" button sets an

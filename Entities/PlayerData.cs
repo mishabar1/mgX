@@ -16,6 +16,10 @@ namespace MG.Server.Entities
         public LocationData Avatar { get; set; }
         public LocationData Camera { get; set; }
 
+        // Server-driven UI: the complete 2D panel this seat should see, as a tree the client renders
+        // verbatim. Null = no panel for this seat. Rebuilt by the game flow on every action.
+        public List<UiNode>? Screen { get; set; }
+
         [JsonIgnore] public AIAgent AIAgent { get; set; }
 
         public PlayerData() { }
