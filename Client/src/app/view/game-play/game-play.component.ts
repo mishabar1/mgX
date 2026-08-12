@@ -298,6 +298,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       if (act === 'AddMonster') args.monsterUrl = t.getAttribute('data-url');
       if (act === 'PlaySound') { args.soundUrl = t.getAttribute('data-url'); args.loop = t.getAttribute('data-loop'); }
       if (act === 'SetHp') args.delta = t.getAttribute('data-delta');
+      if (act === 'RotateSelected') args.delta = t.getAttribute('data-delta');
       if (act === 'RemoveRoll') args.idx = t.getAttribute('data-idx');
       if (act === 'AskRoll') args.seat = t.getAttribute('data-seat');
       if (act === 'SetDie') {
@@ -424,9 +425,18 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
         <button class="dmbtn" data-act="SetHp" data-delta="5" style="padding:4px 10px;">+5</button>
       </div>` : '';
 
+    // Facing: nudge the figure's heading in 10° steps.
+    const facingRow = `
+      <div style="display:flex;align-items:center;gap:6px;margin:4px 0;">
+        <span style="color:#8aa0c0;font-size:13px;letter-spacing:.06em;margin-right:2px;">Facing</span>
+        <button class="dmbtn" data-act="RotateSelected" data-delta="10" style="padding:4px 12px;">⟲ −10°</button>
+        <button class="dmbtn" data-act="RotateSelected" data-delta="-10" style="padding:4px 12px;">⟳ +10°</button>
+      </div>`;
+
     box.innerHTML = `
       <div class="lbl">Selected — ${name}</div>
       ${hpRow}
+      ${facingRow}
       ${rollsRow}
       <div class="pick" style="align-items:center;gap:8px;">
         ${rollDD}

@@ -505,6 +505,8 @@ namespace MG.Server.GameFlows
                 var piece = GameData.FindItem(selectedId);
                 if (piece != null)
                 {
+                    var oldX = piece.Position.X;
+                    var oldZ = piece.Position.Z;
                     if (data.Item != null && data.Item.HaveAttribute("moveMarker"))
                     {
                         // Clicked a move marker → snap the piece to that exact square.
@@ -518,6 +520,15 @@ namespace MG.Server.GameFlows
                         piece.Position.Z = data.point.Z;
                     }
                     piece.Position.Y = 0; // drop it back down
+
+                    // D&D: turn the figure to face the direction it just moved.
+                    if (GameData.GameType == "DND")
+                    {
+                        var dx = piece.Position.X - oldX;
+                        var dz = piece.Position.Z - oldZ;
+                        if (dx * dx + dz * dz > 0.0001)
+                            piece.Rotation.Y = Math.Atan2(dx, dz) * 180.0 / Math.PI;
+                    }
                 }
             }
             // Keep the piece SELECTED so every subsequent board click moves it again. The user

@@ -575,6 +575,25 @@ namespace MG.Server.GameFlows
             await Task.CompletedTask;
         }
 
+        // DM turns the selected figure by a delta (degrees) — e.g. the +/-10° console buttons.
+        [GameAction]
+        public async Task RotateSelected(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            if (GameData.Attributes.TryGetValue("selectedItem", out var id) && !string.IsNullOrEmpty(id)
+                && double.TryParse(Arg(data, "delta"), out var delta))
+            {
+                var it = GameData.FindItem(id);
+                if (it != null)
+                {
+                    var y = (it.Rotation.Y + delta) % 360.0;
+                    if (y < 0) y += 360.0;
+                    it.Rotation.Y = y;
+                }
+            }
+            await Task.CompletedTask;
+        }
+
         // DM rolls a die FOR the selected item (used for monsters, which have no player). The
         // result is appended to that item's rolls and announced.
         [GameAction]
