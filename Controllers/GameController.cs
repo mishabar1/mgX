@@ -28,6 +28,15 @@ namespace MG.Server.Controllers
             return Ok(await _gameBL.GetAllGames());
         }
 
+        // The catalog of creatable games (type/label/icon). The client's "Create a game" list is
+        // built from this — so adding a game needs no client change.
+        [HttpGet("GameTypes")]
+        public IActionResult GameTypes()
+        {
+            _logger.LogTrace("GameTypes");
+            return Ok(GameFlows.BaseGameFlow.GameCatalog());
+        }
+
 
         [HttpGet("GetGameByID")]
         public async Task<IActionResult> GetGameByID(string gameId)
@@ -65,13 +74,44 @@ namespace MG.Server.Controllers
             return Ok(await _gameBL.DeleteGame(data));
         }
 
+        [HttpPost("UndoGame")]
+        public async Task<IActionResult> UndoGame(StartGameData data)
+        {
+            _logger.LogTrace("UndoGame");
+            return Ok(await _gameBL.UndoGame(data));
+        }
+
         [HttpPost("JoinGame")]
         public async Task<IActionResult> JoinGame(JoinGameData data)
         {
             _logger.LogTrace("JoinGame");
             return Ok(await _gameBL.JoinGame(data));
         }
-        
+
+        // Toggle the per-game voice-chat settings (stored on the game and broadcast to all).
+        [HttpPost("SetVoice")]
+        public async Task<IActionResult> SetVoice(SetVoiceData data)
+        {
+            _logger.LogTrace("SetVoice");
+            return Ok(await _gameBL.SetVoice(data));
+        }
+
+        // Toggle the per-game "show player heads" setting (stored on the game, broadcast to all).
+        [HttpPost("SetShowHeads")]
+        public async Task<IActionResult> SetShowHeads(SetShowHeadsData data)
+        {
+            _logger.LogTrace("SetShowHeads");
+            return Ok(await _gameBL.SetShowHeads(data));
+        }
+
+        // Choose the card back for card games (stored on the game, broadcast to all).
+        [HttpPost("SetCardBack")]
+        public async Task<IActionResult> SetCardBack(SetCardBackData data)
+        {
+            _logger.LogTrace("SetCardBack");
+            return Ok(await _gameBL.SetCardBack(data));
+        }
+
 
         //[HttpPost("ExecuteAction")]
         //public async Task<IActionResult> ExecuteAction(ExecuteActionData data)
@@ -100,6 +140,22 @@ namespace MG.Server.Controllers
     {
         public string gameId { get; set; }
     }
+    public class SetVoiceData
+    {
+        public string gameId { get; set; }
+        public bool enabled { get; set; }    // voice chat allowed at all
+        public bool spectators { get; set; } // if true, spectators may join too (else players only)
+    }
+    public class SetShowHeadsData
+    {
+        public string gameId { get; set; }
+        public bool enabled { get; set; }    // show player avatar heads in the 3D scene
+    }
+    public class SetCardBackData
+    {
+        public string gameId { get; set; }
+        public string value { get; set; }    // "red" | "blue" | "green" | "brown"
+    }
     public class CreateGameData
     {       
         public string gameType { get; set; }
@@ -115,6 +171,10 @@ namespace MG.Server.Controllers
         public string itemId { get; set; }
         public string? dragTargetItemId { get; set; }
         public V3 point { get; set; }
+
+        // Optional key/value params for actions invoked from a UI (the DM's HTML console),
+        // where there is no clicked 3D item carrying attributes.
+        public Dictionary<string, string>? args { get; set; }
 
         [JsonIgnore]public PlayerData? Player { get; set; }
         [JsonIgnore] public ItemData? Item { get; set; }
