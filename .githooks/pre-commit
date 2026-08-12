@@ -1,0 +1,17 @@
+#!/bin/sh
+# Auto-increment the client patch version on every commit.
+# appVersion (environment.*.ts) reads Client/package.json "version".
+node -e '
+const fs = require("fs");
+const p = "Client/package.json";
+let s = fs.readFileSync(p, "utf8");
+let bumped = null;
+s = s.replace(/("version"\s*:\s*")(\d+)\.(\d+)\.(\d+)(")/, (m, a, x, y, z, b) => {
+  bumped = x + "." + y + "." + (Number(z) + 1);
+  return a + bumped + b;
+});
+if (!bumped) { console.error("pre-commit: could not find version in " + p); process.exit(1); }
+fs.writeFileSync(p, s);
+console.log("version bumped -> " + bumped);
+' || exit 1
+git add Client/package.json
