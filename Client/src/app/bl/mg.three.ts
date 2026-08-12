@@ -38,6 +38,11 @@ export class MgThree{
   composer?: EffectComposer;
   outlinePass?: OutlinePass;
   hoverOutlinePass?: OutlinePass;   // second pass: a different-colour glow on the hovered clickable item
+
+  // VR fallback highlight (OutlinePass can't run in WebXR): bright rings on the ground under the
+  // hovered (cyan) / selected (green) item.
+  hoverRing?: THREE.Mesh;
+  selectRing?: THREE.Mesh;
   cameraGroup!: Group;
   camera!: THREE.PerspectiveCamera;
   audioListener!: THREE.AudioListener;
@@ -67,6 +72,8 @@ export class MgThree{
   controllers: any;
   // Set by MgGame: dispatch a game click for the item a VR controller pointed at.
   vrClickHandler?: (mesh: any, point: any) => void;
+  // Set by MgGame: the item currently under a VR controller ray (or null) — drives the hover glow.
+  vrHoverHandler?: (mesh: any) => void;
   selectedObject: any;
   interactionObjects: any = [];
   selectedObjectDistance: any;
@@ -140,6 +147,18 @@ export class MgThree{
   // The hover glow (cyan) around the clickable item under the cursor (empty = none).
   setHovered(objects: THREE.Object3D[]) {
     if (this.hoverOutlinePass) this.hoverOutlinePass.selectedObjects = objects;
+  }
+
+  // VR ground-ring highlights (used instead of the OutlinePass while presenting).
+  setHoverRing(pos: THREE.Vector3 | null) {
+    if (!this.hoverRing) return;
+    if (pos) { this.hoverRing.position.set(pos.x, 0.25, pos.z); this.hoverRing.visible = true; }
+    else this.hoverRing.visible = false;
+  }
+  setSelectRing(pos: THREE.Vector3 | null) {
+    if (!this.selectRing) return;
+    if (pos) { this.selectRing.position.set(pos.x, 0.2, pos.z); this.selectRing.visible = true; }
+    else this.selectRing.visible = false;
   }
 
   // Mount an HTML element into the 3D scene as a CSS3D panel. Returns the object so the caller
@@ -296,6 +315,19 @@ export class MgThree{
     this.composer.addPass(this.hoverOutlinePass);
 
     this.composer.addPass(new OutputPass());   // re-apply tone-mapping + sRGB so the scene isn't dark
+
+    // VR highlight rings (flat, unlit so they're always bright). Hidden until used.
+    const mkRing = (hex: number) => {
+      const m = new THREE.Mesh(
+        new THREE.TorusGeometry(1.1, 0.13, 12, 48),
+        new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.9 }));
+      m.rotation.x = Math.PI / 2;   // lie flat on the ground
+      m.visible = false;
+      this.scene.add(m);
+      return m;
+    };
+    this.hoverRing = mkRing(0x38d6ff);
+    this.selectRing = mkRing(0x3dff6a);
 
     // Refresh the canvas whenever the window resizes.
     window.addEventListener('resize', this.onWindowResize);
@@ -620,29 +652,34 @@ export class MgThree{
     r.render(this.scene, cam);
   }
 
+  // Cast a ray from the controller; return the first item (with click actions) it hits, and
+  // shorten the pointer line to it. Skips cards/labels/terrain/sprites.
+  private vrRaycastItem(controller: XRTargetRaySpace): { mesh: any, point: any } | null {
+    const rot = new Matrix4().extractRotation(controller.matrixWorld);
+    const ray = new Raycaster();
+    ray.camera = this.camera;   // REQUIRED so raycasting sprites doesn't throw (blanking the scene)
+    ray.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+    ray.ray.direction.set(0, 0, -1).applyMatrix4(rot);
+    if (controller.children[0]) (controller.children[0] as any).scale.z = 10;
+    const hits = ray.intersectObjects(this.scene.children, true);
+    for (const h of hits) {
+      let o: any = h.object;
+      while (o && !(o.userData && o.userData['ItemData'] && o.userData['ItemData'].clickActions
+                    && Object.keys(o.userData['ItemData'].clickActions).length)) o = o.parent;
+      if (o) {
+        if (controller.children[0]) (controller.children[0] as any).scale.z = h.distance;
+        return { mesh: o, point: h.point };
+      }
+    }
+    return null;
+  }
+
   handleController(controller: XRTargetRaySpace) {
     const pressed = controller.userData["selectPressed"];
     const prev = controller.userData["selectPressedPrev"];
-    // On the press EDGE, cast a ray from the controller and dispatch a click on the first item
-    // it hits — exactly like a mouse click (so it triggers SelectPiece / MoveHere on the server).
-    if (pressed && !prev) {
-      const rot = new Matrix4().extractRotation(controller.matrixWorld);
-      const ray = new Raycaster();
-      ray.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-      ray.ray.direction.set(0, 0, -1).applyMatrix4(rot);
-      const hits = ray.intersectObjects(this.scene.children, true);
-      for (const h of hits) {
-        // Walk up to an item that actually has click actions (skip cards/labels/terrain/sprites).
-        let o: any = h.object;
-        while (o && !(o.userData && o.userData['ItemData'] && o.userData['ItemData'].clickActions
-                      && Object.keys(o.userData['ItemData'].clickActions).length)) o = o.parent;
-        if (o) {
-          if (controller.children[0]) (controller.children[0] as any).scale.z = h.distance;
-          this.vrClickHandler?.(o, h.point);
-          break;
-        }
-      }
-    }
+    const hit = this.vrRaycastItem(controller);
+    this.vrHoverHandler?.(hit ? hit.mesh : null);            // continuous hover glow
+    if (pressed && !prev && hit) this.vrClickHandler?.(hit.mesh, hit.point);  // trigger = click
     controller.userData["selectPressedPrev"] = pressed;
   }
 

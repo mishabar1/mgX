@@ -118,6 +118,8 @@ export class MgGame{
 
     // VR: a controller "select" on an item dispatches the same click as the mouse would.
     this.mgThree.vrClickHandler = (mesh: any, point: any) => this.MeshClickFunc({ target: mesh, point });
+    // VR: glow (cyan) the item the controller is pointing at (OutlinePass can't run in VR).
+    this.mgThree.vrHoverHandler = (mesh: any) => this.vrHover(mesh);
 
     // Heads-visibility preference set on the game setup page (default: shown).
     // Read the "show heads" preference from the saved game state (default shown).
@@ -1021,7 +1023,8 @@ export class MgGame{
     // Hover cue: pointer cursor + a cyan glow on the clickable item under the cursor. We don't
     // touch OrbitControls here (pieces move by click, not drag), so the camera stays controllable.
     document.body.style.cursor = 'pointer';
-    if (event?.target) this.mgThree.setHovered([event.target]);
+    const it = event?.target?.userData?.['ItemData'];
+    if (event?.target && this.isHoverable(it)) this.mgThree.setHovered([event.target]);
   }
 
   MeshMouseOutFunc(event: any) {
@@ -1080,10 +1083,95 @@ export class MgGame{
   // draws a glowing contour around them (instead of recolouring the model).
   refreshOutline() {
     const outlined: any[] = [];
+    let selItem: any = null;
     forEach(this.allItems, (it: any) => {
-      if (it?.attributes?.['selected'] == '1' && it.mesh) outlined.push(it.mesh);
+      if (it?.attributes?.['selected'] == '1' && it.mesh) { outlined.push(it.mesh); selItem = it; }
     });
-    this.mgThree.setOutlined(outlined);
+    // Desktop → OutlinePass contour. VR → a green inverted-hull contour on the selected item.
+    if (this.mgThree?.renderer?.xr?.isPresenting) {
+      this.mgThree.setOutlined([]);
+      const newSelId = selItem?.id || null;
+      if (this.vrSelId && this.vrSelId !== newSelId) this.removeHullByKey('sel:' + this.vrSelId);
+      this.vrSelId = newSelId;
+      if (selItem) this.addHull(selItem, 0x3dff6a, 0.045, 'sel:' + selItem.id);
+    } else {
+      this.mgThree.setOutlined(outlined);
+    }
+  }
+
+  // ---- VR contour highlight (inverted-hull outline; works without postprocessing) ----------
+  private hulls: { [id: string]: any[] } = {};   // per item id → its hull meshes
+  private vrHoverItem: any = null;
+  private vrHoverId: string | null = null;
+  private vrSelId: string | null = null;
+
+  // Add a coloured back-faces "shell" around each mesh of an item — a contour that follows it
+  // (the shell meshes are siblings of the originals, so they move/rotate with the piece).
+  private addHull(item: ItemData, colorHex: number, factor: number, key: string) {
+    if (!item.mesh || this.hulls[key]) return;
+    const srcs: any[] = [];
+    item.mesh.traverse((o: any) => { if (o.isMesh && o.geometry && !o.userData?.['isHull']) srcs.push(o); });
+    const made: any[] = [];
+    srcs.forEach((o: any) => {
+      // Expand a CLONED geometry along its normals — this keeps skin weights so a skinned hull
+      // deforms with the same pose (a plain transform-scale would ignore the skeleton = T-pose).
+      const geo = o.geometry.clone();
+      let norA: any = geo.getAttribute('normal');
+      if (!norA) { geo.computeVertexNormals(); norA = geo.getAttribute('normal'); }   // STL etc. have no normals
+      const posA: any = geo.getAttribute('position');
+      if (posA && norA) {
+        geo.computeBoundingSphere();
+        const grow = (geo.boundingSphere?.radius || 1) * factor;
+        for (let i = 0; i < posA.count; i++) {
+          posA.setXYZ(i, posA.getX(i) + norA.getX(i) * grow, posA.getY(i) + norA.getY(i) * grow, posA.getZ(i) + norA.getZ(i) * grow);
+        }
+        posA.needsUpdate = true;
+      }
+      const mat = new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.BackSide });
+      let hull: any;
+      if (o.isSkinnedMesh && o.skeleton) {
+        hull = new THREE.SkinnedMesh(geo, mat);
+        hull.bindMode = o.bindMode;
+        hull.bind(o.skeleton, o.bindMatrix);   // share the skeleton → same pose
+      } else {
+        hull = new THREE.Mesh(geo, mat);
+      }
+      hull.userData['isHull'] = true;
+      hull.position.copy(o.position);
+      hull.quaternion.copy(o.quaternion);
+      hull.scale.copy(o.scale);
+      o.parent.add(hull);
+      made.push(hull);
+    });
+    this.hulls[key] = made;
+  }
+  private removeHullByKey(key: string | null) {
+    if (!key) return;
+    const list = this.hulls[key];
+    if (list) { list.forEach(h => h.parent?.remove(h)); delete this.hulls[key]; }
+  }
+
+  // VR hover: a cyan contour on the item the controller points at (skips the board and the
+  // selected item, which already has its own contour).
+  // Don't hover-highlight the board, or a coloured piece that isn't the side to move (chess/
+  // checkers) — even though it stays clickable (e.g. to capture).
+  private isHoverable(it: any): boolean {
+    if (!it) return false;
+    if (it.attributes?.['scene'] == '1') return false;
+    const color = it.attributes?.['color'], turn = this.gameData?.attributes?.['turn'];
+    if (color && turn && color !== turn) return false;
+    return true;
+  }
+
+  vrHover(mesh: any) {
+    if (this.vrHoverItem === mesh) return;
+    this.removeHullByKey('hover:' + this.vrHoverId);   // clear the old hover contour
+    this.vrHoverItem = mesh;
+    const it = mesh?.userData?.['ItemData'];
+    this.vrHoverId = it?.id || null;
+    // A bigger cyan contour — shown even on the selected piece (outer ring beyond the green),
+    // so you can tell when you're hovering it.
+    if (this.isHoverable(it)) this.addHull(it, 0x38d6ff, 0.10, 'hover:' + it.id);
   }
 
   applyEmissive(item: ItemData, hex: number | null) {
@@ -1152,7 +1240,7 @@ export class MgGame{
     // opponent's face-down cards would glow and leak which cards they can play.
     const owner = a['owner'];
     const mine = !owner || (this.playerData && this.playerData.id === owner);
-    if (a['selected'] == '1') this.applyEmissive(item, null);   // selection shown by the OutlinePass contour, not a fill
+    if (a['selected'] == '1') this.applyEmissive(item, null);   // shown by the OutlinePass (desktop) or a ground ring (VR)
     else if (a['check'] == '1') this.applyEmissive(item, 0xEE2222);
     else if (a['playable'] == '1' && mine) this.applyEmissive(item, 0x8cff8c);   // a card YOU can play now
     else if (a['moveMarker'] || a['captureTarget'] == '1') this.applyEmissive(item, 0xffe000);
