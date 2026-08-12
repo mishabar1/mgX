@@ -37,6 +37,7 @@ export class MgThree{
   // recolouring the whole model). The main scene renders through this composer.
   composer?: EffectComposer;
   outlinePass?: OutlinePass;
+  hoverOutlinePass?: OutlinePass;   // second pass: a different-colour glow on the hovered clickable item
   cameraGroup!: Group;
   camera!: THREE.PerspectiveCamera;
   audioListener!: THREE.AudioListener;
@@ -125,12 +126,18 @@ export class MgThree{
     this.css3dRenderer?.setSize(w, h);
     this.composer?.setSize(w, h);
     this.outlinePass?.setSize(w, h);
+    this.hoverOutlinePass?.setSize(w, h);
     this.renderer.render(this.scene, this.camera);
   };
 
   // Draw the glowing selection contour around these objects (empty = none).
   setOutlined(objects: THREE.Object3D[]) {
     if (this.outlinePass) this.outlinePass.selectedObjects = objects;
+  }
+
+  // The hover glow (cyan) around the clickable item under the cursor (empty = none).
+  setHovered(objects: THREE.Object3D[]) {
+    if (this.hoverOutlinePass) this.hoverOutlinePass.selectedObjects = objects;
   }
 
   // Mount an HTML element into the 3D scene as a CSS3D panel. Returns the object so the caller
@@ -276,6 +283,16 @@ export class MgThree{
     this.outlinePass.visibleEdgeColor.set('#3dff6a');
     this.outlinePass.hiddenEdgeColor.set('#124a24');
     this.composer.addPass(this.outlinePass);
+
+    // Hover glow — a cyan contour on whatever clickable item the mouse is over.
+    this.hoverOutlinePass = new OutlinePass(new THREE.Vector2(w0, h0), this.scene, this.camera);
+    this.hoverOutlinePass.edgeStrength = 4;
+    this.hoverOutlinePass.edgeGlow = 0.5;
+    this.hoverOutlinePass.edgeThickness = 1.5;
+    this.hoverOutlinePass.visibleEdgeColor.set('#38d6ff');
+    this.hoverOutlinePass.hiddenEdgeColor.set('#0e4a5c');
+    this.composer.addPass(this.hoverOutlinePass);
+
     this.composer.addPass(new OutputPass());   // re-apply tone-mapping + sRGB so the scene isn't dark
 
     // Refresh the canvas whenever the window resizes.

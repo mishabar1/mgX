@@ -1014,14 +1014,15 @@ export class MgGame{
   }
 
   MeshMouseOverFunc(event: any) {
-    // Just a hover cue. We no longer touch OrbitControls here: pieces move by click-to-
-    // select + click-destination (not drag), so there's no camera-vs-piece gesture conflict,
-    // and the camera stays fully controllable (rotate/pan/zoom) from anywhere on screen.
+    // Hover cue: pointer cursor + a cyan glow on the clickable item under the cursor. We don't
+    // touch OrbitControls here (pieces move by click, not drag), so the camera stays controllable.
     document.body.style.cursor = 'pointer';
+    if (event?.target) this.mgThree.setHovered([event.target]);
   }
 
   MeshMouseOutFunc(event: any) {
     document.body.style.cursor = 'default';
+    this.mgThree.setHovered([]);
   }
 
   onMeshClickFunc = this.MeshClickFunc.bind(this);
