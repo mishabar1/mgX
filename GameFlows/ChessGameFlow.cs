@@ -202,6 +202,18 @@ namespace MG.Server.GameFlows
             return Task.FromResult(true);
         }
 
+        // Server-decided top HUD (material readout). The client just displays attribute "hud".
+        protected override void RefreshScreens()
+        {
+            var val = new Dictionary<string, int> { { "pawn", 1 }, { "knight", 3 }, { "bishop", 3 }, { "rook", 5 }, { "queen", 9 }, { "king", 0 } };
+            int Mat(string c) => getItemsByAttribute("piece")
+                .Where(p => p.GetStringAttribute("color") == c)
+                .Sum(p => val.GetValueOrDefault(p.GetStringAttribute("piece"), 0));
+            int w = Mat("white"), b = Mat("black"), d = w - b;
+            string adv = d > 0 ? $"White +{d}" : d < 0 ? $"Black +{-d}" : "even";
+            GameData.Attributes["hud"] = $"White {w}   Black {b}   ({adv})";
+        }
+
         protected override List<PlayerData> GetGameWinners()
         {
             if (GameData.Attributes.TryGetValue("winnerColor", out var wc) && !string.IsNullOrEmpty(wc))

@@ -18,6 +18,7 @@ import {ConfirmationService} from 'primeng/api';
 export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, OnChanges {
 
   games: GameData[]=[];
+  gameTypes: {type: string, label: string, icon: string}[] = [];   // creatable games, from the server
   user!:UserData;
   constructor(public signalRService: SignalrService,
               private router: Router,
@@ -30,6 +31,7 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
   ngOnInit(): void {
     this.user = this.generalService.User!;
     this.updateGamesList();
+    this.dalService.getGameTypes().subscribe(list => this.gameTypes = list);   // server-driven "Create" buttons
 
     // SignalR callbacks fire OUTSIDE Angular's zone, so re-run the refresh inside
     // the zone — otherwise this.games updates but change detection never runs and

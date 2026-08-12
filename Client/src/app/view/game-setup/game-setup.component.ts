@@ -42,9 +42,11 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
     this.dalService.setVoice(this.gameId!, this.allowVoice, spectators).subscribe();
   }
 
-  // Card-back chooser (card games only, e.g. Durak).
-  get isDurak(): boolean { return String(this.gameData?.gameType) === 'DURAK'; }
-  get isDnd(): boolean { return String(this.gameData?.gameType) === 'DND'; }
+  // Generic, server-driven setup options (no game type hard-coded):
+  //  • a game sets "usesCardBack"=1 to offer the card-back chooser
+  //  • a game sets "noAvatars"=1 to hide the "show avatars" toggle
+  get usesCardBack(): boolean { return this.gameData?.attributes?.['usesCardBack'] === '1'; }
+  get noAvatars(): boolean { return this.gameData?.attributes?.['noAvatars'] === '1'; }
   // Raw game-data dump is debug-only: shown when the URL has ?debug.
   get showDebug(): boolean { return typeof location !== 'undefined' && location.search.includes('debug'); }
   get cardBack(): string { return this.gameData?.attributes?.['cardBack'] || 'red'; }

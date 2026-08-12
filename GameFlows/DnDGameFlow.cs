@@ -77,6 +77,8 @@ namespace MG.Server.GameFlows
             addAsset(Assets.BUTTON);
             addAsset(Assets.PAWN);
 
+            GameData.Attributes["noAvatars"] = "1";   // players are tray tokens; no seated figures
+
             GameData.Observer.Position.Set(0, 24, 0);
 
             // Seat 0 = DM. A close 3/4 "tabletop" angle (not straight-down) so the board fills
@@ -697,5 +699,125 @@ namespace MG.Server.GameFlows
         private AssetData SceneAsset(string url) => addAsset(new TokenAssetData(url, url));
         private AssetData MonsterAsset(string url) => addAsset(new ObjectAssetData(url) { Scale = new V3(2.2) });
         private AssetData HeroAsset(string url) => addAsset(new ObjectAssetData(url) { Scale = new V3(2.0) });
+
+        // =====================================================================================
+        // SERVER-DRIVEN PANEL. The DM's console and a player's roll prompt are described entirely
+        // here and rendered by the dumb client (PlayerData.Screen). Rebuilt on start + each action.
+        // =====================================================================================
+        private const string ASSETS = "/assets/games/";   // plain-image URL prefix (models stay raw)
+
+        protected override void RefreshScreens()
+        {
+            GameData.Attributes["panelMode"] = "side";
+            string? dm = DmId();
+            foreach (var seat in GameData.Players)
+            {
+                if (seat.Type == PlayerTypeEnum.EMPTY_SEAT) { seat.Screen = null; continue; }
+                bool isDm = seat.Id == dm;
+                string pending = GameData.Attributes.GetValueOrDefault("roll:" + seat.Id, "");
+                if (!isDm && !string.IsNullOrEmpty(pending)) seat.Screen = BuildRollScreen(pending);
+                else if (isDm) seat.Screen = BuildDmScreen();
+                else seat.Screen = null;   // players normally have no panel
+            }
+        }
+
+        // A player asked to roll: one big button (the result shows over their token).
+        private List<UiNode> BuildRollScreen(string sides) => new()
+        {
+            UiNode.Title("🎲 Roll"),
+            UiNode.Text_("The DM asks you to roll", "8aa0c0", 14),
+            UiNode.Text_("d" + sides, "ffd166", 52, "big"),
+            UiNode.Button($"🎲 Roll d{sides}", nameof(RollDice), null, null, "ok big"),
+        };
+
+        private List<UiNode> BuildDmScreen()
+        {
+            var s = new List<UiNode> { UiNode.Title("🎲 DM Console") };
+
+            var sel = getItemsByAttribute("selected").FirstOrDefault();
+            if (sel != null) s.AddRange(BuildSelectedSection(sel));
+
+            s.Add(UiNode.Text_("SCENE", "8aa0c0", 12));
+            s.Add(UiNode.Row(SCENES.Select(sc =>
+                UiNode.Button(sc.label, nameof(LoadScene), new() { { "sceneUrl", sc.url } }, ASSETS + sc.url, "tile")).ToArray()));
+
+            s.Add(UiNode.Text_("ADD MONSTER", "8aa0c0", 12));
+            s.Add(UiNode.Row(MONSTERS.Select(m =>
+                UiNode.Button(m.label, nameof(AddMonster), new() { { "monsterUrl", m.url } }, m.url, "tile")).ToArray()));
+
+            s.Add(UiNode.Text_("SOUND", "8aa0c0", 12));
+            var sounds = SOUNDS.Select(sd => UiNode.Button((sd.loop ? "🎵 " : "🔊 ") + sd.label, nameof(PlaySound),
+                new() { { "soundUrl", sd.url }, { "loop", sd.loop ? "1" : "0" } })).ToList();
+            sounds.Add(UiNode.Button("⏹ Stop", nameof(StopSound)));
+            s.Add(UiNode.Row(sounds.ToArray()));
+
+            s.Add(UiNode.Text_("ALL CHARACTERS", "8aa0c0", 12));
+            s.Add(UiNode.Row(
+                UiNode.Button("👁 Show labels", nameof(ShowAllLabels)),
+                UiNode.Button("🚫 Hide labels", nameof(HideAllLabels)),
+                UiNode.Button("🎲 Clear dice", nameof(ClearAllRolls))));
+
+            return s;
+        }
+
+        private List<UiNode> BuildSelectedSection(ItemData sel)
+        {
+            bool isHero = sel.HaveAttribute("char");
+            string owner = sel.GetStringAttribute("owner");
+            var ownerP = GameData.Players.Find(p => p.Id == owner);
+            string cls = ownerP?.GetStringAttribute("hero") ?? "";
+            string name = isHero
+                ? (string.IsNullOrEmpty(cls) ? PlayerDisplayName(ownerP) : cls + " · " + PlayerDisplayName(ownerP))
+                : "Monster";
+
+            var nodes = new List<UiNode> { UiNode.Text_("Selected — " + name, "d9b98a", 14) };
+
+            string hp = sel.GetStringAttribute("hp");
+            if (!string.IsNullOrEmpty(hp))
+            {
+                string maxhp = sel.GetStringAttribute("maxhp");
+                nodes.Add(UiNode.Row(
+                    UiNode.Text_("HP", "8aa0c0", 13),
+                    UiNode.Button("−5", nameof(SetHp), new() { { "delta", "-5" } }),
+                    UiNode.Button("−", nameof(SetHp), new() { { "delta", "-1" } }),
+                    UiNode.Text_(hp + (string.IsNullOrEmpty(maxhp) ? "" : "/" + maxhp), "ff6b6b", 20, "big"),
+                    UiNode.Button("+", nameof(SetHp), new() { { "delta", "1" } }),
+                    UiNode.Button("+5", nameof(SetHp), new() { { "delta", "5" } })));
+            }
+
+            nodes.Add(UiNode.Row(
+                UiNode.Text_("Facing", "8aa0c0", 13),
+                UiNode.Button("⟲ −10°", nameof(RotateSelected), new() { { "delta", "10" } }),
+                UiNode.Button("⟳ +10°", nameof(RotateSelected), new() { { "delta", "-10" } })));
+
+            var rolls = (sel.GetStringAttribute("rolls") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries);
+            if (rolls.Length > 0)
+            {
+                nodes.Add(UiNode.Text_("Rolls (click to remove)", "8aa0c0", 12));
+                var chips = new List<UiNode>();
+                for (int i = 0; i < rolls.Length; i++)
+                {
+                    var pr = rolls[i].Split(':');
+                    string die = pr.Length > 1 ? pr[0] : "", res = pr.Length > 1 ? pr[1] : pr[0];
+                    chips.Add(UiNode.Button($"{res} ({die}) ✖", nameof(RemoveRoll), new() { { "idx", i.ToString() } }));
+                }
+                nodes.Add(UiNode.Row(chips.ToArray()));
+            }
+
+            var dieOpts = new List<UiOption> { new("🎲 Roll a die…", "") };
+            foreach (var d in new[] { 4, 6, 8, 10, 12, 20, 100 }) dieOpts.Add(new("d" + d, d.ToString()));
+            nodes.Add(isHero && !string.IsNullOrEmpty(owner)
+                ? UiNode.Select("die", dieOpts, nameof(AskRoll), "sides", true, new() { { "seat", owner } })
+                : UiNode.Select("die", dieOpts, nameof(RollSelected), "sides", true));
+
+            nodes.Add(new UiNode { Type = "animpick", Id = sel.Id, Action = nameof(SetAnim), ArgKey = "idx" });
+            nodes.Add(UiNode.Check("show label", nameof(ToggleLabel), "on", sel.GetStringAttribute("hidelabel") != "1"));
+
+            nodes.Add(UiNode.Row(
+                UiNode.Button("✖ Unselect", nameof(ClearSelected)),
+                UiNode.Button("🗑 Remove", nameof(RemoveSelected), null, null, "no", "Remove this piece?")));
+
+            return nodes;
+        }
     }
 }

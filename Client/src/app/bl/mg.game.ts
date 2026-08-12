@@ -208,10 +208,11 @@ export class MgGame{
       // D&D seats carry a "heroUrl" — render that hero model (keeping its own textures) as the
       // seated avatar. Everyone else shows the tinted animal, falling back to the monkey.
       const heroUrl = playerData.attributes?.['heroUrl'];
-      const isDnd = String(this.gameData?.gameType) === 'DND';
-      if (heroUrl || isDnd) {
-        // D&D: NO seated avatars at all (players are tray tokens; the DM has none) — so draw no
-        // seated figure here for any seat, including the DM.
+      // Generic, server-driven: a game sets attribute "noAvatars"=1 when seats have no seated
+      // figure (e.g. D&D players are tray tokens). No game type is hard-coded here.
+      const noAvatars = this.gameData?.attributes?.['noAvatars'] === '1';
+      if (heroUrl || noAvatars) {
+        // No seated figure for this seat.
       } else {
         this.mgThree.gltfLoader.load(
           `\\assets\\heads\\animals\\${animal}.glb`,
@@ -243,7 +244,7 @@ export class MgGame{
 
       // Floating name label + a DEFENDING badge above each OTHER player's head (you know your
       // own seat). Skipped entirely for D&D — no seated figures there.
-      if (!(this.playerData && this.playerData.id === playerData.id) && !playerData.attributes?.['heroUrl'] && String(this.gameData?.gameType) !== 'DND') {
+      if (!(this.playerData && this.playerData.id === playerData.id) && !playerData.attributes?.['heroUrl'] && this.gameData?.attributes?.['noAvatars'] !== '1') {
         const disp = playerData.user?.name || playerData.name || (playerData.type === 'AI' ? 'AI' : 'open');
         const nameSpr = this.makeTextSprite(disp, 'rgba(18,28,38,0.75)', '#ffffff');
         nameSpr.position.set(0, 3.3, 0);

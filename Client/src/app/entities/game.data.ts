@@ -13,8 +13,8 @@ export class GameData {
   attributes: any;
   creatorId?: string;
   currentTurnId?: string;
-  gameStatus!: number;
-  gameType!: number;
+  gameStatus!: string;
+  gameType!: string;
   players!: PlayerData[];
   winners?: PlayerData[];
   minPlayers?: number;   // required occupied seats before the game can start

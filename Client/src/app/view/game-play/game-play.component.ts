@@ -141,40 +141,15 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         this.lastStatus = status;
         this.computeHud(data);
-        this.updateDmSelected(data);   // refresh the console's contextual section
-        this.updateRollUi(data);       // dice-roll prompt / result toast
         this.updateServerPanel(data);   // generic server-driven panel (any game)
       });
     });
 
   }
 
-  // Captured/score readout for chess & checkers (top-centre HUD).
+  // Top-centre HUD. The TEXT is decided by the server (attribute "hud"); the client only shows it.
   hud = '';
-  private computeHud(data: any) {
-    const type = String(data?.gameType);
-    if (type !== 'CHESS' && type !== 'CHECKERS') { this.hud = ''; return; }
-
-    const byColor: { [c: string]: any[] } = {};
-    const walk = (it: any) => {
-      if (!it) return;
-      const a = it.attributes || {};
-      if (a['piece'] && a['color']) (byColor[a['color']] = byColor[a['color']] || []).push(it);
-      (it.items || []).forEach(walk);
-    };
-    walk(data?.table);
-
-    if (type === 'CHESS') {
-      const val: any = { pawn: 1, knight: 3, bishop: 3, rook: 5, queen: 9, king: 0 };
-      const mat = (c: string) => (byColor[c] || []).reduce((s, it) => s + (val[it.attributes.piece] || 0), 0);
-      const w = mat('white'), b = mat('black'), d = w - b;
-      const adv = d > 0 ? `White +${d}` : d < 0 ? `Black +${-d}` : 'even';
-      this.hud = `White ${w}  ·  Black ${b}   (${adv})`;
-    } else { // CHECKERS
-      const bk = (byColor['black'] || []).length, rd = (byColor['red'] || []).length;
-      this.hud = `Black ${bk}  ·  Red ${rd}`;
-    }
-  }
+  private computeHud(data: any) { this.hud = String(data?.attributes?.['hud'] || ''); }
 
   backToList() {
     this.router.navigate([RouteNames.GamesList]);
@@ -211,7 +186,6 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
 
       this.mgGame = new MgGame();
       this.mgGame.gameData = game;
-      this.lastRollNonce = game.attributes?.['rollResult'] || '';   // don't replay last roll on load
 
       // If opening an already-finished game (e.g. to analyse it), show the result once.
       this.lastStatus = String(game.gameStatus);
@@ -223,7 +197,6 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       this.mgThree=new MgThree();
       this.mgThree.initThree(this.rendererContainer.nativeElement,()=>{
         this.mgGame.loadGame(this.mgThree,this.generalService.User!);
-        this.setupDmConsole();   // DM-only HTML control panel, mounted into the 3D scene
         this.setupServerPanel();   // generic server-driven panel: renders PlayerData.Screen for any game
       });
     });
@@ -233,126 +206,6 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     this.mgThree.startVr();
   }
 
-  // ---- DM console (CSS3D in-scene HTML panel) ------------------------------
-  private dmPanelObj: any = null;
-
-  private setupDmConsole() {
-    const g: any = this.mgGame?.gameData;
-    if (!g || String(g.gameType) !== 'DND') return;
-
-    const me = this.generalService.User?.id;
-    const dmSeat = (g.players || []).find((p: any) => p.attributes?.['type'] === 'dm' && p.user?.id === me);
-    if (!dmSeat) return;                       // only the DM gets the console
-    const dmSeatId = dmSeat.id;
-
-    const scenes = this.parseCatalog(g.attributes?.['dndScenes']);
-    const monsters = this.parseCatalog(g.attributes?.['dndMonsters']);
-    const sounds = (g.attributes?.['dndSounds'] || '').split(';').filter(Boolean).map((p: string) => {
-      const a = p.split('|'); return {label: a[0], url: a[1], loop: a[2] === '1'};
-    });
-
-    // A picture tile: scenes use their map PNG directly; monsters/heroes get a data-thumb the
-    // model is rendered into after mount. Clicking a tile performs its action.
-    const sceneTile = (s: any) =>
-      `<div class="tile" data-act="LoadScene" data-url="${s.url}"><img src="/assets/games/${s.url}"><span>${s.label}</span></div>`;
-    const monsterTile = (m: any) =>
-      `<div class="tile" data-act="AddMonster" data-url="${m.url}"><img data-thumb="${m.url}"><span>${m.label}</span></div>`;
-    const soundBtn = (s: any) =>
-      `<button class="dmbtn" data-act="PlaySound" data-url="${s.url}" data-loop="${s.loop ? '1' : '0'}">${s.loop ? '🎵' : '🔊'} ${s.label}</button>`;
-
-    const el = document.createElement('div');
-    el.style.pointerEvents = 'auto';   // a docked HUD panel on the screen's right edge
-    el.innerHTML = `
-      <style>
-        .dmc{width:340px;max-height:92vh;overflow-y:auto;font:600 16px system-ui,sans-serif;color:#e8edf5;
-             background:linear-gradient(180deg,rgba(19,30,51,.97),rgba(10,17,32,.97));border:1px solid #2a3a55;
-             border-radius:18px;padding:16px 18px;box-shadow:0 12px 48px rgba(0,0,0,.55);}
-        .dmc h3{margin:0 0 12px;font-size:20px;}
-        .dmc .row{margin-bottom:14px;}
-        .dmc .lbl{font-size:12px;letter-spacing:.09em;color:#8aa0c0;text-transform:uppercase;margin-bottom:6px;}
-        .dmc .pick{display:flex;gap:8px;flex-wrap:wrap;}
-        .dmc .tile{width:78px;cursor:pointer;background:#0e1626;border:2px solid #2a3a55;border-radius:12px;
-             padding:5px;text-align:center;transition:border-color .12s,transform .12s;}
-        .dmc .tile:hover{border-color:#4a86e8;transform:translateY(-2px);}
-        .dmc .tile img{width:66px;height:66px;object-fit:contain;border-radius:8px;display:block;background:#0a0f1a;}
-        .dmc .tile span{display:block;font-size:12px;margin-top:4px;color:#cdd8ea;}
-        .dmc .dmbtn{font:600 16px system-ui;color:#fff;background:#25406b;border:0;border-radius:10px;
-             padding:8px 16px;margin:2px 6px 2px 0;cursor:pointer;}
-        .dmc .dmbtn:hover{background:#31538c;}
-        .dmc .dmbtn.on{background:#c99a00;color:#151515;}
-      </style>
-      <div class="dmc">
-        <h3>🎲 DM Console</h3>
-        <div class="row" id="dmSelected"></div>
-        <div class="row"><div class="lbl">Scene</div><div class="pick">${scenes.map(sceneTile).join('')}</div></div>
-        <div class="row"><div class="lbl">Add monster</div><div class="pick">${monsters.map(monsterTile).join('')}</div></div>
-        <div class="row"><div class="lbl">Sound</div><div class="pick">${sounds.map(soundBtn).join('')}<button class="dmbtn" data-act="StopSound">⏹ Stop</button></div></div>
-        <div class="row"><div class="lbl">All characters</div><div class="pick">
-          <button class="dmbtn" data-act="ShowAllLabels">👁 Show labels</button>
-          <button class="dmbtn" data-act="HideAllLabels">🚫 Hide labels</button>
-          <button class="dmbtn" data-act="ClearAllRolls">🎲 Clear all dice</button>
-        </div></div>
-      </div>`;
-
-    el.addEventListener('click', (ev: any) => {
-      const t = ev.target.closest('[data-act]');
-      if (!t || t.tagName === 'SELECT' || t.tagName === 'INPUT') return;   // selects/checkboxes fire via 'change'
-      const act = t.getAttribute('data-act');
-      if (!act) return;
-      if (act === 'RemoveSelected' && !window.confirm('Remove this piece from the board?')) return;
-      const args: any = {};
-      if (act === 'LoadScene') args.sceneUrl = t.getAttribute('data-url');
-      if (act === 'AddMonster') args.monsterUrl = t.getAttribute('data-url');
-      if (act === 'PlaySound') { args.soundUrl = t.getAttribute('data-url'); args.loop = t.getAttribute('data-loop'); }
-      if (act === 'SetHp') args.delta = t.getAttribute('data-delta');
-      if (act === 'RotateSelected') args.delta = t.getAttribute('data-delta');
-      if (act === 'RemoveRoll') args.idx = t.getAttribute('data-idx');
-      if (act === 'AskRoll') args.seat = t.getAttribute('data-seat');
-      if (act === 'SetDie') {
-        args.sides = t.getAttribute('data-sides');
-        el.querySelectorAll('.dmdice .dmbtn').forEach((b: any) => b.classList.remove('on'));
-        t.classList.add('on');
-      }
-      this.signalRService.executeActionArgs(this.gameId!, dmSeatId, act, args);
-    });
-
-    // Dropdowns + the label checkbox fire 'change', not 'click'.
-    el.addEventListener('change', (ev: any) => {
-      const inp = ev.target.closest('input[data-act]');
-      if (inp && inp.getAttribute('data-act') === 'ToggleLabel') {
-        this.signalRService.executeActionArgs(this.gameId!, dmSeatId, 'ToggleLabel', {});
-        return;
-      }
-      const s = ev.target.closest('select[data-act]');
-      if (!s) return;
-      const act = s.getAttribute('data-act');
-      if (act === 'SetAnim') {
-        this.signalRService.executeActionArgs(this.gameId!, dmSeatId, 'SetAnim', { idx: s.value });
-      } else if (act === 'AskRoll' && s.value) {
-        this.signalRService.executeActionArgs(this.gameId!, dmSeatId, 'AskRoll', { seat: s.getAttribute('data-seat'), sides: s.value });
-        s.value = '';   // reset so the DM can ask again
-      } else if (act === 'RollSelected' && s.value) {
-        this.signalRService.executeActionArgs(this.gameId!, dmSeatId, 'RollSelected', { sides: s.value });
-        s.value = '';
-      }
-    });
-
-    // Dock into the screen-anchored "onscreen" holder — stays fixed on the right as the camera moves.
-    this.mgThree.onscreenHolder?.appendChild(el);
-    this.dmConsoleEl = el;
-    this.dmConsoleSeat = dmSeatId;
-    this.updateDmSelected(g);   // fill the contextual section for any current selection
-
-    // Render the model thumbnails (monsters + heroes) into their tiles, one by one.
-    setTimeout(async () => {
-      const imgs = Array.from(el.querySelectorAll('img[data-thumb]')) as HTMLImageElement[];
-      for (const img of imgs) {
-        const u = img.getAttribute('data-thumb'); if (!u) continue;
-        const data = await this.mgThree.renderModelThumbnail(u);
-        if (data) img.src = data;
-      }
-    }, 0);
-  }
 
   // ==================== Generic server-driven panel ====================
   // The client is DUMB. The server sends this seat's ENTIRE panel as PlayerData.Screen (a UiNode
@@ -469,10 +322,21 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       case 'image': return `<img class="sp-img ${nd.style || ''}" src="${nd.url}"${nd.size ? ` style="height:${nd.size}px"` : ''}>`;
       case 'model': return `<img class="sp-img sp-model ${nd.style || ''}" data-model="${nd.url}"${nd.size ? ` style="height:${nd.size}px"` : ''}>`;
       case 'button': {
-        const icon = nd.url ? `<img src="${nd.url}">` : '';
+        const isModel = nd.url && /\.(gltf|glb|obj|stl)$/i.test(nd.url);  // model icon → client thumbnail
+        const icon = nd.url ? (isModel ? `<img data-model="${nd.url}">` : `<img src="${nd.url}">`) : '';
         const extra = (nd.confirm ? ` data-confirm="${esc(nd.confirm)}"` : '')
                     + (nd.gather ? ` data-gather="${esc((nd.gather || []).join(','))}"` : '');
         return `<button class="sp-btn ${nd.style || ''}" data-act="${esc(nd.action)}" data-args='${esc(JSON.stringify(nd.args || {}))}'${extra}>${icon}<span>${esc(nd.text)}</span></button>`;
+      }
+      case 'animpick': {
+        // Model-inspection capability (not game logic): fill a dropdown from the loaded model's
+        // animation clips and dispatch the server action (SetAnim) with the chosen index.
+        const it = (this.mgGame as any)?.allItems?.[nd.id];
+        const clips = it?.mesh?.userData?.['clips'] || [];
+        const cur = it?.animationIdx ?? -1;
+        const opts = ['<option value="-1">🎬 none</option>'].concat(
+          clips.map((c: any, i: number) => `<option value="${i}" ${i === cur ? 'selected' : ''}>${esc(c.name || ('Clip ' + i))}</option>`)).join('');
+        return `<select class="sp-input" data-act="${esc(nd.action)}" data-onchange="1" data-argkey="${esc(nd.argKey || 'idx')}">${opts}</select>`;
       }
       case 'input':
         return `<input class="sp-input" data-id="${esc(nd.id)}" placeholder="${esc(nd.placeholder || '')}">`;
@@ -531,188 +395,11 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       .sp-check input{width:18px;height:18px;}
       .sp-input{box-sizing:border-box;padding:8px 10px;border-radius:9px;border:1px solid #5a4632;background:#0e0b08;color:#e8edf5;font:600 15px system-ui;margin:4px 0;min-width:140px;}
       .sp-model{width:74px;height:74px;object-fit:contain;background:#0a0705;border-radius:8px;}
+      .sp-btn.tile{flex-direction:column;gap:4px;width:86px;background:#241a12;border:1px solid #5a4632;font-size:12px;padding:6px;}
+      .sp-btn.tile img{width:68px;height:68px;object-fit:contain;border-radius:6px;background:#0a0705;}
+      .sp-chip{display:inline-flex;align-items:center;gap:6px;background:#241a12;border:1px solid #5a4632;border-radius:9px;padding:5px 9px;margin:0 6px 6px 0;}
     `;
   }
 
-  private parseCatalog(s: string): {label: string, url: string}[] {
-    return (s || '').split(';').filter(Boolean).map(pair => {
-      const i = pair.indexOf('|');
-      return {label: pair.slice(0, i), url: pair.slice(i + 1)};
-    });
-  }
-  private pname(p: any) { return p.user?.name || p.name || (p.type === 'AI' ? 'AI' : 'open'); }
-
-  // ---- contextual "selected item" section of the DM console ----------------
-  private dmConsoleEl?: HTMLElement;
-  private dmConsoleSeat = '';
-
-  private findSelectedItem(item: any): any {
-    if (!item) return null;
-    if (item.attributes?.['selected'] === '1') return item;
-    for (const c of (item.items || [])) { const r = this.findSelectedItem(c); if (r) return r; }
-    return null;
-  }
-
-  private lastSelKey = '';
-
-  // Refresh the console's contextual block for the selected piece. Guarded by a key so unrelated
-  // game updates don't rebuild it (which would snap an open dropdown shut).
-  private updateDmSelected(g: any) {
-    if (!this.dmConsoleEl) return;
-    const box = this.dmConsoleEl.querySelector('#dmSelected') as HTMLElement | null;
-    if (!box) return;
-    const sel = this.findSelectedItem(g?.table);
-    const key = sel ? `${sel.id}:${sel.animationIdx}:${sel.attributes?.['hp']}:${sel.attributes?.['rolls']}:${sel.attributes?.['hidelabel']}` : '';
-    if (key === this.lastSelKey) return;   // nothing relevant changed
-    this.lastSelKey = key;
-    if (!sel) { box.innerHTML = ''; return; }
-
-    const isHero = sel.attributes?.['char'] === '1';
-    const owner = sel.attributes?.['owner'];
-    const ownerP = (g.players || []).find((p: any) => p.id === owner);
-    const cls = ownerP?.attributes?.['hero'];
-    const name = isHero ? (cls ? `${cls} · ${this.pname(ownerP)}` : this.pname(ownerP)) : 'Monster';
-
-    const dd = 'font:600 15px system-ui;padding:8px;border-radius:10px;border:1px solid #2a3a55;background:#0e1626;color:#e8edf5;margin:2px 6px 2px 0;';
-
-    // Roll dropdown. Heroes → ask that hero's player (AskRoll); monsters → the DM rolls (RollSelected).
-    const dieOpts = ['<option value="">🎲 Roll a die…</option>']
-      .concat([4, 6, 8, 10, 12, 20, 100].map(s => `<option value="${s}">d${s}</option>`)).join('');
-    const rollDD = (isHero && owner)
-      ? `<select data-act="AskRoll" data-seat="${owner}" style="${dd}">${dieOpts}</select>`
-      : `<select data-act="RollSelected" style="${dd}">${dieOpts}</select>`;
-
-    // Accumulated rolls for this character — each removable by the DM.
-    const rolls = (sel.attributes?.['rolls'] || '').split(';').filter((x: string) => x);
-    const rollsRow = rolls.length ? `
-      <div style="margin:6px 0 2px;">
-        <div class="lbl">Rolls</div>
-        ${rolls.map((r: string, i: number) => { const pr = r.split(':'); return `
-          <span style="display:inline-flex;align-items:center;gap:5px;background:#0e1626;border:1px solid #2a3a55;border-radius:9px;padding:5px 9px;margin:0 6px 6px 0;">
-            <b style="color:#ffd166;font-size:17px;">${pr[1]}</b><span style="color:#8aa0c0;font-size:12px;">${pr[0]}</span>
-            <span data-act="RemoveRoll" data-idx="${i}" style="cursor:pointer;color:#ff6b6b;font-weight:800;margin-left:2px;">✖</span>
-          </span>`; }).join('')}
-      </div>` : '';
-
-    // Animation: a dropdown of the model's actual clips.
-    const clips: any[] = (this.mgGame as any)?.allItems?.[sel.id]?.mesh?.userData?.['clips'] || [];
-    const curIdx = sel.animationIdx ?? -1;
-    const animOpts = ['<option value="-1">🎬 none</option>']
-      .concat(clips.map((c: any, i: number) => `<option value="${i}" ${i === curIdx ? 'selected' : ''}>${c.name || ('Clip ' + i)}</option>`)).join('');
-
-    const hp = sel.attributes?.['hp'];
-    const maxhp = sel.attributes?.['maxhp'];
-    const hpRow = hp != null ? `
-      <div style="display:flex;align-items:center;gap:6px;margin:8px 0 4px;">
-        <span style="color:#8aa0c0;font-size:13px;letter-spacing:.06em;margin-right:2px;">HP</span>
-        <button class="dmbtn" data-act="SetHp" data-delta="-5" style="padding:4px 10px;">−5</button>
-        <button class="dmbtn" data-act="SetHp" data-delta="-1" style="padding:4px 12px;">−</button>
-        <span style="font-weight:800;font-size:20px;color:#ff6b6b;min-width:60px;text-align:center;">${hp}${maxhp ? ('<span style="color:#8aa0c0;font-size:14px;font-weight:600;">/' + maxhp + '</span>') : ''}</span>
-        <button class="dmbtn" data-act="SetHp" data-delta="1" style="padding:4px 12px;">+</button>
-        <button class="dmbtn" data-act="SetHp" data-delta="5" style="padding:4px 10px;">+5</button>
-      </div>` : '';
-
-    // Facing: nudge the figure's heading in 10° steps.
-    const facingRow = `
-      <div style="display:flex;align-items:center;gap:6px;margin:4px 0;">
-        <span style="color:#8aa0c0;font-size:13px;letter-spacing:.06em;margin-right:2px;">Facing</span>
-        <button class="dmbtn" data-act="RotateSelected" data-delta="10" style="padding:4px 12px;">⟲ −10°</button>
-        <button class="dmbtn" data-act="RotateSelected" data-delta="-10" style="padding:4px 12px;">⟳ +10°</button>
-      </div>`;
-
-    box.innerHTML = `
-      <div class="lbl">Selected — ${name}</div>
-      ${hpRow}
-      ${facingRow}
-      ${rollsRow}
-      <div class="pick" style="align-items:center;gap:8px;">
-        ${rollDD}
-        ${clips.length ? `<select data-act="SetAnim" style="${dd}">${animOpts}</select>` : ''}
-        <label style="display:inline-flex;align-items:center;gap:5px;color:#cdd8ea;font-size:14px;cursor:pointer;">
-          <input type="checkbox" data-act="ToggleLabel" ${sel.attributes?.['hidelabel'] === '1' ? '' : 'checked'}> label
-        </label>
-        <button class="dmbtn" data-act="ClearSelected">✖ Unselect</button>
-        <button class="dmbtn" data-act="RemoveSelected">🗑 Remove</button>
-      </div>`;
-  }
-
-  // ---- player dice-roll prompt + result toast (onscreen) -------------------
-  private rollEl?: HTMLElement;
-  private rolling = false;
-  private myRollFinal: number | null = null;
-  private lastRollNonce = '';
-
-  private mySeatId(): string { return (this.mgGame as any)?.playerData?.id || ''; }
-
-  private updateRollUi(g: any) {
-    const host = this.rendererContainer?.nativeElement;
-    if (!host || !g) return;
-    const seat = this.mySeatId();
-
-    // Pending roll prompt for ME?
-    const pending = seat ? g.attributes?.['roll:' + seat] : null;
-    if (pending && !this.rollEl && !this.rolling) this.showRollPrompt(parseInt(pending, 10) || 20);
-    else if (!pending && this.rollEl && !this.rolling) this.hideRollPrompt();
-
-    // A roll result (for everyone). Nonce-prefixed so repeats still fire. Announce + settle mine.
-    const rr = g.attributes?.['rollResult'];
-    if (rr && rr !== this.lastRollNonce) {
-      this.lastRollNonce = rr;
-      const parts = String(rr).split('|');   // nonce|seat|who|sides|result
-      const rseat = parts[1], who = parts[2], sides = parts[3], result = parts[4];
-      this.showRollToast(`${who} rolled d${sides} → ${result}`);
-      if (rseat === seat) this.myRollFinal = parseInt(result, 10);
-    }
-  }
-
-  private showRollPrompt(sides: number) {
-    const host = this.rendererContainer.nativeElement as HTMLElement;
-    const el = document.createElement('div');
-    el.style.cssText = 'position:absolute;left:50%;bottom:9%;transform:translateX(-50%);z-index:40;pointer-events:auto;'
-      + 'font:600 20px system-ui,sans-serif;color:#e8edf5;text-align:center;'
-      + 'background:linear-gradient(180deg,rgba(19,30,51,.97),rgba(10,17,32,.97));border:1px solid #2a3a55;'
-      + 'border-radius:18px;padding:18px 28px;box-shadow:0 12px 48px rgba(0,0,0,.6);';
-    el.innerHTML = `
-      <div style="font-size:14px;color:#8aa0c0;letter-spacing:.06em;margin-bottom:8px;">THE DM ASKS YOU TO ROLL</div>
-      <div class="rollnum" style="font-size:64px;font-weight:800;line-height:1;margin-bottom:14px;color:#ffd166;">d${sides}</div>
-      <button class="rollbtn" style="font:700 20px system-ui;color:#151515;background:#ffd166;border:0;border-radius:12px;padding:12px 32px;cursor:pointer;">🎲 Roll d${sides}</button>`;
-    el.querySelector('.rollbtn')!.addEventListener('click', () => this.startRoll(sides));
-    host.appendChild(el);
-    this.rollEl = el;
-  }
-
-  private startRoll(sides: number) {
-    if (!this.rollEl || this.rolling) return;
-    this.rolling = true;
-    const numEl = this.rollEl.querySelector('.rollnum') as HTMLElement;
-    const btn = this.rollEl.querySelector('.rollbtn') as HTMLElement;
-    if (btn) btn.style.display = 'none';
-    const spin = setInterval(() => { numEl.textContent = String(1 + Math.floor(Math.random() * sides)); }, 70);
-    const start = Date.now();
-    this.signalRService.executeActionArgs(this.gameId!, this.mySeatId(), 'RollDice', {});
-    const settle = setInterval(() => {
-      const done = Date.now() - start >= 900 && this.myRollFinal != null;
-      if (done || Date.now() - start > 4000) {
-        clearInterval(spin); clearInterval(settle);
-        if (this.myRollFinal != null) numEl.textContent = String(this.myRollFinal);
-        setTimeout(() => { this.hideRollPrompt(); this.rolling = false; this.myRollFinal = null; }, 1500);
-      }
-    }, 80);
-  }
-
-  private hideRollPrompt() { this.rollEl?.remove(); this.rollEl = undefined; }
-
-  private showRollToast(text: string) {
-    const host = this.rendererContainer?.nativeElement as HTMLElement;
-    if (!host) return;
-    const t = document.createElement('div');
-    t.textContent = '🎲 ' + text;
-    t.style.cssText = 'position:absolute;left:50%;top:18px;transform:translateX(-50%);z-index:45;pointer-events:none;'
-      + 'font:700 22px system-ui,sans-serif;color:#151515;background:#ffd166;border-radius:12px;padding:10px 24px;'
-      + 'box-shadow:0 8px 30px rgba(0,0,0,.45);opacity:0;transition:opacity .2s;';
-    host.appendChild(t);
-    requestAnimationFrame(() => { t.style.opacity = '1'; });
-    setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3200);
-  }
 
 }

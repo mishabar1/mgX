@@ -80,7 +80,7 @@
     }
 
     <div class="mg-section">Settings</div>
-    @if (!isDnd) {
+    @if (!noAvatars) {
       <div class="mg-game-card">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
           <input type="checkbox" [checked]="showHeads"
@@ -107,7 +107,7 @@
       </div>
     }
 
-    @if (isDurak) {
+    @if (usesCardBack) {
       <div class="mg-game-card" style="display:block;">
         <div class="mg-game-name" style="margin-bottom:10px;"><i class="pi pi-clone" style="margin-right:6px;"></i>Card back</div>
         <div class="mg-row-center" style="gap:10px;">

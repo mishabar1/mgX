@@ -28,6 +28,15 @@ namespace MG.Server.Controllers
             return Ok(await _gameBL.GetAllGames());
         }
 
+        // The catalog of creatable games (type/label/icon). The client's "Create a game" list is
+        // built from this — so adding a game needs no client change.
+        [HttpGet("GameTypes")]
+        public IActionResult GameTypes()
+        {
+            _logger.LogTrace("GameTypes");
+            return Ok(GameFlows.BaseGameFlow.GameCatalog());
+        }
+
 
         [HttpGet("GetGameByID")]
         public async Task<IActionResult> GetGameByID(string gameId)

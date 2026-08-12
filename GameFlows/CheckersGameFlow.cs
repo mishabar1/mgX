@@ -290,6 +290,15 @@ namespace MG.Server.GameFlows
             foreach (var m in getItemsByAttribute("moveMarker")) removeItem(m.Id);
         }
 
+        // Server-decided top HUD (piece count). The client just displays attribute "hud".
+        protected override void RefreshScreens()
+        {
+            var pieces = getItemsByAttribute("piece");
+            int bk = pieces.Count(p => p.GetStringAttribute("color") == "black");
+            int rd = pieces.Count(p => p.GetStringAttribute("color") == "red");
+            GameData.Attributes["hud"] = $"Black {bk}   Red {rd}";
+        }
+
         private void UpdateTurnText()
         {
             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "black";

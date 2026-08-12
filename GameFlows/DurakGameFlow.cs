@@ -49,6 +49,8 @@ namespace MG.Server.GameFlows
             addAsset(Assets.TEXT);
             addAsset(Assets.TABLE);
 
+            GameData.Attributes["usesCardBack"] = "1";   // offer the card-back chooser in setup
+
             GameData.Observer.Position.Set(0, 15, 0);
 
             // Six empty seats evenly spaced around the ring. Seat 0 is the near side (-Z);

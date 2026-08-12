@@ -30,15 +30,9 @@
   }
 
   <div class="mg-section">Create a game</div>
-  <div class="mg-row-center" style="column-gap: 12px;">
-    <p-button (onClick)="createGame('TIK_TAK_TOE')" label="Tic-Tac-Toe" icon="pi pi-th-large"></p-button>
-    <p-button (onClick)="createGame('CHESS')" label="Chess" icon="pi pi-flag"></p-button>
-    <p-button (onClick)="createGame('GOMOKU')" label="Gomoku" icon="pi pi-circle-fill"></p-button>
-    <p-button (onClick)="createGame('REVERSI')" label="Reversi" icon="pi pi-circle"></p-button>
-    <p-button (onClick)="createGame('CHECKERS')" label="Checkers" icon="pi pi-star"></p-button>
-    <p-button (onClick)="createGame('DND')" label="D&D" icon="pi pi-compass"></p-button>
-    <p-button (onClick)="createGame('DURAK')" label="Durak" icon="pi pi-clone"></p-button>
-    <p-button (onClick)="createGame('RESISTANCE')" label="The Resistance" icon="pi pi-users"></p-button>
-    <p-button (onClick)="createGame('DEMO')" label="Demo (dev reference)" icon="pi pi-code" severity="secondary"></p-button>
+  <div class="mg-row-center" style="column-gap: 12px; row-gap: 10px; flex-wrap: wrap;">
+    @for (gt of gameTypes; track gt.type) {
+      <p-button (onClick)="createGame(gt.type)" [label]="gt.label" [icon]="gt.icon"></p-button>
+    }
   </div>
 </div>

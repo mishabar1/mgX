@@ -25,6 +25,23 @@ namespace MG.Server.GameFlows
         public bool CanStart => OccupiedSeats >= MinPlayers;
 
 
+        // The catalog of creatable games — the SINGLE SOURCE OF TRUTH the client's "Create a game"
+        // list is built from (type + label + PrimeNG icon). Adding a game = add a line here (plus the
+        // CreateGame/AttachGameFlow cases). The client needs no change.
+        public record GameTypeInfo(string type, string label, string icon);
+        public static List<GameTypeInfo> GameCatalog() => new()
+        {
+            new(GameTypeEnum.TIK_TAK_TOE, "Tic-Tac-Toe",         "pi pi-th-large"),
+            new(GameTypeEnum.CHESS,       "Chess",               "pi pi-flag"),
+            new(GameTypeEnum.GOMOKU,      "Gomoku",              "pi pi-circle-fill"),
+            new(GameTypeEnum.REVERSI,     "Reversi",             "pi pi-circle"),
+            new(GameTypeEnum.CHECKERS,    "Checkers",            "pi pi-star"),
+            new(GameTypeEnum.DND,         "D&D",                 "pi pi-compass"),
+            new(GameTypeEnum.DURAK,       "Durak",               "pi pi-clone"),
+            new(GameTypeEnum.RESISTANCE,  "The Resistance",      "pi pi-users"),
+            new(GameTypeEnum.DEMO,        "Demo (dev reference)","pi pi-code"),
+        };
+
         private static string PrettyName(string type) => type switch
         {
             GameTypeEnum.TIK_TAK_TOE => "Tic-Tac-Toe",
@@ -117,7 +134,7 @@ namespace MG.Server.GameFlows
             // on the first move. Each game's StartGame repopulates what it needs.
             // BUT preserve persistent game SETTINGS that also live in Attributes (e.g. the
             // voice-chat config) — otherwise Setup/Restart would silently reset them.
-            var preservedKeys = new[] { "allowVoice", "voiceSpectators", "showHeads", "cardBack" };
+            var preservedKeys = new[] { "allowVoice", "voiceSpectators", "showHeads", "cardBack", "noAvatars", "usesCardBack" };
             var preserved = preservedKeys
                 .Where(k => this.GameData.Attributes.ContainsKey(k))
                 .ToDictionary(k => k, k => this.GameData.Attributes[k]);
@@ -150,6 +167,7 @@ namespace MG.Server.GameFlows
             this.GameData.GameStatus = GameStatusEnum.PLAY;
 
             await StartGame();
+            RefreshScreens();   // build the server-driven per-seat panels for the fresh game
 
             // (Re)create AI agents — exactly one per current AI seat. Stop any prior agent first
             // so a restart, or a seat that changed to/from AI, can't leave a duplicate ticking.
@@ -185,6 +203,12 @@ namespace MG.Server.GameFlows
 
         protected abstract Task<bool> IsEndGame();
         protected abstract List<PlayerData> GetGameWinners();
+
+        // Server-driven UI hook: build each seat's PlayerData.Screen (the 2D panel the dumb client
+        // renders). Called on start and after every action. Games with a panel override this;
+        // games that render their panel elsewhere (Resistance/Demo build it in Render/StartGame)
+        // or have no panel leave it as a no-op.
+        protected virtual void RefreshScreens() { }
 
         // Serializes all state mutations for THIS game (human actions, AI turns, undo) so a
         // background AI-timer tick can't interleave with a SignalR action and corrupt state.
@@ -294,6 +318,8 @@ namespace MG.Server.GameFlows
                 Console.WriteLine("GAME ENDED !!!!!! winners count: " + this.GameData.Winners.Count());
                 await RunEndGameFlow();
             }
+
+            RefreshScreens();   // rebuild the server-driven per-seat panels after every action
 
             HistoryGameData.Add(GameData.DeepCopy());
 
