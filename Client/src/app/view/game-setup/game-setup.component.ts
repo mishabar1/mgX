@@ -27,7 +27,7 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
 
   // Show/hide the player avatar heads in the 3D scene. Now saved ON THE GAME (shared,
   // survives reload) — default shown when the setting is absent.
-  get showHeads(): boolean { return this.gameData?.attributes?.['showHeads'] !== '0'; }
+  get showHeads(): boolean { return this.gameData?.attributes?.['showHeads'] === '1'; }   // OFF by default
   setShowHeads(enabled: boolean) {
     this.dalService.setShowHeads(this.gameId!, enabled).subscribe();
   }

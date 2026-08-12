@@ -120,6 +120,8 @@ namespace MG.Server.Entities
         public const string REVERSI = "REVERSI";
         public const string CHECKERS = "CHECKERS";
         public const string DURAK = "DURAK";
+        public const string RESISTANCE = "RESISTANCE";
+        public const string DEMO = "DEMO";
     }
 
     public class GameStatusEnum

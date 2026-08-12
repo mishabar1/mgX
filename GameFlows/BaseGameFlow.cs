@@ -34,6 +34,8 @@ namespace MG.Server.GameFlows
             GameTypeEnum.REVERSI => "Reversi",
             GameTypeEnum.CHECKERS => "Checkers",
             GameTypeEnum.DURAK => "Durak",
+            GameTypeEnum.RESISTANCE => "The Resistance",
+            GameTypeEnum.DEMO => "Demo (dev reference)",
             _ => type
         };
 
@@ -63,6 +65,12 @@ namespace MG.Server.GameFlows
                     break;
                 case GameTypeEnum.DURAK:
                     game.GameFlow = new DurakGameFlow(game);
+                    break;
+                case GameTypeEnum.RESISTANCE:
+                    game.GameFlow = new ResistanceGameFlow(game);
+                    break;
+                case GameTypeEnum.DEMO:
+                    game.GameFlow = new DemoGameFlow(game);
                     break;
                 default:
                     break;

@@ -134,6 +134,12 @@ namespace MG.Server.Database
                 case GameTypeEnum.DURAK:
                     game.GameFlow = new DurakGameFlow(game);
                     break;
+                case GameTypeEnum.RESISTANCE:
+                    game.GameFlow = new ResistanceGameFlow(game);
+                    break;
+                case GameTypeEnum.DEMO:
+                    game.GameFlow = new DemoGameFlow(game);
+                    break;
             }
         }
 
