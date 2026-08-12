@@ -365,7 +365,8 @@ namespace MG.Server.GameFlows
             await Task.CompletedTask;
         }
 
-        // DM asks a player to roll: a die appears that only that player can click.
+        // DM asks a player to roll a dN. A human gets an onscreen prompt (attribute "roll:<seat>");
+        // an AI rolls immediately so the table still sees a result.
         [GameAction]
         public async Task AskRoll(ExecuteActionData data)
         {
@@ -376,49 +377,33 @@ namespace MG.Server.GameFlows
             int sides = int.TryParse(Arg(data, "sides"), out var sv) && sv > 0 ? sv
                         : (GameData.Attributes.TryGetValue("die", out var d) && d == "6" ? 6 : 20);
 
-            RemoveDieFor(seat); // one pending die per player
-
-            var plate = addItem(Assets.BUTTON)
-                .SetPosition(0, 1.5, 0).SetScale(2.2, 1, 1.4)
-                .AddAttribute("dieItem", "1").AddAttribute("owner", seat)
-                .AddAttribute("sides", sides.ToString()).AddAttribute("tint", "0xF1C40F");
-            plate.ClickActions[seat] = nameof(RollDice);
-            plate.Visible[seat] = true;
-
-            var text = addTextItem(Assets.TEXT).SetText("ROLL d" + sides)
-                .SetPosition(0, 1.62, 0).SetScale(0.4).SetRotation(-90, 0, 0)
-                .AddAttribute("dieItem", "1").AddAttribute("owner", seat).AddAttribute("textColor", "000000");
-            text.Visible[seat] = true;
+            var target = GameData.Players.Find(p => p.Id == seat);
+            if (target != null && target.Type == PlayerTypeEnum.AI) DoRoll(seat, sides);   // AI auto-rolls
+            else GameData.Attributes["roll:" + seat] = sides.ToString();                    // human: prompt
             await Task.CompletedTask;
         }
 
-        // The prompted player clicks their die → roll, remove it, show the result to everyone.
+        // The prompted player rolls (triggered from their onscreen prompt).
         [GameAction]
         public async Task RollDice(ExecuteActionData data)
         {
-            var item = data.Item;
-            if (item == null || !item.HaveAttribute("dieItem")) { await Task.CompletedTask; return; }
-            string seat = item.GetStringAttribute("owner");
-            if (data.Player?.Id != seat) { await Task.CompletedTask; return; } // only the prompted player
-
-            int sides = item.GetIntAttribute("sides");
-            int roll = _rnd.Next(1, sides + 1);
-            RemoveDieFor(seat);
-
-            foreach (var r in getItemsByAttribute("rollResult")) removeItem(r.Id);
-            var who = PlayerDisplayName(GameData.Players.Find(p => p.Id == seat));
-            // Float the result high above the board centre so everyone sees it (and it clears the
-            // console, which now sits at +z). Stays until the next roll.
-            addTextItem(Assets.TEXT).SetText(who + " rolled d" + sides + " → " + roll)
-                .SetPosition(0, 3.5, 0).SetScale(0.85).SetRotation(-90, 0, 0)
-                .AddAttribute("rollResult", "1").AddAttribute("textColor", "ffd166");
+            string seat = data.Player?.Id ?? "";
+            if (GameData.Attributes.TryGetValue("roll:" + seat, out var s) && int.TryParse(s, out var sides))
+            {
+                GameData.Attributes.Remove("roll:" + seat);
+                DoRoll(seat, sides);
+            }
             await Task.CompletedTask;
         }
 
-        private void RemoveDieFor(string seat)
+        // Roll a dN for a seat and publish the result to everyone. The leading nonce forces the
+        // client to re-animate even when the same number comes up: "nonce|seat|who|sides|result".
+        private void DoRoll(string seat, int sides)
         {
-            foreach (var d in getItemsByAttribute("dieItem").Where(x => x.GetStringAttribute("owner") == seat).ToList())
-                removeItem(d.Id);
+            int r = _rnd.Next(1, sides + 1);
+            var who = PlayerDisplayName(GameData.Players.Find(p => p.Id == seat));
+            string nonce = Guid.NewGuid().ToString("N").Substring(0, 6);
+            GameData.Attributes["rollResult"] = $"{nonce}|{seat}|{who}|{sides}|{r}";
         }
 
         // ============================ selected-item actions (DM) ============================

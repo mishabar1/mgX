@@ -9,6 +9,7 @@ import {UserData} from '../../entities/user.data';
 import {join} from 'lodash';
 import {PlayerData} from '../../entities/player.data';
 import {UnsubscriberService} from '../../services/unsubscriber.service';
+import {ThumbService} from '../../bl/thumb.service';
 
 @Component({
     selector: 'app-game-setup',
@@ -43,6 +44,9 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
 
   // Card-back chooser (card games only, e.g. Durak).
   get isDurak(): boolean { return String(this.gameData?.gameType) === 'DURAK'; }
+  get isDnd(): boolean { return String(this.gameData?.gameType) === 'DND'; }
+  // Raw game-data dump is debug-only: shown when the URL has ?debug.
+  get showDebug(): boolean { return typeof location !== 'undefined' && location.search.includes('debug'); }
   get cardBack(): string { return this.gameData?.attributes?.['cardBack'] || 'red'; }
   backFile(c: string): string {
     return ({red: 'red-56.jpg', blue: 'blue-57.jpg', green: 'green-15.jpg', brown: 'brown-14.jpg'} as any)[c] || 'red-56.jpg';
@@ -71,14 +75,28 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
   // opening the setup page of an already-running game to tweak it).
   private lastStatus = '';
 
+  // Rendered hero portraits keyed by seat id (D&D seats carry a "heroUrl").
+  heroThumbs: {[id: string]: string} = {};
+
   constructor(public signalRService: SignalrService,
               private router: Router,
               private zone: NgZone,
               private unsubscriberService: UnsubscriberService,
               private activatedRoute: ActivatedRoute,
               private generalService: GeneralService,
+              private thumb: ThumbService,
               private dalService: DALService) {
 
+  }
+
+  // Render a portrait for each seat that has a hero model (once per seat).
+  private loadHeroThumbs() {
+    (this.gameData?.players || []).forEach((p: PlayerData) => {
+      const url = (p as any).attributes?.['heroUrl'];
+      if (url && !this.heroThumbs[p.id]) {
+        this.thumb.render(url).then(d => { if (d) this.zone.run(() => this.heroThumbs[p.id] = d); });
+      }
+    });
   }
 
   // Is the current user sitting in an actual seat (not a spectator / empty seat)?
@@ -100,6 +118,7 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
       const nowStarted = String(data.gameStatus) === 'PLAY';
       this.gameData = data;
       this.lastStatus = String(data.gameStatus);
+      this.loadHeroThumbs();
 
       // The game just started while I'm still on the setup page → open it for me,
       // exactly as if I'd clicked Open (only for seated players, not spectators).
@@ -144,6 +163,7 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
       }
       // Seed the status baseline so we don't treat an already-running game as a fresh start.
       this.lastStatus = String(this.gameData.gameStatus);
+      this.loadHeroThumbs();
     });
   }
 
