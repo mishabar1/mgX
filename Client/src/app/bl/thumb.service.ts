@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { GAMES_BASE } from './mg.three';
 
 // Renders a glb/gltf model (under assets/games) to a framed PNG data URL, for UI thumbnails.
 // Standalone (own loader + tiny offscreen renderer) so pages without a 3D scene can use it.
@@ -15,7 +16,7 @@ export class ThumbService {
     if (!assetRelUrl) return '';
     if (this.cache[assetRelUrl]) return this.cache[assetRelUrl];
     try {
-      const url = '/assets/games/' + assetRelUrl;
+      const url = GAMES_BASE + assetRelUrl;
       const gltf: any = await new Promise((res, rej) => this.loader.load(url, res, undefined, rej));
       const model = gltf.scene;
       const scene = new THREE.Scene();

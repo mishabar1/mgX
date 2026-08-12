@@ -448,7 +448,7 @@ namespace MG.Server.GameFlows
         // SERVER-DRIVEN PANEL. The server decides EVERYTHING the player sees — every text, image,
         // button and its layout — and hands it to the (dumb) client as a UiNode tree per seat.
         // =====================================================================================
-        private static string A(string file) => "/assets/games/resistance/" + file;   // asset URL for the client
+        private static string A(string file) => "resistance/" + file;   // relative asset path (client prepends its games base)
         private string Attr(string k) => GameData.Attributes.GetValueOrDefault(k, "");
 
         private void BuildScreens()

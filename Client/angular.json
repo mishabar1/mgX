@@ -30,7 +30,12 @@
             "inlineStyleLanguage": "scss",
             "assets": [
               "src/favicon.ico",
-              "src/assets"
+              {
+                "glob": "**/*",
+                "input": "src/assets",
+                "output": "assets",
+                "ignore": ["games/**", "heads/**"]
+              }
             ],
             "styles": [
               "src/styles.scss",

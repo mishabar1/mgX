@@ -45,7 +45,7 @@ import {environment} from '../../../environments/environment';
 import {Group} from 'three/src/objects/Group.js';
 import {GeneralService} from '../../bl/general.service';
 import {UnsubscriberService} from '../../services/unsubscriber.service';
-import {MgThree} from '../../bl/mg.three';
+import {MgThree, GAMES_BASE} from '../../bl/mg.three';
 import {MgGame} from '../../bl/mg.game';
 import {VoiceService} from '../../bl/voice.service';
 
@@ -319,11 +319,11 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       case 'banner':return `<div class="sp-banner ${nd.style || ''}">${esc(nd.text)}</div>`;
       case 'log':   return `<div class="sp-log">${esc(nd.text)}</div>`;
       case 'space': return `<div style="height:${nd.size || 8}px"></div>`;
-      case 'image': return `<img class="sp-img ${nd.style || ''}" src="${nd.url}"${nd.size ? ` style="height:${nd.size}px"` : ''}>`;
+      case 'image': return `<img class="sp-img ${nd.style || ''}" src="${GAMES_BASE}${nd.url}"${nd.size ? ` style="height:${nd.size}px"` : ''}>`;
       case 'model': return `<img class="sp-img sp-model ${nd.style || ''}" data-model="${nd.url}"${nd.size ? ` style="height:${nd.size}px"` : ''}>`;
       case 'button': {
         const isModel = nd.url && /\.(gltf|glb|obj|stl)$/i.test(nd.url);  // model icon → client thumbnail
-        const icon = nd.url ? (isModel ? `<img data-model="${nd.url}">` : `<img src="${nd.url}">`) : '';
+        const icon = nd.url ? (isModel ? `<img data-model="${nd.url}">` : `<img src="${GAMES_BASE}${nd.url}">`) : '';
         const extra = (nd.confirm ? ` data-confirm="${esc(nd.confirm)}"` : '')
                     + (nd.gather ? ` data-gather="${esc((nd.gather || []).join(','))}"` : '');
         return `<button class="sp-btn ${nd.style || ''}" data-act="${esc(nd.action)}" data-args='${esc(JSON.stringify(nd.args || {}))}'${extra}>${icon}<span>${esc(nd.text)}</span></button>`;

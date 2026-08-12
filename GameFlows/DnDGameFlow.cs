@@ -704,7 +704,7 @@ namespace MG.Server.GameFlows
         // SERVER-DRIVEN PANEL. The DM's console and a player's roll prompt are described entirely
         // here and rendered by the dumb client (PlayerData.Screen). Rebuilt on start + each action.
         // =====================================================================================
-        private const string ASSETS = "/assets/games/";   // plain-image URL prefix (models stay raw)
+        private const string ASSETS = "";   // relative asset paths (client prepends its games base)
 
         protected override void RefreshScreens()
         {

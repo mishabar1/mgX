@@ -1,5 +1,5 @@
 import {GameData} from '../entities/game.data';
-import {MgThree} from './mg.three';
+import {MgThree, GAMES_BASE, HEADS_BASE} from './mg.three';
 import {UserData} from '../entities/user.data';
 import {ItemData} from '../entities/item.data';
 import * as THREE from 'three';
@@ -215,10 +215,10 @@ export class MgGame{
         // No seated figure for this seat.
       } else {
         this.mgThree.gltfLoader.load(
-          `\\assets\\heads\\animals\\${animal}.glb`,
+          `${HEADS_BASE}animals/${animal}.glb`,
           (gltf) => applyHead(gltf.scene, false),
           undefined,
-          () => this.mgThree.gltfLoader.load('\\assets\\heads\\suzanne.glb', (gltf) => applyHead(gltf.scene, false))
+          () => this.mgThree.gltfLoader.load(HEADS_BASE + 'suzanne.glb', (gltf) => applyHead(gltf.scene, false))
         );
       }
 
@@ -411,8 +411,8 @@ export class MgGame{
         this.allItems[itemData.id] = itemData;
         return;
       }
-      const frontURL = '\\assets\\games\\' + this.gameData.assets[itemData.asset].frontURL;
-      const backURL = '\\assets\\games\\' + (this.gameData.assets[itemData.asset].backURL || this.gameData.assets[itemData.asset].frontURL);
+      const frontURL = GAMES_BASE + this.gameData.assets[itemData.asset].frontURL;
+      const backURL = GAMES_BASE + (this.gameData.assets[itemData.asset].backURL || this.gameData.assets[itemData.asset].frontURL);
       const asset = this.gameData.assets[itemData.asset];
       const assetType = asset.type;
 
@@ -706,7 +706,7 @@ export class MgGame{
         const sides = (itemData.attributes && itemData.attributes['sides']) || '';
         const result = parseInt((itemData.attributes && itemData.attributes['result']) || '0', 10);
         const g = new Group();
-        this.mgThree.gltfLoader.load('\\assets\\games\\dices\\d.glb', (gltf) => {
+        this.mgThree.gltfLoader.load(GAMES_BASE + 'dices/d.glb', (gltf) => {
           const model = gltf.scene;
           const box = new THREE.Box3().setFromObject(model);
           const sz = box.getSize(new THREE.Vector3());

@@ -15,6 +15,11 @@ import {InteractionManager} from '../services/mg.interaction.manager';
 import {RoomEnvironment} from 'three/examples/jsm/environments/RoomEnvironment.js';
 import * as ThreeMeshUI from 'three-mesh-ui';
 import * as TWEEN from '@tweenjs/tween.js';
+import {environment} from '../../environments/environment';
+
+// Game assets are hosted by the SERVER (GameContent/ → /games, /heads). Client just points at it.
+export const GAMES_BASE = environment.serverURL + '/games/';
+export const HEADS_BASE = environment.serverURL + '/heads/';
 import {XRTargetRaySpace} from 'three/src/renderers/webxr/WebXRController.js';
 import {XRControllerModelFactory} from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
 import {ThreeHelper} from './three.helper';
@@ -182,7 +187,7 @@ export class MgThree{
   private _thumbRenderer?: THREE.WebGLRenderer;
   async renderModelThumbnail(assetRelUrl: string, size = 150): Promise<string> {
     try {
-      const url = '\\assets\\games\\' + assetRelUrl;
+      const url = GAMES_BASE + assetRelUrl;
       const gltf: any = await new Promise((res, rej) => this.gltfLoader.load(url, res, undefined, rej));
       const model = gltf.scene;
       const scene = new THREE.Scene();

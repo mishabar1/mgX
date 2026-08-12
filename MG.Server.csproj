@@ -30,6 +30,12 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <!-- Game CONTENT (art/models/sounds/heads) is served by the server from GameContent/ — the
+       single source of truth. Ship it with the published app. -->
+  <ItemGroup>
+    <Content Include="GameContent\**" CopyToPublishDirectory="PreserveNewest" CopyToOutputDirectory="Never" />
+  </ItemGroup>
   <!--
     ==================================================================================
     UPGRADE NOTES (.NET 7 -> .NET 10)  — packages intentionally REMOVED:

@@ -36,7 +36,7 @@
                         background:#eef2f8;border:1px solid #cbd5e1;margin-right:12px;"
                  [style.visibility]="heroThumbs[player.id] ? 'visible' : 'hidden'">
           } @else if (player.attributes?.['type'] === 'dm') {
-            <img src="/assets/games/dnd/dm.jpg" alt="Dungeon Master"
+            <img [src]="assetsBase + 'dnd/dm.jpg'" alt="Dungeon Master"
                  style="width:96px;height:96px;object-fit:contain;vertical-align:middle;margin-right:12px;
                         border-radius:12px;mix-blend-mode:multiply;">
           }
@@ -116,7 +116,7 @@
                     [title]="c"
                     [style.outline]="cardBack === c ? '3px solid var(--mg-accent)' : 'none'"
                     [style.outline-offset.px]="2"
-                    [style.background-image]="'url(assets/games/common/back/' + backFile(c) + ')'"
+                    [style.background-image]="'url(' + assetsBase + 'common/back/' + backFile(c) + ')'"
                     style="width:46px;height:64px;border-radius:6px;border:1px solid #cbd5e1;cursor:pointer;background-size:cover;background-position:center;"></button>
           }
         </div>

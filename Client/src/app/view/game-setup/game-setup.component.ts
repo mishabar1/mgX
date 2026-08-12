@@ -10,6 +10,7 @@ import {join} from 'lodash';
 import {PlayerData} from '../../entities/player.data';
 import {UnsubscriberService} from '../../services/unsubscriber.service';
 import {ThumbService} from '../../bl/thumb.service';
+import {GAMES_BASE} from '../../bl/mg.three';
 
 @Component({
     selector: 'app-game-setup',
@@ -24,6 +25,7 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
   gameId:string|null = "";
   gameData!: GameData;
   user!:UserData;
+  assetsBase = GAMES_BASE;   // game assets are hosted by the server
 
   // Show/hide the player avatar heads in the 3D scene. Now saved ON THE GAME (shared,
   // survives reload) — default shown when the setting is absent.

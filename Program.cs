@@ -149,6 +149,19 @@ app.UseStaticFiles(new StaticFileOptions
     ServeUnknownFileTypes = true
 });
 
+// Game CONTENT (art/models/sounds + fallback avatar heads) lives with the SERVER — the single
+// source of truth. Served from GameContent/ at /games and /heads. Adding a new game's assets is a
+// server-only change (drop files here); no client rebuild. A permissive CORS header lets the 3D
+// loader/thumbnailer fetch them cross-origin from the dev client.
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(
+        Path.Combine(builder.Environment.ContentRootPath, "GameContent")),
+    RequestPath = "",
+    ServeUnknownFileTypes = true,
+    OnPrepareResponse = ctx => ctx.Context.Response.Headers["Access-Control-Allow-Origin"] = "*"
+});
+
 app.UseRouting();
 
 app.UseCors("MGX");
