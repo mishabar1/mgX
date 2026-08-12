@@ -73,11 +73,13 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
 
   // Participants, e.g. "A (white) vs AI (black)".
   playersLabel(game: GameData): string {
-    return (game.players || []).map(p => {
-      const who = p.user?.name || (p.type === 'AI' ? 'AI' : 'open');
-      const seat = p.attributes?.['type'];
-      return seat ? `${who} (${seat})` : who;
-    }).join(' vs ');
+    return (game.players || [])
+      .filter(p => p.type !== 'EMPTY_SEAT')          // hide untaken/open seats
+      .map(p => {
+        const who = p.user?.name || (p.type === 'AI' ? 'AI' : 'open');
+        const seat = p.attributes?.['type'];
+        return seat ? `${who} (${seat})` : who;
+      }).join(' vs ');
   }
 
   setup(game: GameData) {

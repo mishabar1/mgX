@@ -11,6 +11,7 @@ namespace MG.Server.Entities
     [JsonDerivedType(typeof(TextBlockAssetData), typeDiscriminator: AssetTypeEnum.TEXTBLOCK)]
     [JsonDerivedType(typeof(CylinderAssetData), typeDiscriminator: AssetTypeEnum.CYLINDER)]
     [JsonDerivedType(typeof(ArrowAssetData), typeDiscriminator: AssetTypeEnum.ARROW)]
+    [JsonDerivedType(typeof(DieAssetData), typeDiscriminator: AssetTypeEnum.DIE)]
     public class AssetData : BaseData<AssetData>
     {
         public string? FrontURL { get; set; }
@@ -102,6 +103,17 @@ namespace MG.Server.Entities
         }
     }
 
+    // A procedural die (Three.js cube) showing the rolled number, built in the client. Its
+    // "result"/"sides" attributes drive the face; "result"=0 shows "?" (awaiting the roll).
+    public class DieAssetData : AssetData
+    {
+        public DieAssetData() { }
+        public DieAssetData(string key = "die") : base(AssetTypeEnum.DIE)
+        {
+            Name = "die:" + key;
+        }
+    }
+
     public class AssetTypeEnum
     {
         public const string TOKEN = "TOKEN"; // some "box" with very small height and 2 sides - front and back
@@ -111,6 +123,7 @@ namespace MG.Server.Entities
         public const string TEXTBLOCK = "TEXTBLOCK"; // 3d text
         public const string CYLINDER = "CYLINDER"; // procedural round disc (radius/height), tinted per-item
         public const string ARROW = "ARROW";       // procedural flat "last move" arrow (shaft + head)
+        public const string DIE = "DIE";           // procedural 3D die cube showing the rolled number
 
     }
 

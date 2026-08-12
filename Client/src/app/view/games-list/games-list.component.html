@@ -22,7 +22,9 @@
       <!-- buttons stop the click from bubbling to the card so they don't open the game -->
       <div class="mg-row-center" style="gap:8px;" (click)="$event.stopPropagation()">
         <p-button (onClick)="setup(game)" severity="warn" label="Settings" icon="pi pi-cog"></p-button>
-        <p-button (onClick)="delete(game)" severity="danger" label="Delete" icon="pi pi-trash"></p-button>
+        @if (game.creatorId && game.creatorId === user?.id) {
+          <p-button (onClick)="delete(game)" severity="danger" label="Delete" icon="pi pi-trash"></p-button>
+        }
       </div>
     </div>
   }

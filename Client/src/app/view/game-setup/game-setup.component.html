@@ -7,9 +7,11 @@
     </div>
 
     <div class="mg-row-center" style="gap: 10px;">
-      <p-button (onClick)="start()" severity="warn" label="Start" icon="pi pi-play" [disabled]="isStarted || !seatsReady"></p-button>
-      @if (isStarted) {
-        <p-button (onClick)="restart()" severity="warn" label="Restart" icon="pi pi-refresh"></p-button>
+      @if (isCreator) {
+        <p-button (onClick)="start()" severity="warn" label="Start" icon="pi pi-play" [disabled]="isStarted || !seatsReady"></p-button>
+        @if (isStarted) {
+          <p-button (onClick)="restart()" severity="warn" label="Restart" icon="pi pi-refresh"></p-button>
+        }
       }
       <p-button (onClick)="open()" severity="success" label="Open" icon="pi pi-external-link" [disabled]="!canOpen"></p-button>
     </div>
@@ -32,8 +34,14 @@
                  style="width:88px;height:88px;object-fit:contain;vertical-align:middle;border-radius:12px;
                         background:#eef2f8;border:1px solid #cbd5e1;margin-right:12px;"
                  [style.visibility]="heroThumbs[player.id] ? 'visible' : 'hidden'">
+          } @else if (player.attributes?.['type'] === 'dm') {
+            <img src="/assets/games/dnd/dm.jpg" alt="Dungeon Master"
+                 style="width:96px;height:96px;object-fit:contain;vertical-align:middle;margin-right:12px;
+                        border-radius:12px;mix-blend-mode:multiply;">
           }
-          {{ player.attributes?.['hero'] || player.attributes?.['type'] || 'Seat' }}
+          @if (player.attributes?.['type'] !== 'dm') {
+            {{ player.attributes?.['hero'] || player.attributes?.['type'] || 'Seat' }}
+          }
           @if (player.type === 'AI') {
             <span style="color:#f59e0b; font-weight:600; margin-left:8px;">
               <i class="pi pi-desktop" style="margin-right:6px;"></i>{{ player.name || 'AI' }} <span style="opacity:.7;font-weight:400;">(AI)</span>
@@ -42,6 +50,9 @@
             <span style="color: var(--mg-muted); font-weight: 400; margin-left: 8px;">
               {{ player.user?.name || '… click Join to take this seat …' }}
             </span>
+            @if (player.user?.id && player.user?.id === user?.id) {
+              <span style="color:#16a34a; font-weight:700; margin-left:6px;">(YOU)</span>
+            }
             @if (seatEmpty(player) && !seatsReady) {
               <span style="color:#ef4444; font-weight:600; margin-left:8px;">(needed)</span>
             } @else if (seatEmpty(player)) {
@@ -50,12 +61,18 @@
           }
         </div>
         <div class="mg-spacer"></div>
-        @if (player.type === 'EMPTY_SEAT') {
-          <p-button (onClick)="join_game(player)" severity="success" label="Join" icon="pi pi-user"></p-button>
-          <p-button (onClick)="set_ai(player)" severity="warn" label="AI"></p-button>
-        }
-        @if (player.type !== 'EMPTY_SEAT') {
-          <p-button (onClick)="leave(player)" severity="danger" label="Leave" icon="pi pi-sign-out"></p-button>
+        @if (!isStarted) {
+          @if (player.type === 'EMPTY_SEAT') {
+            @if (canJoin) {
+              <p-button (onClick)="join_game(player)" severity="success" label="Join" icon="pi pi-user"></p-button>
+            }
+            @if (canAddAi) {
+              <p-button (onClick)="set_ai(player)" severity="warn" label="AI"></p-button>
+            }
+          }
+          @if (player.type !== 'EMPTY_SEAT' && canLeave(player)) {
+            <p-button (onClick)="leave(player)" severity="danger" label="Leave" icon="pi pi-sign-out"></p-button>
+          }
         }
       </div>
     }
@@ -71,20 +88,22 @@
       </div>
     }
 
-    <div class="mg-game-card" style="display:block;">
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-        <input type="checkbox" [checked]="allowVoice"
-               (change)="setVoiceEnabled($any($event.target).checked)" />
-        <span class="mg-game-name"><i class="pi pi-microphone" style="margin-right:6px;"></i>Allow voice chat during the game</span>
-      </label>
-      @if (allowVoice) {
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:10px;padding-left:26px;color:var(--mg-muted);">
-          <input type="checkbox" [checked]="voiceSpectators"
-                 (change)="setVoiceSpectators($any($event.target).checked)" />
-          <span>Let spectators join voice too (otherwise players only)</span>
+    @if (isCreator) {
+      <div class="mg-game-card" style="display:block;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <input type="checkbox" [checked]="allowVoice"
+                 (change)="setVoiceEnabled($any($event.target).checked)" />
+          <span class="mg-game-name"><i class="pi pi-microphone" style="margin-right:6px;"></i>Allow voice chat during the game</span>
         </label>
-      }
-    </div>
+        @if (allowVoice) {
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:10px;padding-left:26px;color:var(--mg-muted);">
+            <input type="checkbox" [checked]="voiceSpectators"
+                   (change)="setVoiceSpectators($any($event.target).checked)" />
+            <span>Let spectators join voice too (otherwise players only)</span>
+          </label>
+        }
+      </div>
+    }
 
     @if (isDurak) {
       <div class="mg-game-card" style="display:block;">

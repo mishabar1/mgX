@@ -145,9 +145,11 @@ namespace MG.Server.GameFlows
                     ? addItem(Assets.PAWN).SetScale(1.25).AddAttribute("tint", CHAR_COLORS[i % CHAR_COLORS.Length])
                     : addItem(HeroAsset(heroUrl));
                 token.SetPosition(x, 0.15, TRAY_Z)
-                    .AddAttribute("char", "1").AddAttribute("owner", players[i].Id);
+                    .AddAttribute("char", "1").AddAttribute("owner", players[i].Id)
+                    .AddAttribute("hp", "20").AddAttribute("maxhp", "20");
                 if (dm != null) token.ClickActions[dm] = nameof(SelectPiece); // DM drags onto the map
-                AddNameLabel(token, PlayerDisplayName(players[i]), "FFFFFF", string.IsNullOrEmpty(heroUrl) ? 1.7 : 3.0);
+                token.AddAttribute("namelabel", HeroTokenLabel(players[i]));
+                RefreshCharLabels(token);
             }
         }
 
@@ -303,9 +305,11 @@ namespace MG.Server.GameFlows
             // so the DM can drag each onto the map from there.
             int mc = getItemsByAttribute("monster").Count;
             double sx = -12 + 6 * (mc % 5);
-            var m = addItem(MonsterAsset(url)).SetPosition(sx, 0.1, 12).AddAttribute("monster", "1");
+            var m = addItem(MonsterAsset(url)).SetPosition(sx, 0.1, 12).AddAttribute("monster", "1")
+                .AddAttribute("hp", "12").AddAttribute("maxhp", "12");
             m.AddAction(data.Player!.Id, SelectPiece); // DM can select & move it
-            AddNameLabel(m, MonsterLabel(url), "FFD9A0");
+            m.AddAttribute("namelabel", MonsterLabel(url));
+            RefreshCharLabels(m);
             await Task.CompletedTask;
         }
 
@@ -353,6 +357,91 @@ namespace MG.Server.GameFlows
             return "Monster";
         }
 
+        // A red "HP n/max" caption floating above a character's head. Idempotent — removes any
+        // existing HP child first, so it doubles as the refresh after the DM changes HP.
+        private void AddHpLabel(ItemData token)
+        {
+            foreach (var l in ItemData.GetItemsByAttribute(token, "hplabel").ToList()) token.RemoveItem(l.Id);
+            int hp = token.GetIntAttribute("hp");
+            int max = token.GetIntAttribute("maxhp");
+            double h = token.HaveAttribute("char") ? 3.9 : 3.1; // above the name label
+            new ItemData(Assets.TEXT.Name, token)
+                .SetText("HP " + hp + "/" + max)
+                .SetPosition(0, h, 0).SetScale(0.34).SetRotation(-90, 0, 0)
+                .AddAttribute("hplabel", "1").AddAttribute("textColor", "FF5A5A");
+        }
+
+        // Rebuild a character's name + HP captions — or remove them if the DM hid its labels
+        // ("hidelabel"). The name text is stored on the token as "namelabel" so it can be restored.
+        // One tidy "character card" over the head (name + HP bar + dice), rendered client-side
+        // from these attributes — replaces the separate name/HP/rolls labels.
+        private void RefreshCharLabels(ItemData token)
+        {
+            foreach (var l in ItemData.GetItemsByAttribute(token, "charcard").ToList()) token.RemoveItem(l.Id);
+            if (token.GetStringAttribute("hidelabel") == "1") return;
+            bool isChar = token.HaveAttribute("char");
+            new ItemData(Assets.TEXT.Name, token)
+                .SetPosition(0, isChar ? 3.9 : 3.1, 0)
+                .AddAttribute("charcard", "1")
+                .AddAttribute("cardName", token.GetStringAttribute("namelabel") ?? "")
+                .AddAttribute("cardHp", token.GetStringAttribute("hp") ?? "")
+                .AddAttribute("cardMax", token.GetStringAttribute("maxhp") ?? "")
+                .AddAttribute("cardRolls", token.GetStringAttribute("rolls") ?? "")
+                .AddAttribute("cardKind", isChar ? "hero" : "monster");
+        }
+
+        private IEnumerable<ItemData> AllCharacters() =>
+            getItemsByAttribute("char").Concat(getItemsByAttribute("monster")).ToList();
+
+        [GameAction]
+        public async Task ShowAllLabels(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            foreach (var it in AllCharacters()) { it.Attributes["hidelabel"] = "0"; RefreshCharLabels(it); }
+            await Task.CompletedTask;
+        }
+
+        [GameAction]
+        public async Task HideAllLabels(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            foreach (var it in AllCharacters()) { it.Attributes["hidelabel"] = "1"; RefreshCharLabels(it); }
+            await Task.CompletedTask;
+        }
+
+        [GameAction]
+        public async Task ClearAllRolls(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            foreach (var it in AllCharacters()) { it.Attributes.Remove("rolls"); RefreshCharLabels(it); }
+            await Task.CompletedTask;
+        }
+
+        // DM toggles whether the selected character's labels are shown.
+        [GameAction]
+        public async Task ToggleLabel(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            if (GameData.Attributes.TryGetValue("selectedItem", out var id) && !string.IsNullOrEmpty(id))
+            {
+                var it = GameData.FindItem(id);
+                if (it != null)
+                {
+                    it.Attributes["hidelabel"] = it.GetStringAttribute("hidelabel") == "1" ? "0" : "1";
+                    RefreshCharLabels(it);
+                }
+            }
+            await Task.CompletedTask;
+        }
+
+        // Token caption = class · name (shows for humans and AIs alike).
+        private string HeroTokenLabel(PlayerData p)
+        {
+            string cls = p.GetStringAttribute("hero");
+            string nm = PlayerDisplayName(p);
+            return string.IsNullOrEmpty(cls) ? nm : cls + " · " + nm;
+        }
+
         // ============================ dice (d6 / d20) ============================
         private readonly Random _rnd = new Random();
 
@@ -379,7 +468,7 @@ namespace MG.Server.GameFlows
 
             var target = GameData.Players.Find(p => p.Id == seat);
             if (target != null && target.Type == PlayerTypeEnum.AI) DoRoll(seat, sides);   // AI auto-rolls
-            else GameData.Attributes["roll:" + seat] = sides.ToString();                    // human: prompt
+            else GameData.Attributes["roll:" + seat] = sides.ToString();                    // human: onscreen prompt
             await Task.CompletedTask;
         }
 
@@ -403,7 +492,48 @@ namespace MG.Server.GameFlows
             int r = _rnd.Next(1, sides + 1);
             var who = PlayerDisplayName(GameData.Players.Find(p => p.Id == seat));
             string nonce = Guid.NewGuid().ToString("N").Substring(0, 6);
-            GameData.Attributes["rollResult"] = $"{nonce}|{seat}|{who}|{sides}|{r}";
+            GameData.Attributes["rollResult"] = $"{nonce}|{seat}|{who}|{sides}|{r}";   // toast for everyone
+            var tok = getItemsByAttribute("char").FirstOrDefault(c => c.GetStringAttribute("owner") == seat);
+            if (tok != null) AppendRoll(tok, sides, r);   // record on the character (shows in its properties)
+        }
+
+        // Append a "dN:r" roll entry to a character's rolls list (shown in the DM's Selected panel).
+        private void AppendRoll(ItemData item, int sides, int r)
+        {
+            if (item == null) return;
+            var cur = item.GetStringAttribute("rolls");
+            var entry = "d" + sides + ":" + r;
+            item.Attributes["rolls"] = string.IsNullOrEmpty(cur) ? entry : cur + ";" + entry;
+            RefreshCharLabels(item);   // update the over-head roll label
+        }
+
+        private AssetData DieAsset() => addAsset(new DieAssetData());
+
+        // Place a 3D die over the seat's character token (visible to all). result=0 → "?" (pending).
+        // It stays on the table until the DM clicks it (TakeDice).
+        private void SpawnDie(string seat, int sides, int result)
+        {
+            foreach (var d in getItemsByAttribute("die3d").Where(x => x.GetStringAttribute("owner") == seat).ToList())
+                removeItem(d.Id);
+            var tok = getItemsByAttribute("char").FirstOrDefault(c => c.GetStringAttribute("owner") == seat);
+            double x = tok?.Position?.X ?? 0;
+            double z = tok?.Position?.Z ?? TRAY_Z;
+            double y = (tok?.Position?.Y ?? 0) + 3.5;   // float it above the figure
+            var die = addItem(DieAsset()).SetPosition(x, y, z)   // client normalizes the model size
+                .AddAttribute("die3d", "1").AddAttribute("owner", seat)
+                .AddAttribute("sides", sides.ToString()).AddAttribute("result", result.ToString());
+            string? dm = DmId();
+            if (dm != null) die.ClickActions[dm] = nameof(TakeDice); // DM clicks the die to take it away
+        }
+
+        // DM "takes" the die: clicking a die removes it; otherwise clears all dice.
+        [GameAction]
+        public async Task TakeDice(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            if (data.Item != null && data.Item.HaveAttribute("die3d")) removeItem(data.Item.Id);
+            else foreach (var d in getItemsByAttribute("die3d").ToList()) removeItem(d.Id);
+            await Task.CompletedTask;
         }
 
         // ============================ selected-item actions (DM) ============================
@@ -418,6 +548,78 @@ namespace MG.Server.GameFlows
                 var it = GameData.FindItem(id);
                 if (it != null && int.TryParse(Arg(data, "idx"), out var idx)) it.AnimationIdx = idx;
             }
+            await Task.CompletedTask;
+        }
+
+        // Adjust the selected character's HP by a delta (DM tweaks it from the console).
+        [GameAction]
+        public async Task SetHp(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            if (GameData.Attributes.TryGetValue("selectedItem", out var id) && !string.IsNullOrEmpty(id)
+                && int.TryParse(Arg(data, "delta"), out var delta))
+            {
+                var it = GameData.FindItem(id);
+                if (it != null)
+                {
+                    int hp = it.GetIntAttribute("hp") + delta;
+                    int max = it.GetIntAttribute("maxhp");
+                    if (hp < 0) hp = 0;
+                    if (max > 0 && hp > max) hp = max;
+                    it.Attributes["hp"] = hp.ToString();   // overwrite (AddAttribute throws on an existing key)
+                    RefreshCharLabels(it);                 // refresh the over-head HP text (respects hidelabel)
+                }
+            }
+            await Task.CompletedTask;
+        }
+
+        // DM rolls a die FOR the selected item (used for monsters, which have no player). The
+        // result is appended to that item's rolls and announced.
+        [GameAction]
+        public async Task RollSelected(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            if (GameData.Attributes.TryGetValue("selectedItem", out var id) && !string.IsNullOrEmpty(id)
+                && int.TryParse(Arg(data, "sides"), out var sides) && sides > 0)
+            {
+                var it = GameData.FindItem(id);
+                if (it != null)
+                {
+                    int r = _rnd.Next(1, sides + 1);
+                    AppendRoll(it, sides, r);
+                    string owner = it.GetStringAttribute("owner");
+                    string who = !string.IsNullOrEmpty(owner) ? PlayerDisplayName(GameData.Players.Find(p => p.Id == owner)) : "Monster";
+                    string nonce = Guid.NewGuid().ToString("N").Substring(0, 6);
+                    GameData.Attributes["rollResult"] = $"{nonce}|{owner}|{who}|{sides}|{r}";
+                }
+            }
+            await Task.CompletedTask;
+        }
+
+        // DM removes one roll line from the selected item's rolls.
+        [GameAction]
+        public async Task RemoveRoll(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            if (GameData.Attributes.TryGetValue("selectedItem", out var id) && !string.IsNullOrEmpty(id)
+                && int.TryParse(Arg(data, "idx"), out var idx))
+            {
+                var it = GameData.FindItem(id);
+                if (it != null)
+                {
+                    var list = (it.GetStringAttribute("rolls") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries).ToList();
+                    if (idx >= 0 && idx < list.Count) { list.RemoveAt(idx); it.Attributes["rolls"] = string.Join(";", list); RefreshCharLabels(it); }
+                }
+            }
+            await Task.CompletedTask;
+        }
+
+        // Clear the current selection (unselect from the console).
+        [GameAction]
+        public async Task ClearSelected(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            ClearSelection();
             await Task.CompletedTask;
         }
 

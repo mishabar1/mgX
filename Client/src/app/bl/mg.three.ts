@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import {Group} from 'three/src/objects/Group.js';
 import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
 import {CSS3DRenderer, CSS3DObject} from 'three/examples/jsm/renderers/CSS3DRenderer.js';
+import {EffectComposer} from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import {RenderPass} from 'three/examples/jsm/postprocessing/RenderPass.js';
+import {OutlinePass} from 'three/examples/jsm/postprocessing/OutlinePass.js';
+import {OutputPass} from 'three/examples/jsm/postprocessing/OutputPass.js';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {STLLoader} from 'three/examples/jsm/loaders/STLLoader.js';
 import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -28,6 +32,11 @@ export class MgThree{
   // side, not the world) — stays put when the camera moves. Panels appended here get their own
   // pointer-events; the empty column around them stays click-through to the canvas.
   onscreenHolder?: HTMLDivElement;
+
+  // Postprocessing: an OutlinePass draws a glowing CONTOUR around selected objects (instead of
+  // recolouring the whole model). The main scene renders through this composer.
+  composer?: EffectComposer;
+  outlinePass?: OutlinePass;
   cameraGroup!: Group;
   camera!: THREE.PerspectiveCamera;
   audioListener!: THREE.AudioListener;
@@ -114,8 +123,15 @@ export class MgThree{
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
     this.css3dRenderer?.setSize(w, h);
+    this.composer?.setSize(w, h);
+    this.outlinePass?.setSize(w, h);
     this.renderer.render(this.scene, this.camera);
   };
+
+  // Draw the glowing selection contour around these objects (empty = none).
+  setOutlined(objects: THREE.Object3D[]) {
+    if (this.outlinePass) this.outlinePass.selectedObjects = objects;
+  }
 
   // Mount an HTML element into the 3D scene as a CSS3D panel. Returns the object so the caller
   // can reposition/remove it. `scale` converts CSS pixels → world units (e.g. 0.02).
@@ -247,6 +263,20 @@ export class MgThree{
       'position:absolute;top:0;right:0;height:100%;z-index:20;pointer-events:none;' +
       'display:flex;flex-direction:column;justify-content:center;align-items:flex-end;padding:14px;';
     this.rendererContainerElement.appendChild(this.onscreenHolder);
+
+    // Postprocessing composer with an OutlinePass for the selection contour.
+    const w0 = this.rendererContainerElement.clientWidth, h0 = this.rendererContainerElement.clientHeight;
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.outlinePass = new OutlinePass(new THREE.Vector2(w0, h0), this.scene, this.camera);
+    this.outlinePass.edgeStrength = 6;
+    this.outlinePass.edgeGlow = 0.7;
+    this.outlinePass.edgeThickness = 2;
+    this.outlinePass.pulsePeriod = 2;
+    this.outlinePass.visibleEdgeColor.set('#3dff6a');
+    this.outlinePass.hiddenEdgeColor.set('#124a24');
+    this.composer.addPass(this.outlinePass);
+    this.composer.addPass(new OutputPass());   // re-apply tone-mapping + sRGB so the scene isn't dark
 
     // Refresh the canvas whenever the window resizes.
     window.addEventListener('resize', this.onWindowResize);
@@ -426,7 +456,7 @@ export class MgThree{
 
     this.orbitControls.update();
     this.interactionManager.update();
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera);
     if (this.css3dRenderer && this.css3dScene) this.css3dRenderer.render(this.css3dScene, this.camera);
     this.updateMagnifier();
 
@@ -529,6 +559,13 @@ export class MgThree{
       closeBtn.style.display = 'block';   // ✕ back; the loupe canvas reappears on next mouse move
       zoomBar.style.display = 'flex';
     });
+
+    // Start CLOSED — the user opens the magnifier with 🔍 only when they want it.
+    this.magEnabled = false;
+    canvas.style.display = 'none';
+    closeBtn.style.display = 'none';
+    zoomBar.style.display = 'none';
+    showBtn.style.display = 'block';
   }
 
   // Each frame: point the loupe camera at the square of screen under the mouse and render.

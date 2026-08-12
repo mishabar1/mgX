@@ -71,6 +71,19 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
   get seatsReady(): boolean { return this.occupiedSeats >= this.minPlayers; }
   seatEmpty(player: PlayerData): boolean { return player.type === 'EMPTY_SEAT'; }
 
+  // You can only remove your OWN seat — unless you created the game (admin), who can remove anyone.
+  get isCreator(): boolean { return !!this.user?.id && this.gameData?.creatorId === this.user?.id; }
+  canLeave(player: PlayerData): boolean {
+    return this.isCreator || (!!player.user?.id && player.user?.id === this.user?.id);
+  }
+
+  // Do I already occupy a seat? A non-creator may join only ONE seat and can't add AIs.
+  get hasMySeat(): boolean {
+    return (this.gameData?.players || []).some(p => !!p.user?.id && p.user?.id === this.user?.id);
+  }
+  get canJoin(): boolean { return this.isCreator || !this.hasMySeat; }
+  get canAddAi(): boolean { return this.isCreator; }
+
   // Tracks the last-seen status so we only auto-open on the transition INTO play (not when
   // opening the setup page of an already-running game to tweak it).
   private lastStatus = '';
@@ -113,18 +126,22 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
     this.signalRService.hubConnection.off('GameUpdated');
     this.signalRService.hubConnection.on('GameUpdated', data => {
       console.log('GameUpdated', data);
-      //this.iterate(this.gameData,data);
-      const wasStarted = this.lastStatus === 'PLAY';
-      const nowStarted = String(data.gameStatus) === 'PLAY';
-      this.gameData = data;
-      this.lastStatus = String(data.gameStatus);
-      this.loadHeroThumbs();
+      if (String(data?.id) !== String(this.gameId)) return;   // broadcast is Clients.All — ignore other games
+      // SignalR fires OUTSIDE Angular's zone — run inside so every client's seat list refreshes
+      // immediately when anyone joins/leaves (not just on the next change-detection tick).
+      this.zone.run(() => {
+        const wasStarted = this.lastStatus === 'PLAY';
+        const nowStarted = String(data.gameStatus) === 'PLAY';
+        this.gameData = data;
+        this.lastStatus = String(data.gameStatus);
+        this.loadHeroThumbs();
 
-      // The game just started while I'm still on the setup page → open it for me,
-      // exactly as if I'd clicked Open (only for seated players, not spectators).
-      if (nowStarted && !wasStarted && this.isSeatedPlayer(data)) {
-        this.zone.run(() => this.router.navigate([RouteNames.GamePlay, this.gameId]));
-      }
+        // The game just started while I'm still on the setup page → open it for me,
+        // exactly as if I'd clicked Open (only for seated players, not spectators).
+        if (nowStarted && !wasStarted && this.isSeatedPlayer(data)) {
+          this.router.navigate([RouteNames.GamePlay, this.gameId]);
+        }
+      });
     });
     // this.signalRService.hubConnection.off('GamesUpdated');
     // this.signalRService.hubConnection.on('GamesUpdated', data => {

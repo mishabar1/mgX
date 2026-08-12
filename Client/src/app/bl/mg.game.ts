@@ -203,9 +203,10 @@ export class MgGame{
       // D&D seats carry a "heroUrl" — render that hero model (keeping its own textures) as the
       // seated avatar. Everyone else shows the tinted animal, falling back to the monkey.
       const heroUrl = playerData.attributes?.['heroUrl'];
-      if (heroUrl) {
-        // D&D: the player is represented by their character token in the tray, not by a seated
-        // avatar around the table — so draw no seated figure here (avoids the duplicate).
+      const isDnd = String(this.gameData?.gameType) === 'DND';
+      if (heroUrl || isDnd) {
+        // D&D: NO seated avatars at all (players are tray tokens; the DM has none) — so draw no
+        // seated figure here for any seat, including the DM.
       } else {
         this.mgThree.gltfLoader.load(
           `\\assets\\heads\\animals\\${animal}.glb`,
@@ -236,8 +237,8 @@ export class MgGame{
       this.createItem(playerData.hand, playerHand);
 
       // Floating name label + a DEFENDING badge above each OTHER player's head (you know your
-      // own seat). Skipped for D&D seats (heroUrl) — they have no seated figure to label.
-      if (!(this.playerData && this.playerData.id === playerData.id) && !playerData.attributes?.['heroUrl']) {
+      // own seat). Skipped entirely for D&D — no seated figures there.
+      if (!(this.playerData && this.playerData.id === playerData.id) && !playerData.attributes?.['heroUrl'] && String(this.gameData?.gameType) !== 'DND') {
         const disp = playerData.user?.name || playerData.name || (playerData.type === 'AI' ? 'AI' : 'open');
         const nameSpr = this.makeTextSprite(disp, 'rgba(18,28,38,0.75)', '#ffffff');
         nameSpr.position.set(0, 3.3, 0);
@@ -331,6 +332,56 @@ export class MgGame{
     const spr = new THREE.Sprite(mat);
     const h = 0.9;
     spr.scale.set(h * (canvas.width / canvas.height), h, 1);
+    return spr;
+  }
+
+  private rrect(ctx: any, x: number, y: number, w: number, h: number, r: number) {
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+  }
+
+  // A billboard "character card": name, an HP bar, and the rolled dice — one tidy nameplate.
+  makeCharCard(name: string, hpStr: string, maxStr: string, rollsStr: string, kind: string): THREE.Sprite {
+    const hp = parseInt(hpStr || '0', 10), max = parseInt(maxStr || '0', 10);
+    const rolls = (rollsStr || '').split(';').filter(x => x).map(x => x.split(':').pop() as string);
+    const W = 320, H = rolls.length ? 172 : 118;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d')!;
+    // panel
+    this.rrect(ctx, 4, 4, W - 8, H - 8, 18);
+    ctx.fillStyle = 'rgba(14,20,34,0.92)'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = kind === 'hero' ? '#3a5a8c' : '#8c4a3a'; ctx.stroke();
+    // name
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 30px system-ui, sans-serif';
+    ctx.fillStyle = kind === 'hero' ? '#e8edf5' : '#ffcaa0';
+    ctx.fillText(name, W / 2, 34);
+    // HP bar
+    const bx = 24, by = 56, bw = W - 48, bh = 24;
+    this.rrect(ctx, bx, by, bw, bh, 9); ctx.fillStyle = '#1c2740'; ctx.fill();
+    const f = max > 0 ? Math.max(0, Math.min(1, hp / max)) : 1;
+    const col = f > 0.5 ? '#3fb950' : f > 0.25 ? '#d4a017' : '#e5484d';
+    this.rrect(ctx, bx, by, Math.max(8, bw * f), bh, 9); ctx.fillStyle = col; ctx.fill();
+    ctx.font = 'bold 16px system-ui, sans-serif'; ctx.fillStyle = '#fff';
+    ctx.fillText('HP ' + hp + ' / ' + max, W / 2, by + bh / 2 + 1);
+    // dice chips
+    if (rolls.length) {
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.font = '20px system-ui'; ctx.fillStyle = '#8aa0c0'; ctx.fillText('🎲', 22, 138);
+      let x = 56;
+      rolls.forEach(v => {
+        ctx.font = 'bold 22px system-ui, sans-serif';
+        const tw = ctx.measureText(v).width + 18;
+        this.rrect(ctx, x, 122, tw, 32, 8); ctx.fillStyle = '#241c14'; ctx.fill();
+        ctx.fillStyle = '#ffd166'; ctx.textAlign = 'center'; ctx.fillText(v, x + tw / 2, 139);
+        ctx.textAlign = 'left'; x += tw + 8;
+      });
+    }
+    const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
+    const spr = new THREE.Sprite(mat);
+    const hh = 1.35;
+    spr.scale.set(hh * (W / H), hh, 1);
     return spr;
   }
 
@@ -507,6 +558,31 @@ export class MgGame{
       }
 
       if (assetType == "TEXT3D") {
+        const la = itemData.attributes || {};
+        if (la['charcard']) {
+          // A single "character card" billboard: name + HP bar + dice, nicely formatted.
+          const spr = this.makeCharCard(la['cardName'] || '', la['cardHp'] || '', la['cardMax'] || '', la['cardRolls'] || '', la['cardKind'] || 'hero');
+          const p: any = itemData.position;
+          if (p) spr.position.set(p.x, p.y, p.z);
+          (spr as any).userData['ItemData'] = itemData;
+          itemData.mesh = spr as any;
+          if (parentMesh) parentMesh.add(spr); else this.mgThree.scene.add(spr);
+          this.allItems[itemData.id] = itemData;
+          return;
+        }
+        if (la['label'] || la['hplabel']) {
+          // Character name / HP captions: render as a billboard sprite so they always face the
+          // camera (like the avatar name tags), instead of flat 3D text on the ground.
+          const fg = la['textColor'] ? '#' + la['textColor'] : '#ffffff';
+          const spr = this.makeTextSprite(itemData.text || '', 'rgba(18,28,38,0.72)', fg);
+          const p: any = itemData.position;
+          if (p) spr.position.set(p.x, p.y, p.z);
+          (spr as any).userData['ItemData'] = itemData;
+          itemData.mesh = spr as any;
+          if (parentMesh) parentMesh.add(spr); else this.mgThree.scene.add(spr);
+          this.allItems[itemData.id] = itemData;
+          return;
+        }
         this.mgThree.fontLoader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', (font) => {
 
           const geometry = new TextGeometry(itemData.text!, {
@@ -615,6 +691,31 @@ export class MgGame{
         head.position.x = shaftLen + headLen / 2;
         const g = new Group();
         g.add(shaft); g.add(head);
+        this.processItem(itemData, g, parentMesh);
+      }
+
+      if (assetType == "DIE") {
+        // A real 3D die model (dices/d.glb) with the rolled number floating above it ("?" while
+        // pending) so everyone sees the result. Sits over the figure until the DM takes it.
+        const sides = (itemData.attributes && itemData.attributes['sides']) || '';
+        const result = parseInt((itemData.attributes && itemData.attributes['result']) || '0', 10);
+        const g = new Group();
+        this.mgThree.gltfLoader.load('\\assets\\games\\dices\\d.glb', (gltf) => {
+          const model = gltf.scene;
+          const box = new THREE.Box3().setFromObject(model);
+          const sz = box.getSize(new THREE.Vector3());
+          const c = box.getCenter(new THREE.Vector3());
+          const s = 2.0 / (Math.max(sz.x, sz.y, sz.z) || 1);   // normalise to ~2 units
+          model.scale.setScalar(s);
+          model.position.set(-c.x * s, -c.y * s, -c.z * s);
+          model.rotation.set(0.5, 0.8, 0.25);                  // tumbled orientation
+          model.traverse((o: any) => { if (o.isMesh) o.castShadow = true; });
+          g.add(model);
+        });
+        // Result number (billboard, always faces the camera), floating above the die.
+        const num = this.makeTextSprite(result > 0 ? String(result) : '?', 'rgba(20,20,20,0.85)', '#ffd166');
+        num.position.set(0, 1.9, 0);
+        g.add(num);
         this.processItem(itemData, g, parentMesh);
       }
 
@@ -739,6 +840,8 @@ export class MgGame{
     // keep debug frames in sync with the rebuilt item set (no-op when debug is off)
     if (this.showDebugBoxes) this.rebuildDebugBoxes();
 
+    this.refreshOutline();   // glowing selection contour around the currently-selected item(s)
+
     // Sound cue: fewer capturable pieces than before ⇒ a capture; otherwise if any real
     // item changed or a piece glided ⇒ a move. (No sound on a no-op update.)
     const nowRealIds = Object.keys(this.allItems).filter(id => this.hasAny(this.allItems[id], MgGame.REAL));
@@ -771,6 +874,9 @@ export class MgGame{
     //console.log("updateItemScale", item, scale);
 
     item.scale = scale;
+    // Billboard sprite labels manage their own (aspect-ratio) scale — don't overwrite it with
+    // the item's tiny text scale, or the label gets squished/blurred.
+    if ((item.mesh as any)?.isSprite) return;
     item.mesh!.scale.set(scale.x, scale.y, scale.z);
 
   }
@@ -948,6 +1054,33 @@ export class MgGame{
     if (idx != null && idx >= 0) mixer.clipAction(clips[idx % clips.length]).reset().play();
   }
 
+  // A canvas texture for a die face: ivory background, big number (or "?"), small "dN" caption.
+  makeDieTexture(numStr: string, label: string): THREE.CanvasTexture {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+    const ctx = c.getContext('2d')!;
+    const g = ctx.createLinearGradient(0, 0, 256, 256);
+    g.addColorStop(0, '#f6f1e4'); g.addColorStop(1, '#d9ccb1');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 256);
+    ctx.strokeStyle = '#2a2118'; ctx.lineWidth = 12; ctx.strokeRect(8, 8, 240, 240);
+    ctx.fillStyle = '#241c14'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 150px Georgia, serif';
+    ctx.fillText(numStr, 128, 128);
+    ctx.font = 'bold 30px system-ui, sans-serif'; ctx.fillStyle = '#7a4a24';
+    ctx.fillText(label, 128, 224);
+    const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true;
+    return tex;
+  }
+
+  // Collect the meshes of all currently-selected items and hand them to the OutlinePass so it
+  // draws a glowing contour around them (instead of recolouring the model).
+  refreshOutline() {
+    const outlined: any[] = [];
+    forEach(this.allItems, (it: any) => {
+      if (it?.attributes?.['selected'] == '1' && it.mesh) outlined.push(it.mesh);
+    });
+    this.mgThree.setOutlined(outlined);
+  }
+
   applyEmissive(item: ItemData, hex: number | null) {
     if (!item.mesh) return;
     item.mesh.traverse((o: any) => {
@@ -957,20 +1090,19 @@ export class MgGame{
           if (!m) return;
           if (!m.userData) m.userData = {};
           if (hex != null) {
-            // Save this material's originals ONCE (per material, so multi-part models revert
-            // every part — not just the first).
+            // Glow ONLY the emissive channel — keep the model's own colours/textures (so the
+            // whole item isn't flooded with the highlight colour). Saved per-material.
             if (!m.userData.hl) {
               m.userData.hl = {
-                color: m.color ? m.color.clone() : null,
-                emissive: m.emissive ? m.emissive.clone() : null
+                emissive: m.emissive ? m.emissive.clone() : null,
+                ei: ('emissiveIntensity' in m) ? m.emissiveIntensity : null
               };
             }
-            if (m.color) m.color.setHex(hex);
-            if (m.emissive) m.emissive.setHex(hex);
+            if (m.emissive) { m.emissive.setHex(hex); if ('emissiveIntensity' in m) m.emissiveIntensity = 0.85; }
             m.needsUpdate = true;
           } else if (m.userData.hl) {
-            if (m.color && m.userData.hl.color) m.color.copy(m.userData.hl.color);
             if (m.emissive && m.userData.hl.emissive) m.emissive.copy(m.userData.hl.emissive);
+            if (('emissiveIntensity' in m) && m.userData.hl.ei != null) m.emissiveIntensity = m.userData.hl.ei;
             m.userData.hl = null;
             m.needsUpdate = true;
           }
@@ -1015,7 +1147,7 @@ export class MgGame{
     // opponent's face-down cards would glow and leak which cards they can play.
     const owner = a['owner'];
     const mine = !owner || (this.playerData && this.playerData.id === owner);
-    if (a['selected'] == '1') this.applyEmissive(item, 0x33ff44);
+    if (a['selected'] == '1') this.applyEmissive(item, null);   // selection shown by the OutlinePass contour, not a fill
     else if (a['check'] == '1') this.applyEmissive(item, 0xEE2222);
     else if (a['playable'] == '1' && mine) this.applyEmissive(item, 0x8cff8c);   // a card YOU can play now
     else if (a['moveMarker'] || a['captureTarget'] == '1') this.applyEmissive(item, 0xffe000);

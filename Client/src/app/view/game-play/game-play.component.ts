@@ -110,6 +110,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     this.signalRService.hubConnection.off('GameUpdated');
     this.signalRService.hubConnection.on('GameUpdated', data => {
       console.log('GameUpdated', data);
+      if (String(data?.id) !== String(this.gameId)) return;   // broadcast is Clients.All — ignore other games
       if (this.mgGame) this.mgGame.updateGame(data);
       // SignalR fires outside Angular's zone — run inside so the overlay renders.
       this.zone.run(() => {
@@ -266,17 +267,25 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
         <div class="row"><div class="lbl">Scene</div><div class="pick">${scenes.map(sceneTile).join('')}</div></div>
         <div class="row"><div class="lbl">Add monster</div><div class="pick">${monsters.map(monsterTile).join('')}</div></div>
         <div class="row"><div class="lbl">Sound</div><div class="pick">${sounds.map(soundBtn).join('')}<button class="dmbtn" data-act="StopSound">⏹ Stop</button></div></div>
+        <div class="row"><div class="lbl">All characters</div><div class="pick">
+          <button class="dmbtn" data-act="ShowAllLabels">👁 Show labels</button>
+          <button class="dmbtn" data-act="HideAllLabels">🚫 Hide labels</button>
+          <button class="dmbtn" data-act="ClearAllRolls">🎲 Clear all dice</button>
+        </div></div>
       </div>`;
 
     el.addEventListener('click', (ev: any) => {
       const t = ev.target.closest('[data-act]');
-      if (!t || t.tagName === 'SELECT') return;   // selects fire via 'change', not click
+      if (!t || t.tagName === 'SELECT' || t.tagName === 'INPUT') return;   // selects/checkboxes fire via 'change'
       const act = t.getAttribute('data-act');
       if (!act) return;
+      if (act === 'RemoveSelected' && !window.confirm('Remove this piece from the board?')) return;
       const args: any = {};
       if (act === 'LoadScene') args.sceneUrl = t.getAttribute('data-url');
       if (act === 'AddMonster') args.monsterUrl = t.getAttribute('data-url');
       if (act === 'PlaySound') { args.soundUrl = t.getAttribute('data-url'); args.loop = t.getAttribute('data-loop'); }
+      if (act === 'SetHp') args.delta = t.getAttribute('data-delta');
+      if (act === 'RemoveRoll') args.idx = t.getAttribute('data-idx');
       if (act === 'AskRoll') args.seat = t.getAttribute('data-seat');
       if (act === 'SetDie') {
         args.sides = t.getAttribute('data-sides');
@@ -286,8 +295,13 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       this.signalRService.executeActionArgs(this.gameId!, dmSeatId, act, args);
     });
 
-    // Dropdowns (animation picker, ask-roll die picker) fire 'change', not 'click'.
+    // Dropdowns + the label checkbox fire 'change', not 'click'.
     el.addEventListener('change', (ev: any) => {
+      const inp = ev.target.closest('input[data-act]');
+      if (inp && inp.getAttribute('data-act') === 'ToggleLabel') {
+        this.signalRService.executeActionArgs(this.gameId!, dmSeatId, 'ToggleLabel', {});
+        return;
+      }
       const s = ev.target.closest('select[data-act]');
       if (!s) return;
       const act = s.getAttribute('data-act');
@@ -296,6 +310,9 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       } else if (act === 'AskRoll' && s.value) {
         this.signalRService.executeActionArgs(this.gameId!, dmSeatId, 'AskRoll', { seat: s.getAttribute('data-seat'), sides: s.value });
         s.value = '';   // reset so the DM can ask again
+      } else if (act === 'RollSelected' && s.value) {
+        this.signalRService.executeActionArgs(this.gameId!, dmSeatId, 'RollSelected', { sides: s.value });
+        s.value = '';
       }
     });
 
@@ -344,7 +361,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     const box = this.dmConsoleEl.querySelector('#dmSelected') as HTMLElement | null;
     if (!box) return;
     const sel = this.findSelectedItem(g?.table);
-    const key = sel ? `${sel.id}:${sel.animationIdx}` : '';
+    const key = sel ? `${sel.id}:${sel.animationIdx}:${sel.attributes?.['hp']}:${sel.attributes?.['rolls']}:${sel.attributes?.['hidelabel']}` : '';
     if (key === this.lastSelKey) return;   // nothing relevant changed
     this.lastSelKey = key;
     if (!sel) { box.innerHTML = ''; return; }
@@ -352,13 +369,29 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     const isHero = sel.attributes?.['char'] === '1';
     const owner = sel.attributes?.['owner'];
     const ownerP = (g.players || []).find((p: any) => p.id === owner);
-    const name = isHero ? (ownerP?.attributes?.['hero'] || this.pname(ownerP)) : 'Monster';
+    const cls = ownerP?.attributes?.['hero'];
+    const name = isHero ? (cls ? `${cls} · ${this.pname(ownerP)}` : this.pname(ownerP)) : 'Monster';
 
     const dd = 'font:600 15px system-ui;padding:8px;border-radius:10px;border:1px solid #2a3a55;background:#0e1626;color:#e8edf5;margin:2px 6px 2px 0;';
 
-    // Ask-to-roll: a die dropdown (asks THIS hero's player to roll the chosen die).
-    const dieOpts = ['<option value="">🎲 Ask to roll…</option>']
+    // Roll dropdown. Heroes → ask that hero's player (AskRoll); monsters → the DM rolls (RollSelected).
+    const dieOpts = ['<option value="">🎲 Roll a die…</option>']
       .concat([4, 6, 8, 10, 12, 20, 100].map(s => `<option value="${s}">d${s}</option>`)).join('');
+    const rollDD = (isHero && owner)
+      ? `<select data-act="AskRoll" data-seat="${owner}" style="${dd}">${dieOpts}</select>`
+      : `<select data-act="RollSelected" style="${dd}">${dieOpts}</select>`;
+
+    // Accumulated rolls for this character — each removable by the DM.
+    const rolls = (sel.attributes?.['rolls'] || '').split(';').filter((x: string) => x);
+    const rollsRow = rolls.length ? `
+      <div style="margin:6px 0 2px;">
+        <div class="lbl">Rolls</div>
+        ${rolls.map((r: string, i: number) => { const pr = r.split(':'); return `
+          <span style="display:inline-flex;align-items:center;gap:5px;background:#0e1626;border:1px solid #2a3a55;border-radius:9px;padding:5px 9px;margin:0 6px 6px 0;">
+            <b style="color:#ffd166;font-size:17px;">${pr[1]}</b><span style="color:#8aa0c0;font-size:12px;">${pr[0]}</span>
+            <span data-act="RemoveRoll" data-idx="${i}" style="cursor:pointer;color:#ff6b6b;font-weight:800;margin-left:2px;">✖</span>
+          </span>`; }).join('')}
+      </div>` : '';
 
     // Animation: a dropdown of the model's actual clips.
     const clips: any[] = (this.mgGame as any)?.allItems?.[sel.id]?.mesh?.userData?.['clips'] || [];
@@ -366,11 +399,29 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     const animOpts = ['<option value="-1">🎬 none</option>']
       .concat(clips.map((c: any, i: number) => `<option value="${i}" ${i === curIdx ? 'selected' : ''}>${c.name || ('Clip ' + i)}</option>`)).join('');
 
+    const hp = sel.attributes?.['hp'];
+    const maxhp = sel.attributes?.['maxhp'];
+    const hpRow = hp != null ? `
+      <div style="display:flex;align-items:center;gap:6px;margin:8px 0 4px;">
+        <span style="color:#8aa0c0;font-size:13px;letter-spacing:.06em;margin-right:2px;">HP</span>
+        <button class="dmbtn" data-act="SetHp" data-delta="-5" style="padding:4px 10px;">−5</button>
+        <button class="dmbtn" data-act="SetHp" data-delta="-1" style="padding:4px 12px;">−</button>
+        <span style="font-weight:800;font-size:20px;color:#ff6b6b;min-width:60px;text-align:center;">${hp}${maxhp ? ('<span style="color:#8aa0c0;font-size:14px;font-weight:600;">/' + maxhp + '</span>') : ''}</span>
+        <button class="dmbtn" data-act="SetHp" data-delta="1" style="padding:4px 12px;">+</button>
+        <button class="dmbtn" data-act="SetHp" data-delta="5" style="padding:4px 10px;">+5</button>
+      </div>` : '';
+
     box.innerHTML = `
       <div class="lbl">Selected — ${name}</div>
+      ${hpRow}
+      ${rollsRow}
       <div class="pick" style="align-items:center;gap:8px;">
-        ${isHero && owner ? `<select data-act="AskRoll" data-seat="${owner}" style="${dd}">${dieOpts}</select>` : ''}
+        ${rollDD}
         ${clips.length ? `<select data-act="SetAnim" style="${dd}">${animOpts}</select>` : ''}
+        <label style="display:inline-flex;align-items:center;gap:5px;color:#cdd8ea;font-size:14px;cursor:pointer;">
+          <input type="checkbox" data-act="ToggleLabel" ${sel.attributes?.['hidelabel'] === '1' ? '' : 'checked'}> label
+        </label>
+        <button class="dmbtn" data-act="ClearSelected">✖ Unselect</button>
         <button class="dmbtn" data-act="RemoveSelected">🗑 Remove</button>
       </div>`;
   }
