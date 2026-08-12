@@ -188,9 +188,9 @@ namespace MG.Server.BL
                     player.User = data.user;
                     player.Type = data.type;
 
-                    // Give each AI a unique, friendly name (animal). Keep the seat's own name if
-                    // it's not already taken by another occupied seat; otherwise draw a new one.
-                    if (data.type == PlayerTypeEnum.AI)
+                    // Give each AI a unique, friendly name (animal) — EXCEPT in D&D, where each
+                    // seat already has a class/role (Warrior, Wizard…) that identifies it.
+                    if (data.type == PlayerTypeEnum.AI && game.GameType != GameTypeEnum.DND)
                     {
                         var taken = game.Players
                             .Where(p => p != player && p.Type != PlayerTypeEnum.EMPTY_SEAT)

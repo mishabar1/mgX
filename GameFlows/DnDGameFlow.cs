@@ -434,12 +434,14 @@ namespace MG.Server.GameFlows
             await Task.CompletedTask;
         }
 
-        // Token caption = class · name (shows for humans and AIs alike).
+        // Token caption: the class/role, plus a real player's name (humans only — AIs just show
+        // their role, no random name).
         private string HeroTokenLabel(PlayerData p)
         {
             string cls = p.GetStringAttribute("hero");
-            string nm = PlayerDisplayName(p);
-            return string.IsNullOrEmpty(cls) ? nm : cls + " · " + nm;
+            string who = p.User?.Name;
+            if (string.IsNullOrEmpty(cls)) return PlayerDisplayName(p);
+            return string.IsNullOrEmpty(who) ? cls : cls + " · " + who;
         }
 
         // ============================ dice (d6 / d20) ============================

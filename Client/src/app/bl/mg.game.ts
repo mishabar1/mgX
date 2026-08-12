@@ -116,6 +116,9 @@ export class MgGame{
 
     this.playerData = this.getPlayerByUserId(user.id)!;
 
+    // VR: a controller "select" on an item dispatches the same click as the mouse would.
+    this.mgThree.vrClickHandler = (mesh: any, point: any) => this.MeshClickFunc({ target: mesh, point });
+
     // Heads-visibility preference set on the game setup page (default: shown).
     // Read the "show heads" preference from the saved game state (default shown).
     this.showHeads = this.gameData.attributes?.['showHeads'] !== '0';
@@ -1003,6 +1006,7 @@ export class MgGame{
     if (this.playerData) {
 
       let action = event.target.userData.ItemData.clickActions[this.playerData.id] || event.target.userData.ItemData.clickActions[''];
+      if (!action) return;   // item has no click action for me → do nothing (avoids stray VR/mouse dispatches)
       SignalrService.singletone.executeAction(
         this.gameData.id,
         this.playerData.id,

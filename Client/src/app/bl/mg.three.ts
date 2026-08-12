@@ -65,6 +65,8 @@ export class MgThree{
   }
 
   controllers: any;
+  // Set by MgGame: dispatch a game click for the item a VR controller pointed at.
+  vrClickHandler?: (mesh: any, point: any) => void;
   selectedObject: any;
   interactionObjects: any = [];
   selectedObjectDistance: any;
@@ -473,7 +475,10 @@ export class MgThree{
 
     this.orbitControls.update();
     this.interactionManager.update();
-    if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+    // EffectComposer (OutlinePass) can't render to the WebXR framebuffer — use the plain
+    // renderer in VR, the composer (with the selection/hover glow) otherwise.
+    if (this.composer && !this.renderer.xr.isPresenting) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
     if (this.css3dRenderer && this.css3dScene) this.css3dRenderer.render(this.css3dScene, this.camera);
     this.updateMagnifier();
 
@@ -616,36 +621,29 @@ export class MgThree{
   }
 
   handleController(controller: XRTargetRaySpace) {
-    if (controller.userData["selectPressed"]) {
-      if (!controller.userData["selectPressedPrev"]) {
-        // Select pressed
-        controller.children[0].scale.z = 10;
-        const rotationMatrix = new Matrix4();
-        rotationMatrix.extractRotation(controller.matrixWorld);
-        const raycaster = new Raycaster();
-        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(rotationMatrix);
-        const intersects = raycaster.intersectObjects(this.interactionObjects);
-        if (intersects.length > 0) {
-          controller.children[0].scale.z = intersects[0].distance;
-          this.selectedObject = intersects[0].object;
-          this.selectedObject.material.color = this.objectSelectedColor;
-          this.selectedObjectDistance = this.selectedObject.position.distanceTo(controller.position);
+    const pressed = controller.userData["selectPressed"];
+    const prev = controller.userData["selectPressedPrev"];
+    // On the press EDGE, cast a ray from the controller and dispatch a click on the first item
+    // it hits — exactly like a mouse click (so it triggers SelectPiece / MoveHere on the server).
+    if (pressed && !prev) {
+      const rot = new Matrix4().extractRotation(controller.matrixWorld);
+      const ray = new Raycaster();
+      ray.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+      ray.ray.direction.set(0, 0, -1).applyMatrix4(rot);
+      const hits = ray.intersectObjects(this.scene.children, true);
+      for (const h of hits) {
+        // Walk up to an item that actually has click actions (skip cards/labels/terrain/sprites).
+        let o: any = h.object;
+        while (o && !(o.userData && o.userData['ItemData'] && o.userData['ItemData'].clickActions
+                      && Object.keys(o.userData['ItemData'].clickActions).length)) o = o.parent;
+        if (o) {
+          if (controller.children[0]) (controller.children[0] as any).scale.z = h.distance;
+          this.vrClickHandler?.(o, h.point);
+          break;
         }
-      } else if (this.selectedObject) {
-        // Move selected object so it's always the same distance from controller
-        const moveVector = controller.getWorldDirection(new Vector3()).multiplyScalar(this.selectedObjectDistance).negate();
-        this.selectedObject.position.copy(controller.position.clone().add(moveVector));
-      }
-    } else if (controller.userData["selectPressedPrev"]) {
-      // Select released
-      controller.children[0].scale.z = 10;
-      if (this.selectedObject != null) {
-        this.selectedObject.material.color = this.objectUnselectedColor;
-        this.selectedObject = null;
       }
     }
-    controller.userData["selectPressedPrev"] = controller.userData["selectPressed"];
+    controller.userData["selectPressedPrev"] = pressed;
   }
 
   resizeCanvasToDisplaySize() {
@@ -666,19 +664,8 @@ export class MgThree{
 
 
 
-  onSelectStart(x: any) {
-    console.log("onSelectStart", x);
-    // this refers to the controller
-    // this.children[0].scale.z = 10;
-    // this.userData.selectPressed = true;
-  }
-
-  onSelectEnd(x: any) {
-    console.log("onSelectEnd", x);
-    // this refers to the controller
-    // this.children[0].scale.z = 0;
-    // this.userData.selectPressed = false;
-  }
+  onSelectStart = (x: any) => { if (x?.target) x.target.userData['selectPressed'] = true; };
+  onSelectEnd = (x: any) => { if (x?.target) x.target.userData['selectPressed'] = false; };
 
   buildControllers() {
     const controllerModelFactory = new XRControllerModelFactory();

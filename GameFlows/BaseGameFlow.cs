@@ -266,6 +266,12 @@ namespace MG.Server.GameFlows
                 }
 
                 await (Task)theMethod.Invoke(this, new object[] { data })!;
+
+                // Remember who made the last HUMAN move — only that player may undo it (and only
+                // their own move). Captured AFTER the move; the pre-move snapshot keeps the prior
+                // value, so undoing reverts this too.
+                if (data.Player.Type == PlayerTypeEnum.HUMAN)
+                    GameData.Attributes["lastHumanActor"] = data.Player.Id;
             }
         }
 

@@ -83,6 +83,19 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
   // ---- voice chat ----
   // Is the current user a seated player (vs a spectator)? mgGame.playerData is set on load.
   get isPlayer(): boolean { return !!this.mgGame?.playerData; }
+
+  // Only the game's creator may restart it ("Play again").
+  get isCreator(): boolean {
+    const me = this.generalService.User?.id;
+    return !!me && this.mgGame?.gameData?.creatorId === me;
+  }
+
+  // Undo is only for the player who made the last move — and only their own move.
+  get canUndo(): boolean {
+    const me = this.mgGame?.playerData?.id;
+    const last = this.mgGame?.gameData?.attributes?.['lastHumanActor'];
+    return !!me && !!last && me === last;
+  }
   // Show the voice panel only if the game allows it AND (spectators allowed OR you're a player).
   get voiceAllowed(): boolean {
     const a = this.mgGame?.gameData?.attributes;

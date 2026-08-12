@@ -27,6 +27,7 @@
 
     <div class="mg-section">Players</div>
     @for (player of gameData.players; track player) {
+      @if (!isStarted || !seatEmpty(player)) {
       <div class="mg-game-card">
         <div class="mg-game-name">
           @if (player.attributes?.['heroUrl']) {
@@ -75,6 +76,7 @@
           }
         }
       </div>
+      }
     }
 
     <div class="mg-section">Settings</div>
