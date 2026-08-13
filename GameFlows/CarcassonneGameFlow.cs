@@ -433,8 +433,8 @@ namespace MG.Server.GameFlows
             // The server owns the camera: pull it up/back as the board grows so map + HUD always fit.
             // The client re-applies a camera only when this value CHANGES (manual orbit stays free).
             double span = Math.Max(maxX - minX, (maxZ - minZ) + 14);
-            double s = Math.Max(1.0, span / 36.0);
-            int camY = (int)Math.Round(28 * s), camZ = (int)Math.Round(18 * s);
+            double zoom = Math.Max(1.0, span / 36.0);
+            int camY = (int)Math.Round(28 * zoom), camZ = (int)Math.Round(18 * zoom);
             foreach (var p in GameData.Players.Where(p => p.Type != PlayerTypeEnum.EMPTY_SEAT))
                 p.SetCameraPosition(0, camY, camZ);
             GameData.Observer.Position.Set(0, camY + 4, camZ + 2);
