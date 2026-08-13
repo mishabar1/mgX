@@ -7,6 +7,7 @@ import {Router} from '@angular/router';
 import {UserData} from '../../entities/user.data';
 import {GeneralService} from '../../bl/general.service';
 import {ConfirmationService} from 'primeng/api';
+import {GAMES_BASE} from '../../bl/mg.three';
 
 @Component({
     selector: 'app-games-list',
@@ -18,7 +19,8 @@ import {ConfirmationService} from 'primeng/api';
 export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, OnChanges {
 
   games: GameData[]=[];
-  gameTypes: {type: string, label: string, icon: string}[] = [];   // creatable games, from the server
+  gameTypes: {type: string, label: string, icon: string, image: string}[] = [];   // creatable games, from the server
+  assetsBase = GAMES_BASE;   // cover images are hosted by the server
   user!:UserData;
   constructor(public signalRService: SignalrService,
               private router: Router,

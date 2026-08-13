@@ -28,18 +28,19 @@ namespace MG.Server.GameFlows
         // The catalog of creatable games — the SINGLE SOURCE OF TRUTH the client's "Create a game"
         // list is built from (type + label + PrimeNG icon). Adding a game = add a line here (plus the
         // CreateGame/AttachGameFlow cases). The client needs no change.
-        public record GameTypeInfo(string type, string label, string icon);
+        // type + label + PrimeNG icon (fallback) + a cover image (relative to the games asset base).
+        public record GameTypeInfo(string type, string label, string icon, string image);
         public static List<GameTypeInfo> GameCatalog() => new()
         {
-            new(GameTypeEnum.TIK_TAK_TOE, "Tic-Tac-Toe",         "pi pi-th-large"),
-            new(GameTypeEnum.CHESS,       "Chess",               "pi pi-flag"),
-            new(GameTypeEnum.GOMOKU,      "Gomoku",              "pi pi-circle-fill"),
-            new(GameTypeEnum.REVERSI,     "Reversi",             "pi pi-circle"),
-            new(GameTypeEnum.CHECKERS,    "Checkers",            "pi pi-star"),
-            new(GameTypeEnum.DND,         "D&D",                 "pi pi-compass"),
-            new(GameTypeEnum.DURAK,       "Durak",               "pi pi-clone"),
-            new(GameTypeEnum.RESISTANCE,  "The Resistance",      "pi pi-users"),
-            new(GameTypeEnum.DEMO,        "Demo (dev reference)","pi pi-code"),
+            new(GameTypeEnum.TIK_TAK_TOE, "Tic-Tac-Toe",         "pi pi-th-large",   "covers/tictactoe.svg"),
+            new(GameTypeEnum.CHESS,       "Chess",               "pi pi-flag",       "covers/chess.svg"),
+            new(GameTypeEnum.GOMOKU,      "Gomoku",              "pi pi-circle-fill","covers/gomoku.svg"),
+            new(GameTypeEnum.REVERSI,     "Reversi",             "pi pi-circle",     "covers/reversi.svg"),
+            new(GameTypeEnum.CHECKERS,    "Checkers",            "pi pi-star",       "covers/checkers.svg"),
+            new(GameTypeEnum.DND,         "D&D",                 "pi pi-compass",    "covers/dnd.svg"),
+            new(GameTypeEnum.DURAK,       "Durak",               "pi pi-clone",      "covers/durak.svg"),
+            new(GameTypeEnum.RESISTANCE,  "The Resistance",      "pi pi-users",      "covers/resistance.svg"),
+            new(GameTypeEnum.DEMO,        "Demo (dev reference)","pi pi-code",       "covers/demo.svg"),
         };
 
         private static string PrettyName(string type) => type switch

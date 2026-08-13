@@ -37,8 +37,8 @@ export class DALService{
 
   // The catalog of creatable games (type/label/icon) — the client renders its "Create" buttons
   // from this, so adding a new game needs no client change.
-  getGameTypes(): Observable<{type: string, label: string, icon: string}[]> {
-    return this.http.get<{type: string, label: string, icon: string}[]>(this.baseGameUrl + `/GameTypes`);
+  getGameTypes(): Observable<{type: string, label: string, icon: string, image: string}[]> {
+    return this.http.get<{type: string, label: string, icon: string, image: string}[]>(this.baseGameUrl + `/GameTypes`);
   }
 
   createGame(userId:string,gameType:string): Observable<GameData> {

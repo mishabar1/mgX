@@ -140,11 +140,17 @@ if (!app.Environment.IsProduction())
     app.UseHttpsRedirection();
 }
 
+// PhysicalFileProvider throws if the folder is missing. In dev the built client (wwwroot) may not
+// exist yet (you run `ng serve` separately) — create it so startup doesn't crash.
+var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+var gameContentPath = Path.Combine(builder.Environment.ContentRootPath, "GameContent");
+Directory.CreateDirectory(wwwrootPath);
+Directory.CreateDirectory(gameContentPath);
+
 app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(
-        Path.Combine(builder.Environment.ContentRootPath, "wwwroot")),
+    FileProvider = new PhysicalFileProvider(wwwrootPath),
     RequestPath = "",
     ServeUnknownFileTypes = true
 });
@@ -155,8 +161,7 @@ app.UseStaticFiles(new StaticFileOptions
 // loader/thumbnailer fetch them cross-origin from the dev client.
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(
-        Path.Combine(builder.Environment.ContentRootPath, "GameContent")),
+    FileProvider = new PhysicalFileProvider(gameContentPath),
     RequestPath = "",
     ServeUnknownFileTypes = true,
     OnPrepareResponse = ctx => ctx.Context.Response.Headers["Access-Control-Allow-Origin"] = "*"

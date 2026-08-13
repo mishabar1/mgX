@@ -9,6 +9,11 @@
     <UserSecretsId>befa8c39-72de-4e09-9e8b-db7b22dda28e</UserSecretsId>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>.</DockerfileContext>
+    <!-- We serve wwwroot + GameContent via explicit UseStaticFiles(PhysicalFileProvider) in
+         Program.cs, NOT the Static Web Assets pipeline. Disabling SWA stops `dotnet watch` from
+         reading a stale staticwebassets manifest in obj/ and trying to file-watch asset folders
+         that no longer exist (the cause of the "directory does not exist" crash). -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
   </PropertyGroup>
   <ItemGroup>
     <!-- ML.NET (used by MLModel.*.cs). Kept and bumped to the current major. -->

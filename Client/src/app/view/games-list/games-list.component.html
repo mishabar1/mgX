@@ -30,9 +30,12 @@
   }
 
   <div class="mg-section">Create a game</div>
-  <div class="mg-row-center" style="column-gap: 12px; row-gap: 10px; flex-wrap: wrap;">
+  <div class="create-grid">
     @for (gt of gameTypes; track gt.type) {
-      <p-button (onClick)="createGame(gt.type)" [label]="gt.label" [icon]="gt.icon"></p-button>
+      <button class="create-tile" (click)="createGame(gt.type)" [title]="gt.label">
+        <img [src]="assetsBase + gt.image" [alt]="gt.label" loading="lazy">
+        <span>{{ gt.label }}</span>
+      </button>
     }
   </div>
 </div>

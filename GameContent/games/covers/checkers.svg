@@ -1,0 +1,21 @@
+<svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7f1d1d"/><stop offset="1" stop-color="#140708"/></linearGradient></defs>
+  <rect width="320" height="200" fill="url(#g)"/>
+  <!-- board -->
+  <g transform="translate(90 40)">
+    <rect width="140" height="140" fill="#1f2937"/>
+    <g fill="#f3f4f6" opacity="0.9">
+      <rect x="0" y="0" width="35" height="35"/><rect x="70" y="0" width="35" height="35"/>
+      <rect x="35" y="35" width="35" height="35"/><rect x="105" y="35" width="35" height="35"/>
+      <rect x="0" y="70" width="35" height="35"/><rect x="70" y="70" width="35" height="35"/>
+      <rect x="35" y="105" width="35" height="35"/><rect x="105" y="105" width="35" height="35"/>
+    </g>
+  </g>
+  <!-- stacked discs -->
+  <g>
+    <ellipse cx="160" cy="150" rx="34" ry="14" fill="#b91c1c"/>
+    <ellipse cx="160" cy="140" rx="34" ry="14" fill="#ef4444"/>
+    <ellipse cx="160" cy="130" rx="34" ry="14" fill="#f87171"/>
+    <ellipse cx="160" cy="130" rx="20" ry="8" fill="#fca5a5"/>
+  </g>
+</svg>
