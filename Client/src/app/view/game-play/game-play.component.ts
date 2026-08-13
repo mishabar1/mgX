@@ -309,11 +309,12 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
   // game can never crash the client.
   private renderNode(nd: any): string {
     const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, (c: string) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
-    const style = (nd.color ? `color:#${nd.color};` : '') + (nd.size ? `font-size:${nd.size}px;` : '');
+    const bg = nd.bg ? `background:#${nd.bg};` : '';
+    const style = (nd.color ? `color:#${nd.color};` : '') + (nd.size ? `font-size:${nd.size}px;` : '') + bg;
     const kids = () => (nd.children || []).map((k: any) => this.renderNode(k)).join('');
     switch (nd.type) {
-      case 'col':   return `<div class="sp-col" style="${nd.size ? `gap:${nd.size}px;` : ''}">${kids()}</div>`;
-      case 'row':   return `<div class="sp-row" style="${nd.size ? `gap:${nd.size}px;` : ''}">${kids()}</div>`;
+      case 'col':   return `<div class="sp-col ${nd.style || ''}" style="${nd.size ? `gap:${nd.size}px;` : ''}${bg}">${kids()}</div>`;
+      case 'row':   return `<div class="sp-row ${nd.style || ''}" style="${nd.size ? `gap:${nd.size}px;` : ''}${bg}">${kids()}</div>`;
       case 'title': return `<h3>${esc(nd.text)}</h3>`;
       case 'note':  return `<div class="sp-note">${esc(nd.text)}</div>`;
       case 'banner':return `<div class="sp-banner ${nd.style || ''}">${esc(nd.text)}</div>`;
@@ -326,7 +327,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
         const icon = nd.url ? (isModel ? `<img data-model="${nd.url}">` : `<img src="${GAMES_BASE}${nd.url}">`) : '';
         const extra = (nd.confirm ? ` data-confirm="${esc(nd.confirm)}"` : '')
                     + (nd.gather ? ` data-gather="${esc((nd.gather || []).join(','))}"` : '');
-        return `<button class="sp-btn ${nd.style || ''}" data-act="${esc(nd.action)}" data-args='${esc(JSON.stringify(nd.args || {}))}'${extra}>${icon}<span>${esc(nd.text)}</span></button>`;
+        return `<button class="sp-btn ${nd.style || ''}" style="${bg}" data-act="${esc(nd.action)}" data-args='${esc(JSON.stringify(nd.args || {}))}'${extra}>${icon}<span>${esc(nd.text)}</span></button>`;
       }
       case 'animpick': {
         // Model-inspection capability (not game logic): fill a dropdown from the loaded model's
@@ -398,6 +399,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       .sp-btn.tile{flex-direction:column;gap:4px;width:86px;background:#241a12;border:1px solid #5a4632;font-size:12px;padding:6px;}
       .sp-btn.tile img{width:68px;height:68px;object-fit:contain;border-radius:6px;background:#0a0705;}
       .sp-chip{display:inline-flex;align-items:center;gap:6px;background:#241a12;border:1px solid #5a4632;border-radius:9px;padding:5px 9px;margin:0 6px 6px 0;}
+      .sp-col.tile{border:1px solid #2a3a55;border-radius:10px;padding:8px;min-width:104px;gap:5px;}
     `;
   }
 

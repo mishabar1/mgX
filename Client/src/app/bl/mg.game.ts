@@ -222,22 +222,31 @@ export class MgGame{
         );
       }
 
-      // table anchor for the player's table items — an empty container (no geometry, renders
-      // nothing). The card items parented to it still show.
+      // Where the per-seat HAND/TABLE anchors sit is decided ENTIRELY by the server via the
+      // "tableAnchor"/"handAnchor" ("x,y,z") and "tableRot"/"handRot" ("xDeg,yDeg,zDeg") attributes.
+      // The client hard-codes NOTHING — an absent attribute means identity (no offset); the server
+      // (BaseGameFlow) supplies the standard defaults for every game.
+      const vec = (key: string): number[] => {
+        // per-seat attribute wins, then game-level, then identity — the client decides nothing.
+        const s = playerData?.attributes?.[key] ?? this.gameData?.attributes?.[key];
+        if (s) { const p = String(s).split(',').map(Number); if (p.length >= 3 && p.every(n => !isNaN(n))) return p; }
+        return [0, 0, 0];
+      };
+
       const playerTable = new Group();
       playerTable.name = "PLAYER TABLE";
       playerData.avatar.mesh?.add(playerTable);
-      playerTable.position.set(0,-1.5,1.5);
+      const tp = vec('tableAnchor'); playerTable.position.set(tp[0], tp[1], tp[2]);
+      const tr = vec('tableRot');    playerTable.rotation.set(MathUtils.degToRad(tr[0]), MathUtils.degToRad(tr[1]), MathUtils.degToRad(tr[2]));
 
       this.tableMeshes[playerData.id] = playerTable;
       this.createItem(playerData.table,playerTable);
 
-      // hand anchor for the player's hand items — empty container (see note above).
       const playerHand = new Group();
       playerHand.name = "PLAYER HAND";
       playerData.avatar.mesh?.add(playerHand);
-      playerHand.rotation.x = -Math.PI / 2;
-      playerHand.position.set(0,0,1.5);
+      const hp = vec('handAnchor'); playerHand.position.set(hp[0], hp[1], hp[2]);
+      const hr = vec('handRot');    playerHand.rotation.set(MathUtils.degToRad(hr[0]), MathUtils.degToRad(hr[1]), MathUtils.degToRad(hr[2]));
 
       this.handMeshes[playerData.id] = playerHand;
       this.createItem(playerData.hand, playerHand);

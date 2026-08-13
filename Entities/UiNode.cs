@@ -31,7 +31,8 @@ namespace MG.Server.Entities
     {
         public string Type { get; set; } = "text";
         public string? Text { get; set; }
-        public string? Color { get; set; }   // hex without '#', e.g. "ffd166"
+        public string? Color { get; set; }   // text colour, hex without '#', e.g. "ffd166"
+        public string? Bg { get; set; }       // background colour, hex without '#' (col/row/text/button)
         public double? Size { get; set; }     // px (text/image) or gap (containers)
         public string? Style { get; set; }    // free-form keyword(s): ok|no|big|primary|pill|s|f|cur|win|lose|team
         public string? Url { get; set; }       // image src / button icon
@@ -78,7 +79,13 @@ namespace MG.Server.Entities
         public static UiNode Check(string text, string action, string argKey, bool chk, Dictionary<string, string>? args = null)
             => new UiNode { Type = "check", Text = text, Action = action, ArgKey = argKey, Checked = chk, OnChange = true, Args = args };
 
+        // A small coloured chip (e.g. a gem count). bg = fill, color = text.
+        public static UiNode Pill(string text, string bg, string color = "ffffff")
+            => new UiNode { Type = "text", Text = text, Bg = bg, Color = color, Style = "pill" };
+
         public UiNode With(List<UiNode> kids) { Children = kids; return this; }
+        public UiNode SetBg(string hex) { Bg = hex; return this; }
+        public UiNode SetStyle(string s) { Style = s; return this; }
     }
 
     public class UiOption

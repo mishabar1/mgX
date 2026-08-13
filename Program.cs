@@ -112,7 +112,9 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
-    options.JsonSerializerOptions.MaxDepth = 10;
+    // Server-driven UI panels (PlayerData.Screen) are deep UiNode trees (rows in cols in rows),
+    // so 10 is too shallow. 64 is System.Text.Json's default ceiling and plenty.
+    options.JsonSerializerOptions.MaxDepth = 64;
     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
 });
 

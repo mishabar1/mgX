@@ -122,6 +122,8 @@ namespace MG.Server.Entities
         public const string DURAK = "DURAK";
         public const string RESISTANCE = "RESISTANCE";
         public const string DEMO = "DEMO";
+        public const string SPLENDOR = "SPLENDOR";
+        public const string CARCASSONNE = "CARCASSONNE";
     }
 
     public class GameStatusEnum

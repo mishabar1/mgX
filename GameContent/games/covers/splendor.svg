@@ -1,0 +1,16 @@
+<svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e293b"/><stop offset="1" stop-color="#0b1020"/></linearGradient></defs>
+  <rect width="320" height="200" fill="url(#g)"/>
+  <!-- gems (cut diamonds) -->
+  <g stroke="#0b1020" stroke-width="1.5">
+    <polygon points="80,70 96,58 112,70 96,96" fill="#16a34a"/>
+    <polygon points="120,84 136,72 152,84 136,110" fill="#2563eb"/>
+    <polygon points="160,66 176,54 192,66 176,92" fill="#dc2626"/>
+    <polygon points="200,84 216,72 232,84 216,110" fill="#e5e7eb"/>
+    <polygon points="140,116 156,104 172,116 156,142" fill="#334155"/>
+    <polygon points="188,116 204,104 220,116 204,142" fill="#f59e0b"/>
+  </g>
+  <!-- title bar -->
+  <rect x="60" y="158" width="200" height="30" rx="8" fill="#f59e0b"/>
+  <text x="160" y="179" font-family="Georgia, serif" font-size="20" font-weight="800" fill="#3a2600" text-anchor="middle" letter-spacing="2">SPLENDOR</text>
+</svg>

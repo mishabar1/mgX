@@ -140,6 +140,12 @@ namespace MG.Server.Database
                 case GameTypeEnum.DEMO:
                     game.GameFlow = new DemoGameFlow(game);
                     break;
+                case GameTypeEnum.SPLENDOR:
+                    game.GameFlow = new SplendorGameFlow(game);
+                    break;
+                case GameTypeEnum.CARCASSONNE:
+                    game.GameFlow = new CarcassonneGameFlow(game);
+                    break;
             }
         }
 

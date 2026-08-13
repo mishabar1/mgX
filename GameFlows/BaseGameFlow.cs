@@ -40,6 +40,8 @@ namespace MG.Server.GameFlows
             new(GameTypeEnum.DND,         "D&D",                 "pi pi-compass",    "covers/dnd.svg"),
             new(GameTypeEnum.DURAK,       "Durak",               "pi pi-clone",      "covers/durak.svg"),
             new(GameTypeEnum.RESISTANCE,  "The Resistance",      "pi pi-users",      "covers/resistance.svg"),
+            new(GameTypeEnum.SPLENDOR,    "Splendor",            "pi pi-wallet",     "covers/splendor.svg"),
+            new(GameTypeEnum.CARCASSONNE, "Carcassonne",         "pi pi-map",        "covers/carcassonne.svg"),
             new(GameTypeEnum.DEMO,        "Demo (dev reference)","pi pi-code",       "covers/demo.svg"),
         };
 
@@ -54,6 +56,8 @@ namespace MG.Server.GameFlows
             GameTypeEnum.DURAK => "Durak",
             GameTypeEnum.RESISTANCE => "The Resistance",
             GameTypeEnum.DEMO => "Demo (dev reference)",
+            GameTypeEnum.SPLENDOR => "Splendor",
+            GameTypeEnum.CARCASSONNE => "Carcassonne",
             _ => type
         };
 
@@ -89,6 +93,12 @@ namespace MG.Server.GameFlows
                     break;
                 case GameTypeEnum.DEMO:
                     game.GameFlow = new DemoGameFlow(game);
+                    break;
+                case GameTypeEnum.SPLENDOR:
+                    game.GameFlow = new SplendorGameFlow(game);
+                    break;
+                case GameTypeEnum.CARCASSONNE:
+                    game.GameFlow = new CarcassonneGameFlow(game);
                     break;
                 default:
                     break;
@@ -166,6 +176,13 @@ namespace MG.Server.GameFlows
             if (!CanStart) return;
 
             this.GameData.GameStatus = GameStatusEnum.PLAY;
+
+            // Standard per-seat HAND/TABLE anchor placement (the client hard-codes none of this).
+            // A game may override any of these in StartGame() below.
+            GameData.Attributes["tableAnchor"] = "0,-1.5,1.5";
+            GameData.Attributes["tableRot"]    = "0,0,0";
+            GameData.Attributes["handAnchor"]  = "0,0,1.5";
+            GameData.Attributes["handRot"]     = "-90,0,0";   // cards lie flat, face up
 
             await StartGame();
             RefreshScreens();   // build the server-driven per-seat panels for the fresh game

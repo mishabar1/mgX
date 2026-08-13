@@ -411,3 +411,8 @@ Database/app.db
 *.db
 *.db-shm
 *.db-wal
+
+# Large source/reference PDFs (print-and-play sheets, card scans). The game runtime uses the
+# generated SVG/PNG art in GameContent, not these — keep the multi-MB PDFs out of git.
+GameContent/**/*.pdf
+*.pdf

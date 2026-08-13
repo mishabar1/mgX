@@ -22,6 +22,12 @@ generic renderer would be rewritten — no game would change.
   Rebuilt every action via the `BaseGameFlow.RefreshScreens()` hook (override it per game).
 - **The "Create a game" list** → from the server catalog `BaseGameFlow.GameCatalog()` via
   `GET /api/Game/GameTypes`. The client renders the buttons dynamically.
+- **Seat zone placement** → where each seat's `player.Hand` / `player.Table` anchors sit is server-set,
+  never hard-coded in the client: attributes `handAnchor`/`tableAnchor` ("x,y,z") and `handRot`/`tableRot`
+  ("xDeg,yDeg,zDeg"). `BaseGameFlow.RunStartFlow` supplies standard defaults; a game overrides them
+  (game-level in `GameData.Attributes`, or per-seat in `PlayerData.Attributes` — per-seat wins). An absent
+  attribute is identity on the client (it decides nothing). E.g. Splendor computes per-seat anchors so each
+  player's tokens/cards rest ON the felt, in front of them, facing centre.
 - **HUD / labels / any derived UI text** → server sets an attribute (e.g. `hud`); the client displays it.
 - **Per-game setup options** → generic attributes the server sets, e.g. `noAvatars=1` (no seated
   figures), `usesCardBack=1` (offer card-back chooser). No game type is ever hard-coded in the client.
