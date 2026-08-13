@@ -112,7 +112,9 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
-    options.JsonSerializerOptions.MaxDepth = 10;
+    // Server-driven UI panels (PlayerData.Screen) are deep UiNode trees (rows in cols in rows),
+    // so 10 is too shallow. 64 is System.Text.Json's default ceiling and plenty.
+    options.JsonSerializerOptions.MaxDepth = 64;
     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
 });
 
@@ -140,13 +142,31 @@ if (!app.Environment.IsProduction())
     app.UseHttpsRedirection();
 }
 
+// PhysicalFileProvider throws if the folder is missing. In dev the built client (wwwroot) may not
+// exist yet (you run `ng serve` separately) — create it so startup doesn't crash.
+var wwwrootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+var gameContentPath = Path.Combine(builder.Environment.ContentRootPath, "GameContent");
+Directory.CreateDirectory(wwwrootPath);
+Directory.CreateDirectory(gameContentPath);
+
 app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(
-        Path.Combine(builder.Environment.ContentRootPath, "wwwroot")),
+    FileProvider = new PhysicalFileProvider(wwwrootPath),
     RequestPath = "",
     ServeUnknownFileTypes = true
+});
+
+// Game CONTENT (art/models/sounds + fallback avatar heads) lives with the SERVER — the single
+// source of truth. Served from GameContent/ at /games and /heads. Adding a new game's assets is a
+// server-only change (drop files here); no client rebuild. A permissive CORS header lets the 3D
+// loader/thumbnailer fetch them cross-origin from the dev client.
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(gameContentPath),
+    RequestPath = "",
+    ServeUnknownFileTypes = true,
+    OnPrepareResponse = ctx => ctx.Context.Response.Headers["Access-Control-Allow-Origin"] = "*"
 });
 
 app.UseRouting();
