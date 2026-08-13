@@ -33,8 +33,7 @@
               {
                 "glob": "**/*",
                 "input": "src/assets",
-                "output": "assets",
-                "ignore": ["games/**", "heads/**"]
+                "output": "assets"
               }
             ],
             "styles": [
