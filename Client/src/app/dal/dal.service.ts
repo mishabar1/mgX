@@ -35,6 +35,12 @@ export class DALService{
     return this.http.get<any>(this.baseGameUrl + `/GetGamesList`);
   }
 
+  // The catalog of creatable games (type/label/icon) — the client renders its "Create" buttons
+  // from this, so adding a new game needs no client change.
+  getGameTypes(): Observable<{type: string, label: string, icon: string, image: string}[]> {
+    return this.http.get<{type: string, label: string, icon: string, image: string}[]>(this.baseGameUrl + `/GameTypes`);
+  }
+
   createGame(userId:string,gameType:string): Observable<GameData> {
     return this.http.post<GameData>(this.baseGameUrl + `/CreateGame`, {userId,gameType});
   }
@@ -47,6 +53,9 @@ export class DALService{
   deleteGame(gameId:string): Observable<GameData> {
     return this.http.post<GameData>(this.baseGameUrl + `/DeleteGame`, {gameId});
   }
+  undoGame(gameId:string): Observable<any> {
+    return this.http.post<any>(this.baseGameUrl + `/UndoGame`, {gameId});
+  }
 
 
 
@@ -58,7 +67,28 @@ export class DALService{
     return this.http.post<any>(this.baseGameUrl + `/ExecuteAction`, data);
   }
 
+  // Invoke a game action from a UI (the DM's HTML console) with key/value params instead of a
+  // clicked 3D item. `args` is sent as `Args` and read server-side from ExecuteActionData.args.
+  executeActionArgs(GameId: string, PlayerId: string, ActionId: string, Args: {[k: string]: string}): Observable<any> {
+    return this.http.post<any>(this.baseGameUrl + `/ExecuteAction`, { GameId, PlayerId, ActionId, ItemId: '', Args });
+  }
+
   joinGame(gameId: string, playerId: string, user: UserData|null, type: string) {
     return this.http.post<GameData>(this.baseGameUrl + `/JoinGame`, {gameId,playerId,user,type});
+  }
+
+  // Toggle the game's voice-chat settings (enabled at all, and whether spectators may join).
+  setVoice(gameId: string, enabled: boolean, spectators: boolean): Observable<any> {
+    return this.http.post<any>(this.baseGameUrl + `/SetVoice`, {gameId, enabled, spectators});
+  }
+
+  // Toggle the game's "show player heads" setting (saved on the game).
+  setShowHeads(gameId: string, enabled: boolean): Observable<any> {
+    return this.http.post<any>(this.baseGameUrl + `/SetShowHeads`, {gameId, enabled});
+  }
+
+  // Choose the card back for card games (saved on the game).
+  setCardBack(gameId: string, value: string): Observable<any> {
+    return this.http.post<any>(this.baseGameUrl + `/SetCardBack`, {gameId, value});
   }
 }

@@ -1,0 +1,17 @@
+<svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c98a2b"/><stop offset="1" stop-color="#5a3208"/></linearGradient></defs>
+  <rect width="320" height="200" fill="url(#g)"/>
+  <!-- grid -->
+  <g stroke="#3f2408" stroke-width="2" opacity="0.7">
+    <path d="M90 40 H230 M90 75 H230 M90 110 H230 M90 145 H230"/>
+    <path d="M90 40 V145 M125 40 V145 M160 40 V145 M195 40 V145 M230 40 V145"/>
+  </g>
+  <!-- stones: a row of black with one white (the winning idea) -->
+  <circle cx="90" cy="110" r="14" fill="#111"/>
+  <circle cx="125" cy="110" r="14" fill="#111"/>
+  <circle cx="160" cy="75" r="14" fill="#f8fafc"/>
+  <circle cx="160" cy="110" r="14" fill="#111"/>
+  <circle cx="195" cy="110" r="14" fill="#111"/>
+  <circle cx="230" cy="110" r="14" fill="#111"/>
+  <circle cx="86" cy="106" r="4" fill="#333"/>
+</svg>
