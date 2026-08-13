@@ -135,7 +135,30 @@ export class MgGame{
     } else {
       this.mgThree.camera.position.set(this.gameData.observer.position.x, this.gameData.observer.position.y, this.gameData.observer.position.z);
     }
+    this.lastServerCam = this.serverCamKey(this.gameData);
 
+  }
+
+  // ---- server-driven camera (generic renderer capability, NOT game logic) ----
+  // The server owns the camera like everything else. If the server-sent camera position for my
+  // seat (or the observer) CHANGES between updates, the game decided the view must move (e.g. a
+  // growing board needs a higher viewpoint) — glide there. While the server value is unchanged,
+  // the user's manual orbit is never touched.
+  private lastServerCam: string | null = null;
+  private serverCamKey(g: GameData): string | null {
+    const me = g.players?.find((p: PlayerData) => p.id === this.playerData?.id);
+    const pos = me?.camera?.position ?? g.observer?.position;
+    return pos ? `${pos.x},${pos.y},${pos.z}` : null;
+  }
+  private applyServerCamera(new_game: GameData) {
+    const key = this.serverCamKey(new_game);
+    if (!key || key === this.lastServerCam) return;
+    this.lastServerCam = key;
+    const [x, y, z] = key.split(',').map(Number);
+    new TWEEN.Tween(this.mgThree.camera.position)
+      .to({ x, y, z }, 900)
+      .easing(TWEEN.Easing.Quadratic.InOut)
+      .start();
   }
 
   addPlayers(){
@@ -829,6 +852,9 @@ export class MgGame{
     // keep game attributes current (defender/turn/over) so the DEFENDING badge tracks play.
     if (new_game.attributes) this.gameData.attributes = new_game.attributes;
     this.refreshDefenderBadges();
+
+    // server may re-position the camera mid-game (e.g. pull back over a growing board)
+    this.applyServerCamera(new_game);
 
     this.updateItem(new_game.table, null);
 

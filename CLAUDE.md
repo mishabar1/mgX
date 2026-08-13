@@ -48,6 +48,14 @@ thumbnail a model into a picture (`model` node / model-icon buttons), enumerate 
 animation clips (`animpick` node), render text/images/buttons/inputs. The server decides *what* and
 *when*; the client only knows *how to draw*.
 
+- **Server-driven camera (mid-game)** → the server owns the camera. The client applies the seat's
+  `Camera` (or `Observer`) position at load, and re-applies it (smooth glide) whenever the
+  SERVER-SENT value *changes* between updates; while it's unchanged the user's manual orbit is never
+  touched. A game with a growing scene (e.g. Carcassonne) recomputes each seat's camera in its
+  `Render()`/`RefreshScreens()` so the view pulls back as the board grows. Games with growing boards
+  should also RE-CENTRE the scene on the origin each render (draw everything relative to the board's
+  bounding-box centre) — the camera orbits (0,0,0), so the map stays framed no matter where it grows.
+
 ### Game assets live with the SERVER
 Art/models/sounds + the fallback avatar heads live in `GameContent/` (`/games`, `/heads`), served by
 ASP.NET static files (`Program.cs`, with a permissive CORS header for the cross-origin 3D loader).

@@ -369,7 +369,10 @@ namespace MG.Server.GameFlows
             // road groups: each straight/curve pair once, each end once
             var rSides = Enumerable.Range(0, 4).Where(s => EdgeAt(t, r, s) == 'R').ToList();
             var seen = new HashSet<int>();
-            foreach (var s in rSides) { if (seen.Contains(s)) continue; if (FeatureFree(x, y, "R", s)) res.Add(("R", s, "Thief (road)")); if (rSides.Count == 2) { seen.Add(rSides[0]); seen.Add(rSides[1]); } else seen.Add(s); }
+            // 3+ road-edges = a junction: each arm is a separate road, so label it with its
+            // direction (N/E/S/W) — otherwise the buttons all read the same.
+            var DIR = new[] { "N", "E", "S", "W" };
+            foreach (var s in rSides) { if (seen.Contains(s)) continue; if (FeatureFree(x, y, "R", s)) res.Add(("R", s, rSides.Count >= 3 ? $"Thief (road {DIR[s]})" : "Thief (road)")); if (rSides.Count == 2) { seen.Add(rSides[0]); seen.Add(rSides[1]); } else seen.Add(s); }
             var fSides = Enumerable.Range(0, 4).Where(s => EdgeAt(t, r, s) == 'F').ToList();
             if (fSides.Count > 0 && FeatureFree(x, y, "F", fSides[0])) res.Add(("F", fSides[0], "Farmer (field)"));
             return res;
@@ -407,42 +410,69 @@ namespace MG.Server.GameFlows
         {
             GameData.Table = ItemData.Table();
 
-            // a big neutral mat under the map, for contrast/framing against the skybox
-            addItem(Assets.MAT).SetPosition(0, -0.15, 0).SetScale(60, 0.2, 60).AddAttribute("tint", "0x123021");
-
+            bool over = GameData.Attributes.ContainsKey("over");
+            string cur = GameData.CurrentTurnId ?? "";
             var b = GetBoard();
+
+            // ---- board bounding box (in cells). The whole scene is RE-CENTRED on the origin every
+            // render: cell (x,y) draws at (x*SZ - cx, 0, y*SZ - cz). The camera orbits (0,0,0), so
+            // the growing map always stays centred in view, and the HUD is laid out relative to the
+            // board's edges (title/scores above the far edge, current tile + buttons below the near
+            // edge) — never colliding with tiles no matter how the map grows. Legal-placement markers
+            // extend one cell beyond the tiles, so include them in the bounds during the place phase.
+            var legal = (!over && Cur() >= 0 && Phase() == "place") ? LegalCells(Cur(), Rot()) : new List<(int x, int y)>();
+            var cells = b.Keys.Select(k => { var p = k.Split(','); return (x: int.Parse(p[0]), y: int.Parse(p[1])); }).Concat(legal).ToList();
+            if (cells.Count == 0) cells.Add((0, 0));
+            double minX = cells.Min(c => c.x) * SZ - SZ / 2, maxX = cells.Max(c => c.x) * SZ + SZ / 2;
+            double minZ = cells.Min(c => c.y) * SZ - SZ / 2, maxZ = cells.Max(c => c.y) * SZ + SZ / 2;
+            double cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;   // board centre → drawn at origin
+            double halfZ = (maxZ - minZ) / 2;
+            double hudTopZ = -halfZ - 5;    // title/scores row, above the far edge
+            double hudBotZ = halfZ + 6;     // current tile / meeple buttons, below the near edge
+
+            // The server owns the camera: pull it up/back as the board grows so map + HUD always fit.
+            // The client re-applies a camera only when this value CHANGES (manual orbit stays free).
+            double span = Math.Max(maxX - minX, (maxZ - minZ) + 14);
+            double s = Math.Max(1.0, span / 36.0);
+            int camY = (int)Math.Round(28 * s), camZ = (int)Math.Round(18 * s);
+            foreach (var p in GameData.Players.Where(p => p.Type != PlayerTypeEnum.EMPTY_SEAT))
+                p.SetCameraPosition(0, camY, camZ);
+            GameData.Observer.Position.Set(0, camY + 4, camZ + 2);
+
+            // a big neutral mat under the map, for contrast/framing against the skybox — growing
+            // with the board (always comfortably larger than map + HUD).
+            double matSize = Math.Max(60, Math.Max(maxX - minX, maxZ - minZ) + 30);
+            addItem(Assets.MAT).SetPosition(0, -0.15, 0).SetScale(matSize, 0.2, matSize).AddAttribute("tint", "0x123021");
+
             foreach (var key in b.Keys)
             {
                 var p = key.Split(','); int x = int.Parse(p[0]), y = int.Parse(p[1]);
                 var v = b[key].Split(','); int t = int.Parse(v[0]), r = int.Parse(v[1]);
-                addItem(TileAsset(t)).SetPosition(x * SZ, 0, y * SZ).SetRotation(0, -90 * r, 0).SetScale(SZ, 1, SZ).AddAttribute("tile", "1");
+                addItem(TileAsset(t)).SetPosition(x * SZ - cx, 0, y * SZ - cz).SetRotation(0, -90 * r, 0).SetScale(SZ, 1, SZ).AddAttribute("tile", "1");
             }
             var order = ListAttr("order");
             foreach (var m in MeepleList())
             {
                 var pm = Parse(m); int oi = Math.Max(0, order.IndexOf(pm.seat));
                 double ox = pm.side == 1 ? 1.1 : pm.side == 3 ? -1.1 : 0, oz = pm.side == 0 ? -1.1 : pm.side == 2 ? 1.1 : 0;
-                addItem(Assets.MEEPLE).SetPosition(pm.x * SZ + ox, 0.6, pm.y * SZ + oz).SetScale(0.9, 1.6, 0.9)
+                addItem(Assets.MEEPLE).SetPosition(pm.x * SZ + ox - cx, 0.6, pm.y * SZ + oz - cz).SetScale(0.9, 1.6, 0.9)
                     .AddAttribute("tint", MEEPLE_COLORS[oi % MEEPLE_COLORS.Length]).AddAttribute("meeple", "1");
             }
 
-            bool over = GameData.Attributes.ContainsKey("over");
-            string cur = GameData.CurrentTurnId ?? "";
-
-            // HUD lives in world space but ELEVATED (y>0) so it floats above the tile plane and never
-            // collides with the growing map. Fixed top-down camera → scores across the far edge,
-            // the current tile + meeple choices across the near edge. Text laid flat (-90) to read
-            // from above.
+            // HUD lives in world space but ELEVATED (y>0) so it floats above the tile plane, and is
+            // anchored to the CURRENT board bounds (hudTopZ/hudBotZ/cx) so it tracks the map as it
+            // grows. Scores across the far edge, the current tile + meeple choices across the near
+            // edge. Text laid flat (-90) to read from above.
             addTextItem(Assets.TEXT).SetText(over ? GameData.Attributes.GetValueOrDefault("result", "Game over")
                 : $"CARCASSONNE   ·   {Name(cur)}'s turn   ·   {Bag().Count} tiles left")
-                .SetPosition(0, 6, -15).SetScale(1.3).SetRotation(-90, 0, 0).AddAttribute("textColor", "ffd166");
+                .SetPosition(0, 6, hudTopZ - 3).SetScale(1.3).SetRotation(-90, 0, 0).AddAttribute("textColor", "ffd166");
 
             for (int i = 0; i < order.Count; i++)
             {
                 var s = order[i];
                 addTextItem(Assets.TEXT)
                     .SetText($"{Name(s)}  {Pts(s)}  ({GameData.Attributes.GetValueOrDefault("meeplesLeft:" + s, "0")}m)")
-                    .SetPosition(-((order.Count - 1) * 8.0) / 2 + i * 8.0, 6, -12).SetScale(0.8).SetRotation(-90, 0, 0)
+                    .SetPosition(-((order.Count - 1) * 8.0) / 2 + i * 8.0, 6, hudTopZ).SetScale(0.8).SetRotation(-90, 0, 0)
                     .AddAttribute("textColor", s == cur ? "ffd166" : "cbd5e1");
             }
 
@@ -451,18 +481,19 @@ namespace MG.Server.GameFlows
             if (Phase() == "place")
             {
                 // green placement markers on the board (click to place)
-                foreach (var c in LegalCells(Cur(), Rot()))
+                foreach (var c in legal)
                 {
-                    var mk = addItem(Assets.MARKER).SetPosition(c.x * SZ, 0.05, c.y * SZ).SetScale(SZ * 0.9, 0.2, SZ * 0.9)
+                    var mk = addItem(Assets.MARKER).SetPosition(c.x * SZ - cx, 0.05, c.y * SZ - cz).SetScale(SZ * 0.9, 0.2, SZ * 0.9)
                         .AddAttribute("tint", "0x22c55e").AddAttribute("marker", "1");
                     mk.ClickActions[cur] = nameof(PlaceTile);
                     mk.AddAttribute("x", c.x.ToString()).AddAttribute("y", c.y.ToString());
                 }
-                // the current tile floats near the front edge — click it to rotate, then a green square
-                addItem(TileAsset(Cur())).SetPosition(-6, 4, 13).SetRotation(0, -90 * Rot(), 0).SetScale(SZ, 1, SZ)
+                // the current tile floats just below the board's near edge — click it to rotate,
+                // then a green square. Tracks the board as it grows.
+                addItem(TileAsset(Cur())).SetPosition(-6, 4, hudBotZ).SetRotation(0, -90 * Rot(), 0).SetScale(SZ, 1, SZ)
                     .AddAttribute("tile", "1").ClickActions[cur] = nameof(RotateTile);
                 addTextItem(Assets.TEXT).SetText("click tile = rotate  ·  click a green square")
-                    .SetPosition(1.5, 4, 13).SetScale(0.5).SetRotation(-90, 0, 0).AddAttribute("textColor", "cbd5e1");
+                    .SetPosition(1.5, 4, hudBotZ).SetScale(0.5).SetRotation(-90, 0, 0).AddAttribute("textColor", "cbd5e1");
             }
             else if (Phase() == "meeple")
             {
@@ -475,10 +506,10 @@ namespace MG.Server.GameFlows
                 for (int i = 0; i < buttons.Count; i++)
                 {
                     double bx = -((buttons.Count - 1) * 5.0) / 2 + i * 5.0;
-                    var bt = addItem(Assets.MARKER).SetPosition(bx, 4, 13).SetScale(4.6, 0.4, 1.8).AddAttribute("tint", buttons[i].col).AddAttribute("button", "1");
+                    var bt = addItem(Assets.MARKER).SetPosition(bx, 4, hudBotZ).SetScale(4.6, 0.4, 1.8).AddAttribute("tint", buttons[i].col).AddAttribute("button", "1");
                     bt.ClickActions[cur] = buttons[i].action;
                     if (buttons[i].args != null) foreach (var kv in buttons[i].args!) bt.AddAttribute(kv.Key, kv.Value);
-                    addTextItem(Assets.TEXT).SetText(buttons[i].label).SetPosition(bx, 4.3, 13).SetScale(0.34).SetRotation(-90, 0, 0).AddAttribute("textColor", "ffffff");
+                    addTextItem(Assets.TEXT).SetText(buttons[i].label).SetPosition(bx, 4.3, hudBotZ).SetScale(0.34).SetRotation(-90, 0, 0).AddAttribute("textColor", "ffffff");
                 }
             }
         }
