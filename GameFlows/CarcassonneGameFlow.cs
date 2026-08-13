@@ -54,21 +54,29 @@ namespace MG.Server.GameFlows
         private static string Arg(ExecuteActionData d, string key)
             => d.args != null && d.args.TryGetValue(key, out var v) ? v : (d.Item?.GetStringAttribute(key) ?? "");
 
-        internal class Assets
+        // Computed properties (not static fields): each returns a fresh asset with a DETERMINISTIC
+        // Name, so addAsset stays idempotent. This deliberately avoids process-global static field
+        // initializers, which `dotnet watch` Hot Reload does NOT run when a field is added to an
+        // already-initialized type (leaving it null). Properties are recomputed every call, so they
+        // are always correct under hot reload and after a cold start alike.
+        internal static class Assets
         {
-            internal static AssetData TEXT = new Text3dAssetData("carc");
-            internal static AssetData MARKER = new CylinderAssetData("carcmark");
-            internal static AssetData MEEPLE = new CylinderAssetData("carcmeeple");
+            internal static AssetData TEXT   => new Text3dAssetData("carc");
+            internal static AssetData MARKER => new CylinderAssetData("carcmark");
+            internal static AssetData MEEPLE => new CylinderAssetData("carcmeeple");
+            internal static AssetData MAT    => new CylinderAssetData("carcmat");
         }
 
         // ============================ lifecycle ============================
         protected override Task Create()
         {
-            addAsset(Assets.TEXT); addAsset(Assets.MARKER); addAsset(Assets.MEEPLE);
-            GameData.Observer.Position.Set(0, 40, 24);
+            addAsset(Assets.TEXT); addAsset(Assets.MARKER); addAsset(Assets.MEEPLE); addAsset(Assets.MAT);
+            GameData.Attributes["noAvatars"] = "1";   // top-down map — no seated figures
+            GameData.Observer.Position.Set(0, 32, 20);
+            // Shared close-ish top-down view (the map is the same for everyone).
             for (int i = 0; i < 5; i++)   // 2..5 players
                 new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
-                    .AddAttribute("type", "p" + (i + 1)).SetCameraPosition(0, 34, 24).SetAvatarPosition(0, 0, 40);
+                    .AddAttribute("type", "p" + (i + 1)).SetCameraPosition(0, 28, 18).SetAvatarPosition(0, 0, 30);
             // pre-register tile face assets so they resolve
             for (int i = 0; i < TYPES.Count; i++) addAsset(new TokenAssetData($"carcassonne/tiles/t{i}.svg"));
             return Task.CompletedTask;
@@ -398,7 +406,9 @@ namespace MG.Server.GameFlows
         private void Render()
         {
             GameData.Table = ItemData.Table();
-            foreach (var p in GameData.Players) { p.Hand = new ItemData("", null) { Name = "HAND" }; p.Table = new ItemData("", null) { Name = "TABLE" }; }
+
+            // a big neutral mat under the map, for contrast/framing against the skybox
+            addItem(Assets.MAT).SetPosition(0, -0.15, 0).SetScale(60, 0.2, 60).AddAttribute("tint", "0x123021");
 
             var b = GetBoard();
             foreach (var key in b.Keys)
@@ -419,18 +429,24 @@ namespace MG.Server.GameFlows
             bool over = GameData.Attributes.ContainsKey("over");
             string cur = GameData.CurrentTurnId ?? "";
 
-            // floating status text above the board
+            // HUD lives in world space but ELEVATED (y>0) so it floats above the tile plane and never
+            // collides with the growing map. Fixed top-down camera → scores across the far edge,
+            // the current tile + meeple choices across the near edge. Text laid flat (-90) to read
+            // from above.
             addTextItem(Assets.TEXT).SetText(over ? GameData.Attributes.GetValueOrDefault("result", "Game over")
-                : $"{Name(cur)}'s turn  ·  {Bag().Count} tiles left").SetPosition(0, 8, -2).SetScale(1.0).AddAttribute("textColor", "ffd166");
+                : $"CARCASSONNE   ·   {Name(cur)}'s turn   ·   {Bag().Count} tiles left")
+                .SetPosition(0, 6, -15).SetScale(1.3).SetRotation(-90, 0, 0).AddAttribute("textColor", "ffd166");
 
-            // scores on each player's own table
-            foreach (var seat in GameData.Players.Where(pp => pp.Type != PlayerTypeEnum.EMPTY_SEAT))
-                addItemToPlayerTable(seat, Assets.TEXT)
-                    .SetText($"{Name(seat.Id)}  {Pts(seat.Id)}pts  ({GameData.Attributes.GetValueOrDefault("meeplesLeft:" + seat.Id, "0")} meeples)")
-                    .SetPosition(0, 2.2, 0).SetScale(0.5).AddAttribute("textColor", seat.Id == cur ? "ffd166" : "cbd5e1");
+            for (int i = 0; i < order.Count; i++)
+            {
+                var s = order[i];
+                addTextItem(Assets.TEXT)
+                    .SetText($"{Name(s)}  {Pts(s)}  ({GameData.Attributes.GetValueOrDefault("meeplesLeft:" + s, "0")}m)")
+                    .SetPosition(-((order.Count - 1) * 8.0) / 2 + i * 8.0, 6, -12).SetScale(0.8).SetRotation(-90, 0, 0)
+                    .AddAttribute("textColor", s == cur ? "ffd166" : "cbd5e1");
+            }
 
             if (over || Cur() < 0) return;
-            var curPlayer = GameData.Players.Find(p => p.Id == cur);
 
             if (Phase() == "place")
             {
@@ -442,15 +458,13 @@ namespace MG.Server.GameFlows
                     mk.ClickActions[cur] = nameof(PlaceTile);
                     mk.AddAttribute("x", c.x.ToString()).AddAttribute("y", c.y.ToString());
                 }
-                // current tile sits in the current player's HAND — click it to rotate; place on a green square
-                if (curPlayer != null)
-                {
-                    addItemToPlayerHand(curPlayer, TileAsset(Cur())).SetPosition(0, 0, 0).SetRotation(-90, -90 * Rot(), 0).SetScale(3, 1, 3)
-                        .AddAttribute("tile", "1").ClickActions[cur] = nameof(RotateTile);
-                    addItemToPlayerHand(curPlayer, Assets.TEXT).SetText("click tile = rotate").SetPosition(0, 0.1, 2.4).SetScale(0.4).AddAttribute("textColor", "cbd5e1");
-                }
+                // the current tile floats near the front edge — click it to rotate, then a green square
+                addItem(TileAsset(Cur())).SetPosition(-6, 4, 13).SetRotation(0, -90 * Rot(), 0).SetScale(SZ, 1, SZ)
+                    .AddAttribute("tile", "1").ClickActions[cur] = nameof(RotateTile);
+                addTextItem(Assets.TEXT).SetText("click tile = rotate  ·  click a green square")
+                    .SetPosition(1.5, 4, 13).SetScale(0.5).SetRotation(-90, 0, 0).AddAttribute("textColor", "cbd5e1");
             }
-            else if (Phase() == "meeple" && curPlayer != null)
+            else if (Phase() == "meeple")
             {
                 int x = int.Parse(GameData.Attributes["lastX"]), y = int.Parse(GameData.Attributes["lastY"]);
                 var opts = MeepleOptions(x, y);
@@ -460,11 +474,11 @@ namespace MG.Server.GameFlows
                 buttons.Add(("Skip", "0x6a4a25", nameof(SkipMeeple), null));
                 for (int i = 0; i < buttons.Count; i++)
                 {
-                    double bx = -((buttons.Count - 1) * 2.2) / 2 + i * 2.2;
-                    var bt = addItemToPlayerHand(curPlayer, Assets.MARKER).SetPosition(bx, 0, 0).SetScale(2, 0.4, 1.4).AddAttribute("tint", buttons[i].col).AddAttribute("button", "1");
+                    double bx = -((buttons.Count - 1) * 5.0) / 2 + i * 5.0;
+                    var bt = addItem(Assets.MARKER).SetPosition(bx, 4, 13).SetScale(4.6, 0.4, 1.8).AddAttribute("tint", buttons[i].col).AddAttribute("button", "1");
                     bt.ClickActions[cur] = buttons[i].action;
                     if (buttons[i].args != null) foreach (var kv in buttons[i].args!) bt.AddAttribute(kv.Key, kv.Value);
-                    addItemToPlayerHand(curPlayer, Assets.TEXT).SetText(buttons[i].label).SetPosition(bx, 0.3, 0).SetScale(0.3).AddAttribute("textColor", "ffffff");
+                    addTextItem(Assets.TEXT).SetText(buttons[i].label).SetPosition(bx, 4.3, 13).SetScale(0.34).SetRotation(-90, 0, 0).AddAttribute("textColor", "ffffff");
                 }
             }
         }

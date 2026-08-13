@@ -112,7 +112,11 @@ namespace MG.Server.GameFlows
             int seq = (DataRepository.Singleton?.Games?.Count(g => g.GameType == game.GameType) ?? 0) + 1;
             game.Name = PrettyName(game.GameType) + " " + seq;
 
-            _ = game.GameFlow.RunCreateFlow();
+            // Run the create flow to completion BEFORE returning/persisting the game. Every game's
+            // Create() completes synchronously (returns Task.CompletedTask), so this does not block;
+            // but it ensures seats/attributes are populated and — crucially — that any exception in
+            // Create() propagates to the caller instead of being silently swallowed by a discarded task.
+            game.GameFlow.RunCreateFlow().GetAwaiter().GetResult();
 
             return game;
         }
@@ -391,6 +395,9 @@ namespace MG.Server.GameFlows
         {
             // Idempotent: deterministic keys mean re-adding the same asset is a no-op
             // rather than a duplicate-key crash.
+            if (asset == null) throw new InvalidOperationException("addAsset: asset is NULL");
+            if (asset.Name == null) throw new InvalidOperationException("addAsset: asset.Name is NULL for type=" + asset.Type);
+            if (this.GameData?.Assets == null) throw new InvalidOperationException("addAsset: GameData.Assets is NULL");
             this.GameData.Assets[asset.Name] = asset;
             return asset;
         }
