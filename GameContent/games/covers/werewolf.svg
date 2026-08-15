@@ -1,0 +1,24 @@
+<svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e2a4a"/><stop offset="1" stop-color="#0a0a12"/></linearGradient></defs>
+  <rect width="320" height="200" fill="url(#g)"/>
+  <!-- stars -->
+  <g fill="#cdd6f4">
+    <circle cx="34" cy="30" r="1.6"/><circle cx="70" cy="58" r="1.2"/><circle cx="118" cy="24" r="1.4"/>
+    <circle cx="248" cy="40" r="1.4"/><circle cx="286" cy="70" r="1.2"/><circle cx="206" cy="18" r="1.2"/>
+    <circle cx="150" cy="64" r="1.1"/><circle cx="262" cy="112" r="1.2"/><circle cx="46" cy="96" r="1.2"/>
+  </g>
+  <!-- moon with glow -->
+  <circle cx="160" cy="78" r="52" fill="#3a4266" opacity="0.55"/>
+  <circle cx="160" cy="78" r="38" fill="#e4e2d2"/>
+  <circle cx="148" cy="68" r="6" fill="#cecbba"/><circle cx="172" cy="84" r="4.5" fill="#cecbba"/>
+  <circle cx="158" cy="94" r="3.5" fill="#cecbba"/>
+  <!-- ridge -->
+  <path d="M0 200 L0 168 L48 158 L104 170 L162 154 L226 168 L276 156 L320 164 L320 200 Z" fill="#0a0a10"/>
+  <!-- howling wolf silhouette -->
+  <g fill="#0a0a10">
+    <path d="M150 160
+             q6 -4 10 -12 q3 -8 8 -12 q1 -6 4 -10 q-1 -4 2 -8 q4 -2 5 -7 l3 -6 q3 4 8 5 q6 1 8 6
+             q-4 3 -6 8 q-2 6 -3 12 q4 8 8 12 q4 6 4 12 z"/>
+    <path d="M150 160 q-14 -2 -20 -8 q-6 2 -4 8 z"/>
+  </g>
+</svg>
