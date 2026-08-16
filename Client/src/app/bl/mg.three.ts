@@ -337,68 +337,27 @@ export class MgThree{
     // Refresh the canvas whenever the window resizes.
     window.addEventListener('resize', this.onWindowResize);
 
+    // ---- VR view preservation --------------------------------------------------------------
+    // Entering VR keeps the player's current viewpoint: remember the desktop camera pose here,
+    // then (on the first tracked frame — see alignXrToDesktopView) shift the XR reference space
+    // so the headset starts exactly at that position, turned to face the same spot.
     this.renderer.xr.addEventListener("sessionstart", () => {
-
-
-      this.renderer.xr.getCamera().position.copy(this.camera.position);
-      this.renderer.xr.getCamera().lookAt(this.orbitControls.target);
-
-      // const xrManager = this.renderer.xr,
-      //   camera = this.camera,
-      //   baseReferenceSpace = xrManager.getReferenceSpace(),
-      //   offsetPosition = camera.position,
-      //   offsetRotation = camera.quaternion;
-      //
-      // // const transform = new XRRigidTransform( offsetPosition, { x: this.config.xrTiltOffset ? offsetRotation.x : 0, y: -(offsetRotation.y - this.config.xrPanOffset), z: offsetRotation.z, w: offsetRotation.w } ),
-      // //   //const transform = new XRRigidTransform( offsetPosition, { x: offsetRotation.x, y: -(offsetRotation.y - 0.5) , z: offsetRotation.z, w: offsetRotation.w } ),
-      // //   teleportSpaceOffset = baseReferenceSpace.getOffsetReferenceSpace( transform );
-      //
-      // const transform = new XRRigidTransform(offsetPosition, {
-      //     x: offsetRotation.x,
-      //     y: offsetRotation.y,
-      //     z: offsetRotation.z,
-      //     w: offsetRotation.w,
-      //   }),
-      //   teleportSpaceOffset = baseReferenceSpace!.getOffsetReferenceSpace( transform );
-      //
-      // xrManager.setReferenceSpace( teleportSpaceOffset );
-
-      // this.orbitControls.update();
-      //
-      // const baseReferenceSpace = this.renderer.xr.getReferenceSpace();
-      //
-      // const offsetPosition = this.camera.position;
-      //
-      // //const offsetRotation = camera.rotation;
-      //
-      // const offsetRotation = this.camera.quaternion;
-      //
-      // // const transform = new XRRigidTransform( offsetPosition, { x: offsetRotation.x, y: -(offsetRotation.y), z: offsetRotation.z, w: offsetRotation.w } );
-      // const transform = new XRRigidTransform( offsetPosition, { x: offsetRotation.x, y: -(offsetRotation.y - 0.85), z: offsetRotation.z, w: offsetRotation.w } );
-      // const teleportSpaceOffset = baseReferenceSpace!.getOffsetReferenceSpace( transform );
-      //
-      // this.renderer.xr.setReferenceSpace( teleportSpaceOffset );
-
-      // this.orbitControls.update();
-      //
-      // const baseReferenceSpace = this.renderer.xr.getReferenceSpace();
-      //
-      // const offsetPosition = this.camera.position;
-      //
-      //
-      // const offsetRotation = this.camera.quaternion;
-      //
-      // const transform = new XRRigidTransform( offsetPosition, { x: offsetRotation.x, y: -(offsetRotation.y), z: offsetRotation.z, w: offsetRotation.w } );
-      //
-      // const teleportSpaceOffset = baseReferenceSpace!.getOffsetReferenceSpace( transform );
-      //
-      // this.renderer.xr.setReferenceSpace( teleportSpaceOffset );
-
+      this.cameraBeforeVr = { pos: this.camera.position.clone(), target: this.orbitControls.target.clone() };
+      this.xrDesiredView  = { pos: this.camera.position.clone(), target: this.orbitControls.target.clone() };
+      // Clear any stale pose left from a previous VR session, so alignXrToDesktopView only fires
+      // once THIS session's first real headset pose has been written (identity = not yet tracked).
+      this.renderer.xr.getCamera().matrixWorld.identity();
     });
     this.renderer.xr.addEventListener('sessionend', () => {
-      // this.camera.position
-      // TODO !!!!
-      debugger
+      // Leaving VR: restore the desktop camera to where it was before the session (WebXR has
+      // been writing headset poses into it every frame).
+      this.xrDesiredView = null;
+      if (this.cameraBeforeVr) {
+        this.camera.position.copy(this.cameraBeforeVr.pos);
+        this.orbitControls.target.copy(this.cameraBeforeVr.target);
+        this.orbitControls.update();
+        this.cameraBeforeVr = null;
+      }
     });
 
 
@@ -509,6 +468,9 @@ export class MgThree{
         this.handleController(controller);
       })
     }
+
+    // VR entry: align the rig to the pre-VR desktop view (no-op once applied / when not in VR).
+    if (this.renderer.xr.isPresenting && this.xrDesiredView) this.alignXrToDesktopView();
 
     this.orbitControls.update();
     this.interactionManager.update();
@@ -736,6 +698,50 @@ export class MgThree{
     }
 
     return controllers;
+  }
+
+  // ---- VR view preservation ----------------------------------------------------------------
+  // Where the desktop camera was when the session started (restored on exit), and the view the
+  // XR rig must be aligned to (consumed by alignXrToDesktopView on the first tracked frame).
+  private cameraBeforeVr: { pos: THREE.Vector3, target: THREE.Vector3 } | null = null;
+  private xrDesiredView: { pos: THREE.Vector3, target: THREE.Vector3 } | null = null;
+
+  // Move the XR reference space so the headset appears exactly at the desktop camera's position,
+  // yawed to face the orbit target (yaw only — pitch stays physical, the user just looks down at
+  // the board like they would in real life). Runs once per session, on the first frame that has
+  // a real headset pose: only then do we know the player's physical head height/offset, so the
+  // delta between "where the head is" and "where it should be" is exact.
+  private alignXrToDesktopView() {
+    const base: any = this.renderer.xr.getReferenceSpace();
+    if (!base || !this.xrDesiredView) return;
+
+    const xrCam = this.renderer.xr.getCamera();
+    const head = new THREE.Vector3().setFromMatrixPosition(xrCam.matrixWorld);
+    if (head.lengthSq() < 1e-9) return;   // identity matrix = no tracked pose yet, try next frame
+
+    const d = this.xrDesiredView;
+    this.xrDesiredView = null;            // apply once
+
+    // yaw delta between where the head currently looks and the desktop view direction
+    const headDir = new THREE.Vector3(0, 0, -1)
+      .applyQuaternion(new THREE.Quaternion().setFromRotationMatrix(xrCam.matrixWorld));
+    const desDir = new THREE.Vector3().subVectors(d.target, d.pos);
+    const yawDelta = Math.atan2(desDir.x, desDir.z) - Math.atan2(headDir.x, headDir.z);
+
+    // M maps the current head pose onto the desired one: translate the head to the origin,
+    // yaw it, then translate to the desktop camera position.
+    const M = new THREE.Matrix4().makeTranslation(d.pos.x, d.pos.y, d.pos.z)
+      .multiply(new THREE.Matrix4().makeRotationY(yawDelta))
+      .multiply(new THREE.Matrix4().makeTranslation(-head.x, -head.y, -head.z));
+
+    // getOffsetReferenceSpace expects the transform of the NEW space's origin expressed in the
+    // old space (pose_new = O⁻¹ · pose_old), so pass O = M⁻¹.
+    const p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+    M.invert().decompose(p, q, s);
+    const XRT: any = (window as any).XRRigidTransform;
+    this.renderer.xr.setReferenceSpace(
+      base.getOffsetReferenceSpace(new XRT({ x: p.x, y: p.y, z: p.z, w: 1 },
+                                           { x: q.x, y: q.y, z: q.z, w: q.w })));
   }
 
   startVr() {
