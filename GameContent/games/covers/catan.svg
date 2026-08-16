@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240">
+<rect width="360" height="240" fill="#2d567f"/>
+<g transform="translate(180,120) scale(0.55)">
+<path d="M0.0,-110.0 L95.3,-55.0 L95.3,55.0 L0.0,110.0 L-95.3,55.0 L-95.3,-55.0 Z" fill="#e0b93c"/>
+<path d="M-170.0,-205.0 L-74.7,-150.0 L-74.7,-40.0 L-170.0,15.0 L-265.3,-40.0 L-265.3,-150.0 Z" fill="#1e6b34"/><path d="M170.0,-205.0 L265.3,-150.0 L265.3,-40.0 L170.0,15.0 L74.7,-40.0 L74.7,-150.0 Z" fill="#c1633a"/>
+<path d="M-170.0,-15.0 L-74.7,40.0 L-74.7,150.0 L-170.0,205.0 L-265.3,150.0 L-265.3,40.0 Z" fill="#8a8f98"/><path d="M170.0,-15.0 L265.3,40.0 L265.3,150.0 L170.0,205.0 L74.7,150.0 L74.7,40.0 Z" fill="#7fbf4d"/>
+<circle r="34" fill="#efe3c0"/><text y="12" font-family="Georgia,serif" font-size="36" font-weight="bold" text-anchor="middle" fill="#c0392b">8</text>
+</g>
+<text x="180" y="222" font-family="Georgia,serif" font-size="26" font-weight="bold" text-anchor="middle" fill="#f4ead2">CATAN</text>
+</svg>
