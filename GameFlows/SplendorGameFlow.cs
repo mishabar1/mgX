@@ -27,21 +27,66 @@ namespace MG.Server.GameFlows
         private static string Arg(ExecuteActionData d, string key)
             => d.args != null && d.args.TryGetValue(key, out var v) ? v : (d.Item?.GetStringAttribute(key) ?? "");
 
-        internal class Assets
+        internal static class Assets
         {
-            internal static AssetData TEXT = new Text3dAssetData("spl");
-            internal static AssetData GEMDISC = new CylinderAssetData("splgem");
-            internal static AssetData BTN = new TokenAssetData("splendor/btn.svg");
-            internal static AssetData NOBLE = new TokenAssetData("splendor/noble.svg");
-            internal static AssetData TABLE = new CylinderAssetData("spltable");
+            internal static AssetData TEXT    => new Text3dAssetData("spl");
+            internal static AssetData GEMDISC => new CylinderAssetData("splgem");
+            internal static AssetData BTN     => new TokenAssetData("splendor/btn.svg");
+            internal static AssetData TABLE   => new CylinderAssetData("spltable");
         }
-        private AssetData CardAsset(string bonus) => addAsset(new TokenAssetData($"splendor/card_{bonus}.svg"));
+        // real art (extracted from the print-and-play set): every card/noble/token has its own face
+        private AssetData CardArt(string art, int tier) => addAsset(new TokenAssetData($"splendor/cards/{art}", $"splendor/cards/back_t{tier}.png"));
+        private AssetData NobleArt(string art) => addAsset(new TokenAssetData($"splendor/nobles/{art}", "splendor/nobles/back.png"));
+        private AssetData TokArt(string c) => addAsset(new TokenAssetData($"splendor/tok_{c}.png"));
+
+        // ============================ the OFFICIAL deck (90 cards) ============================
+        // Extracted card-by-card from the PnP set and verified against the official Splendor
+        // distribution (each tier/bonus has exactly the official cost classes).
+        // Row format: bonus : points : cost e#s#r#d#o : art file.
+        private static readonly string[] DECK1 = {
+            "d:1:4#0#0#0#0:t1_09.png","d:0:2#1#1#0#1:t1_10.png","d:0:2#2#0#0#1:t1_11.png","d:0:0#1#0#3#1:t1_12.png",
+            "s:0:0#0#0#1#2:t1_13.png","s:0:0#0#0#0#3:t1_14.png","s:0:1#0#1#1#1:t1_15.png","s:0:2#0#0#0#2:t1_16.png",
+            "s:1:0#0#4#0#0:t1_17.png","s:0:1#0#2#1#1:t1_18.png","e:0:0#1#0#2#0:t1_19.png","e:0:0#0#3#0#0:t1_20.png",
+            "e:0:0#1#1#1#1:t1_21.png","s:0:2#0#2#1#0:t1_22.png","s:0:3#1#1#0#0:t1_23.png","e:0:0#2#2#0#0:t1_24.png",
+            "e:1:0#0#0#0#4:t1_25.png","e:0:0#1#1#1#2:t1_26.png","e:0:0#1#2#0#2:t1_27.png","e:0:1#3#0#1#0:t1_28.png",
+            "r:0:1#2#0#0#0:t1_29.png","r:0:0#0#0#3#0:t1_30.png","r:0:1#1#0#1#1:t1_31.png","r:0:0#0#2#2#0:t1_32.png",
+            "r:1:0#0#0#4#0:t1_33.png","r:0:1#1#0#2#1:t1_34.png","r:0:1#0#0#2#2:t1_35.png","r:0:0#0#1#1#3:t1_36.png",
+            "o:0:2#0#1#0#0:t1_37.png","o:0:3#0#0#0#0:t1_38.png","o:0:1#1#1#1#0:t1_39.png","o:0:2#0#0#2#0:t1_40.png",
+            "o:1:0#4#0#0#0:t1_41.png","o:0:1#2#1#1#0:t1_42.png","o:0:0#2#1#2#0:t1_43.png","o:0:1#0#3#0#1:t1_44.png",
+            "d:0:0#3#0#0#0:t1_45.png","d:0:0#0#2#0#1:t1_46.png","d:0:1#1#1#0#1:t1_47.png","d:0:0#2#0#0#2:t1_48.png",
+        };
+        private static readonly string[] DECK2 = {
+            "o:2:5#0#3#0#0:t2_09.png","d:2:0#0#5#0#0:t2_10.png","d:3:0#0#0#6#0:t2_11.png","d:1:0#3#3#2#0:t2_12.png",
+            "d:2:1#0#4#0#2:t2_13.png","d:1:3#0#2#0#2:t2_14.png","s:3:6#0#0#0#0:t2_15.png","s:2:5#0#0#0#0:t2_16.png",
+            "d:2:0#0#5#0#3:t2_17.png","s:1:0#3#0#2#2:t2_18.png","s:1:2#0#3#3#0:t2_19.png","s:2:0#2#0#4#1:t2_20.png",
+            "s:2:3#5#0#0#0:t2_21.png","e:2:5#0#0#0#0:t2_22.png","e:3:6#0#0#0#0:t2_23.png","e:1:0#3#0#2#2:t2_24.png",
+            "e:1:2#0#3#3#0:t2_25.png","e:2:0#2#0#4#1:t2_26.png","e:2:3#5#0#0#0:t2_27.png","r:2:0#0#0#0#5:t2_28.png",
+            "r:3:0#0#6#0#0:t2_29.png","r:1:0#0#2#2#3:t2_30.png","r:2:2#4#0#1#0:t2_31.png","r:1:0#3#2#0#3:t2_32.png",
+            "r:2:0#0#0#3#5:t2_33.png","o:2:0#0#0#0#5:t2_34.png","o:3:0#0#0#0#6:t2_35.png","o:1:2#2#0#3#0:t2_36.png",
+            "o:2:4#1#2#0#0:t2_37.png","o:1:3#0#0#3#2:t2_38.png",
+        };
+        private static readonly string[] DECK3 = {
+            "d:3:3#3#5#0#3:t3_09.png","s:5:0#3#0#7#0:t3_10.png","e:4:3#6#0#3#0:t3_11.png","d:4:0#0#0#0#7:t3_12.png",
+            "d:5:0#0#0#3#7:t3_13.png","d:4:0#0#3#3#6:t3_14.png","s:4:0#0#0#7#0:t3_15.png","s:4:0#3#0#6#3:t3_16.png",
+            "r:3:3#5#0#3#3:t3_17.png","s:3:3#0#3#3#5:t3_18.png","e:4:0#7#0#0#0:t3_19.png","e:3:0#3#3#5#3:t3_20.png",
+            "e:5:3#7#0#0#0:t3_21.png","r:4:7#0#0#0#0:t3_22.png","r:5:7#0#3#0#0:t3_23.png","r:4:6#3#3#0#0:t3_24.png",
+            "o:4:0#0#7#0#0:t3_25.png","o:5:0#0#7#0#3:t3_26.png","o:4:3#0#6#0#3:t3_27.png","o:3:5#3#3#3#0:t3_28.png",
+        };
+        // the 10 official nobles: requirement e#s#r#d#o : art file (all give 3 points)
+        private static readonly string[] NOBLES = {
+            "0#0#0#4#4:n0.png","0#3#0#3#3:n1.png","0#4#0#4#0:n2.png","0#0#3#3#3:n3.png","3#0#3#0#3:n4.png",
+            "3#3#0#3#0:n5.png","3#3#3#0#0:n6.png","4#0#4#0#0:n7.png","0#0#4#0#4:n8.png","4#4#0#0#0:n9.png",
+        };
 
         // ============================ lifecycle ============================
         protected override Task Create()
         {
-            addAsset(Assets.TEXT); addAsset(Assets.GEMDISC); addAsset(Assets.BTN); addAsset(Assets.NOBLE); addAsset(Assets.TABLE);
-            foreach (var c in GEM) CardAsset(c);
+            addAsset(Assets.TEXT); addAsset(Assets.GEMDISC); addAsset(Assets.BTN); addAsset(Assets.TABLE);
+            // pre-register the real art: all 90 card faces (+ tier backs), 10 nobles, 6 token kinds
+            foreach (var (tier, rows) in new[] { (1, DECK1), (2, DECK2), (3, DECK3) })
+                foreach (var r in rows) CardArt(r.Split(':')[3], tier);
+            foreach (var nb in NOBLES) NobleArt(nb.Split(':')[1]);
+            foreach (var c in GEM.Append("g")) TokArt(c);
             GameData.Observer.Position.Set(0, 30, 18);
             // four seats evenly around the round table (near/far/right/left). A fairly steep 3/4
             // view (high + not too far back) shows the whole round table with every seat around it.
@@ -65,17 +110,31 @@ namespace MG.Server.GameFlows
             GameData.CurrentTurnId = seats[0];
             int gemEach = n <= 2 ? 4 : n == 3 ? 5 : 7;
             SetInts("bank", new[] { gemEach, gemEach, gemEach, gemEach, gemEach, 5 });
-            foreach (var (tier, count) in new[] { (1, 40), (2, 30), (3, 20) })
+            foreach (var (tier, rows) in new[] { (1, DECK1), (2, DECK2), (3, DECK3) })
             {
                 var ids = new List<string>();
-                for (int i = 0; i < count; i++) { string id = $"k{tier}_{i}"; GameData.Attributes["card:" + id] = GenCard(tier, rnd); ids.Add(id); }
+                for (int i = 0; i < rows.Length; i++)
+                {
+                    // row = bonus : pts : cost : art  →  card state (engine format) + its art file
+                    var f = rows[i].Split(':');
+                    string id = $"k{tier}_{i}";
+                    GameData.Attributes["card:" + id] = $"{tier}:{f[0]}:{f[1]}:{f[2]}";
+                    GameData.Attributes["cardart:" + id] = f[3];
+                    ids.Add(id);
+                }
                 Shuffle(ids, rnd);
                 GameData.Attributes["row" + tier] = string.Join(",", ids.Take(4));
                 GameData.Attributes["deck" + tier] = string.Join(",", ids.Skip(4));
             }
-            var nobles = GenNobles(rnd); Shuffle(nobles, rnd);
+            // the 10 official nobles — art file per noble; n+1 of them enter play
+            var nobles = NOBLES.ToList(); Shuffle(nobles, rnd);
             var active = nobles.Take(n + 1).ToList();
-            for (int i = 0; i < active.Count; i++) GameData.Attributes["noble:n" + i] = active[i];
+            for (int i = 0; i < active.Count; i++)
+            {
+                var f = active[i].Split(':');
+                GameData.Attributes["noble:n" + i] = "3:" + f[0];
+                GameData.Attributes["nobleart:n" + i] = f[1];
+            }
             GameData.Attributes["nobles"] = string.Join(",", Enumerable.Range(0, active.Count).Select(i => "n" + i));
             foreach (var s in seats)
             {
@@ -103,26 +162,6 @@ namespace MG.Server.GameFlows
             return GameData.Players.Where(p => set.Contains(p.Id)).ToList();
         }
 
-        // ============================ card / noble generation ============================
-        private static string GenCard(int tier, Random rnd)
-        {
-            string bonus = GEM[rnd.Next(5)]; int total, pts;
-            if (tier == 1) { total = rnd.Next(3, 6); pts = rnd.Next(10) == 0 ? 1 : 0; }
-            else if (tier == 2) { total = rnd.Next(6, 10); pts = rnd.Next(1, 4); }
-            else { total = rnd.Next(11, 17); pts = rnd.Next(3, 6); }
-            var cost = new int[5];
-            for (int k = 0; k < total; k++) { int c = rnd.Next(5); if (c == Idx(bonus)) c = (c + 1) % 5; cost[c]++; }
-            return $"{tier}:{bonus}:{pts}:{string.Join("#", cost)}";
-        }
-        private static List<string> GenNobles(Random rnd)
-        {
-            var list = new List<string>();
-            foreach (var (a, b) in new[] { (0, 1), (0, 2), (0, 3), (0, 4), (1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4) }.OrderBy(_ => rnd.Next()).Take(5))
-            { var req = new int[5]; req[a] = 4; req[b] = 4; list.Add("3:" + string.Join("#", req)); }
-            foreach (var (a, b, c) in new[] { (0, 1, 2), (0, 1, 3), (0, 2, 4), (1, 3, 4), (2, 3, 4), (0, 3, 4), (1, 2, 3) }.OrderBy(_ => rnd.Next()).Take(5))
-            { var req = new int[5]; req[a] = 3; req[b] = 3; req[c] = 3; list.Add("3:" + string.Join("#", req)); }
-            return list;
-        }
 
         // ============================ actions (all triggered by clicking 3D items) ============================
         [GameAction] public async Task PickGem(ExecuteActionData d) { DoPick(d.Player!.Id, Arg(d, "color")); await Task.CompletedTask; }
@@ -134,6 +173,7 @@ namespace MG.Server.GameFlows
 
         private bool MyTurn(string seat) => seat == GameData.CurrentTurnId && !GameData.Attributes.ContainsKey("over");
         private string Sel(string seat) => GameData.Attributes.GetValueOrDefault("selcard:" + seat, "");
+        private string Attr(string k) => GameData.Attributes.GetValueOrDefault(k, "");
         private List<string> Pending(string seat) => ListAttr("pending:" + seat);
 
         private void DoPick(string seat, string color)
@@ -311,7 +351,15 @@ namespace MG.Server.GameFlows
             {
                 var row = ListAttr("row" + tier);
                 for (int i = 0; i < row.Count; i++) BoardCard(row[i], -4.5 + i * 3, tierZ[tier], cur);
-                addTextItem(Assets.TEXT).SetText($"T{tier}·{ListAttr("deck" + tier).Count}").SetPosition(-8.3, 0.1, tierZ[tier]).SetScale(0.4).SetRotation(-90, 0, 0).AddAttribute("textColor", "cbd5e1");
+                // the face-down draw pile of this tier (real card back) + remaining count
+                int left = ListAttr("deck" + tier).Count;
+                if (left > 0)
+                {
+                    var deckIds = ListAttr("deck" + tier);
+                    addItem(CardArt(Attr("cardart:" + deckIds[0]), tier)).SetPosition(-8.3, 0.05, tierZ[tier])
+                        .SetRotation(0, 0, 180).SetScale(2.3, 1, 3.2);   // flipped = back showing
+                    addTextItem(Assets.TEXT).SetText(left.ToString()).SetPosition(-8.3, 0.35, tierZ[tier]).SetScale(0.45).SetRotation(-90, 0, 0).AddAttribute("textColor", "ffffff");
+                }
             }
 
             var bank = Ints("bank");
@@ -320,7 +368,7 @@ namespace MG.Server.GameFlows
 
             var nobles = ListAttr("nobles");
             for (int i = 0; i < nobles.Count; i++)
-                addItem(Assets.NOBLE).SetPosition(6.5, 0.05, -((nobles.Count - 1) * 2.1) / 2 + i * 2.1).SetScale(1.8, 1, 1.8).AddAttribute("noble", "1");
+                addItem(NobleArt(Attr("nobleart:" + nobles[i]))).SetPosition(6.5, 0.05, -((nobles.Count - 1) * 2.3) / 2 + i * 2.3).SetScale(2.1, 1, 2.1).AddAttribute("noble", "1");
 
             // per-player zones (tokens/bonuses on table, reserved cards in hand, points overhead)
             foreach (var seat in GameData.Players.Where(p => p.Type != PlayerTypeEnum.EMPTY_SEAT))
@@ -332,24 +380,21 @@ namespace MG.Server.GameFlows
 
         private void GemPile(string c, int count, double x, double z, string clickSeat)
         {
-            var d = addItem(Assets.GEMDISC).SetPosition(x, 0.25, z).SetScale(1.6, 0.5, 1.6).AddAttribute("tint", HEX[c]).AddAttribute("gem", "1");
+            // real token art (a flat chip); a thin disc underneath gives it a little body
+            addItem(Assets.GEMDISC).SetPosition(x, 0.10, z).SetScale(1.5, 0.2, 1.5).AddAttribute("tint", "0x1a1a1a");
+            var d = addItem(TokArt(c)).SetPosition(x, 0.22, z).SetScale(1.5, 1, 1.5).AddAttribute("gem", "1");
             if (!string.IsNullOrEmpty(clickSeat) && count > 0) { d.ClickActions[clickSeat] = nameof(PickGem); d.AddAttribute("color", c); }
-            addTextItem(Assets.TEXT).SetText(count.ToString()).SetPosition(x, 0.6, z).SetScale(0.5).SetRotation(-90, 0, 0).AddAttribute("textColor", "ffffff");
+            addTextItem(Assets.TEXT).SetText(count.ToString()).SetPosition(x + 1.1, 0.3, z + 0.6).SetScale(0.42).SetRotation(-90, 0, 0).AddAttribute("textColor", "ffffff");
         }
 
         private void BoardCard(string id, double x, double z, string clickSeat)
         {
+            // the REAL card face (points/bonus/cost are printed on the art — no overlays needed)
             var def = Card(id)!;
             bool selected = Sel(clickSeat) == id;
-            var card = addItem(CardAsset(def.bonus)).SetPosition(x, 0.05, z).SetScale(2.3, 1, 2.8).AddAttribute("card", "1");
+            var card = addItem(CardArt(Attr("cardart:" + id), def.tier)).SetPosition(x, 0.05, z).SetScale(2.3, 1, 3.2).AddAttribute("card", "1");
             if (!string.IsNullOrEmpty(clickSeat)) { card.ClickActions[clickSeat] = nameof(SelectCard); card.AddAttribute("cardid", id); }
             if (selected) card.AddAttribute("selected", "1");
-            if (def.points > 0) addTextItem(Assets.TEXT).SetText(def.points.ToString()).SetPosition(x + 0.85, 0.12, z - 1.35).SetScale(0.5).SetRotation(-90, 0, 0).AddAttribute("textColor", "1f2937");
-            // cost pips along the bottom of the card
-            int k = 0; for (int c = 0; c < 5; c++) if (def.cost[c] > 0)
-            { double px = x - 0.9 + k * 0.55; k++;
-              addItem(Assets.GEMDISC).SetPosition(px, 0.12, z + 1.15).SetScale(0.5, 0.3, 0.5).AddAttribute("tint", HEX[GEM[c]]);
-              addTextItem(Assets.TEXT).SetText(def.cost[c].ToString()).SetPosition(px, 0.22, z + 1.15).SetScale(0.28).SetRotation(-90, 0, 0).AddAttribute("textColor", GEM[c] == "d" ? "111827" : "ffffff"); }
         }
 
         private void PlayerZone(PlayerData seat, string cur)
@@ -360,16 +405,20 @@ namespace MG.Server.GameFlows
             for (int c = 0; c < 5; c++)
             {
                 double x = -2.4 + c * 1.2;
-                addItemToPlayerTable(seat, Assets.GEMDISC).SetPosition(x, 0, 0).SetScale(0.9, 0.35, 0.9).AddAttribute("tint", HEX[GEM[c]]);
+                addItemToPlayerTable(seat, TokArt(GEM[c])).SetPosition(x, 0, 0).SetScale(0.9, 1, 0.9);
                 addItemToPlayerTable(seat, Assets.TEXT).SetText($"{bon[c]}·{tok[c]}").SetPosition(x, 0.35, 0.7).SetScale(0.3).SetRotation(-90, 0, 0).AddAttribute("textColor", "e8edf5");
             }
-            if (tok[5] > 0) addItemToPlayerTable(seat, Assets.TEXT).SetText($"gold {tok[5]}").SetPosition(3.4, 0.35, 0.7).SetScale(0.3).SetRotation(-90, 0, 0).AddAttribute("textColor", "f59e0b");
+            if (tok[5] > 0)
+            {
+                addItemToPlayerTable(seat, TokArt("g")).SetPosition(3.4, 0, 0).SetScale(0.9, 1, 0.9);
+                addItemToPlayerTable(seat, Assets.TEXT).SetText(tok[5].ToString()).SetPosition(3.4, 0.35, 0.7).SetScale(0.3).SetRotation(-90, 0, 0).AddAttribute("textColor", "f59e0b");
+            }
             // reserved cards in the player's hand (clickable by owner on their turn)
             var resv = ResvList(seat.Id);
             for (int i = 0; i < resv.Count; i++)
             {
                 var def = Card(resv[i])!;
-                var card = addItemToPlayerHand(seat, CardAsset(def.bonus)).SetPosition(-1.6 + i * 1.6, 0, 0).SetScale(1.3, 1, 1.7).AddAttribute("card", "1");
+                var card = addItemToPlayerHand(seat, CardArt(Attr("cardart:" + resv[i]), def.tier)).SetPosition(-1.6 + i * 1.6, 0, 0).SetScale(1.3, 1, 1.8).AddAttribute("card", "1");
                 if (seat.Id == cur) { card.ClickActions[cur] = nameof(SelectCard); card.AddAttribute("cardid", resv[i]); if (Sel(cur) == resv[i]) card.AddAttribute("selected", "1"); }
             }
         }
