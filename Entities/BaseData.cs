@@ -21,13 +21,15 @@ namespace MG.Server.Entities
         }
         internal T AddAttribute(string key, string val)
         {
-            Attributes.Add(key, val);
+            // upsert: setting an attribute that already exists overwrites it (Dictionary.Add
+            // would throw — e.g. re-setting an item's animNonce/tint on a later action).
+            Attributes[key] = val;
             return (T)this;
         }
         internal T AddAttribute(string key, double val)
         {
-            Attributes.Add(key, val.ToString());
-            return (T)this; 
+            Attributes[key] = val.ToString();
+            return (T)this;
         }
 
         internal double GetNumberAttribute(string key)
