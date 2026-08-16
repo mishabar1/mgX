@@ -50,6 +50,10 @@ namespace MG.Server.Entities
         public string? Confirm { get; set; }      // for "button": window.confirm(text) before dispatching
         public List<string>? Gather { get; set; } // for "button": input/select ids to read into args[id]
 
+        // for "image": small images layered ON TOP of the base image (markers/badges), positioned
+        // in PERCENT of the base image so they stay glued to the right spot at any render size.
+        public List<UiOverlay>? Overlays { get; set; }
+
         // ---- tiny fluent helpers so game flows read cleanly ----
         public static UiNode Col(params UiNode[] kids) => new UiNode { Type = "col", Children = new(kids) };
         public static UiNode Row(params UiNode[] kids) => new UiNode { Type = "row", Children = new(kids) };
@@ -83,9 +87,32 @@ namespace MG.Server.Entities
         public static UiNode Pill(string text, string bg, string color = "ffffff")
             => new UiNode { Type = "text", Text = text, Bg = bg, Color = color, Style = "pill" };
 
+        // A compact rounded tag that hugs its text (unlike Pill it doesn't stretch to fill the
+        // row) — for dense info like vote records ("✔ Misha") or tiny labels ("M1").
+        public static UiNode Chip(string text, string bg, string color = "ffffff")
+            => new UiNode { Type = "text", Text = text, Bg = bg, Color = color, Style = "chip" };
+
         public UiNode With(List<UiNode> kids) { Children = kids; return this; }
         public UiNode SetBg(string hex) { Bg = hex; return this; }
         public UiNode SetStyle(string s) { Style = s; return this; }
+
+        // Layer a marker image on top of an "image" node. x/y = CENTER of the marker, w = its
+        // width — all in percent of the base image, so the marker tracks the same map spot at
+        // any panel size. E.g. Resistance stamps the current mission + past results on the map.
+        public UiNode WithOverlay(string url, double xPct, double yPct, double wPct)
+        {
+            (Overlays ??= new()).Add(new UiOverlay { Url = url, X = xPct, Y = yPct, W = wPct });
+            return this;
+        }
+    }
+
+    // A positioned marker on top of a UiNode image (see UiNode.WithOverlay).
+    public class UiOverlay
+    {
+        public string Url { get; set; } = "";
+        public double X { get; set; }   // centre, % of base image width
+        public double Y { get; set; }   // centre, % of base image height
+        public double W { get; set; }   // width, % of base image width
     }
 
     public class UiOption

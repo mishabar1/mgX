@@ -320,7 +320,17 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       case 'banner':return `<div class="sp-banner ${nd.style || ''}">${esc(nd.text)}</div>`;
       case 'log':   return `<div class="sp-log">${esc(nd.text)}</div>`;
       case 'space': return `<div style="height:${nd.size || 8}px"></div>`;
-      case 'image': return `<img class="sp-img ${nd.style || ''}" src="${GAMES_BASE}${nd.url}"${nd.size ? ` style="height:${nd.size}px"` : ''}>`;
+      case 'image': {
+        const img = `<img class="sp-img ${nd.style || ''}" src="${GAMES_BASE}${nd.url}"${nd.size ? ` style="height:${nd.size}px"` : ''}>`;
+        // Generic "item over item": the server can layer marker images on top of a base image
+        // (nd.overlays: url + x/y centre + width, all in % of the base) — e.g. Resistance stamps
+        // the current mission + past results onto the map. Percent units keep markers glued to
+        // the same map spot at any panel size.
+        if (!nd.overlays?.length) return img;
+        const marks = nd.overlays.map((o: any) =>
+          `<img src="${GAMES_BASE}${o.url}" style="position:absolute;left:${o.x}%;top:${o.y}%;width:${o.w}%;transform:translate(-50%,-50%);pointer-events:none;">`).join('');
+        return `<span style="position:relative;display:inline-block;line-height:0;">${img}${marks}</span>`;
+      }
       case 'model': return `<img class="sp-img sp-model ${nd.style || ''}" data-model="${nd.url}"${nd.size ? ` style="height:${nd.size}px"` : ''}>`;
       case 'button': {
         const isModel = nd.url && /\.(gltf|glb|obj|stl)$/i.test(nd.url);  // model icon → client thumbnail
@@ -380,6 +390,9 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       .sp-banner.res,.sp-banner.win{background:#123a20;color:#8fffb0;}
       .sp-banner.spy,.sp-banner.lose{background:#3a1414;color:#ff9b9b;}
       .sp-text.pill{flex:1;text-align:center;padding:8px 0;border-radius:8px;background:#241a12;border:1px solid #5a4632;font-size:14px;margin:0;}
+      .sp-text.chip{padding:2px 10px;border-radius:999px;font-size:12.5px;margin:0;border:1px solid rgba(255,255,255,.14);white-space:nowrap;}
+      .sp-col.hist{margin-top:12px;border-top:1px solid #5a4632;padding-top:8px;max-height:260px;overflow-y:auto;}
+      .sp-col.hist .sp-row{margin:2px 0;}
       .sp-text.pill.cur{outline:2px solid #d9b98a;}
       .sp-text.pill.s{background:#123a20;border-color:#2f7a45;} .sp-text.pill.f{background:#3a1414;border-color:#7a2f2f;}
       .sp-text.teamrow{font-size:18px;font-weight:700;color:#ffe0a8;padding:8px 12px;background:#241a12;border:1px solid #5a4632;border-radius:9px;margin-bottom:6px;}

@@ -19,28 +19,95 @@ namespace MG.Server.GameFlows
     // one region unless a straight road bisects it). Rotation just rotates the edges.
     public class CarcassonneGameFlow : BaseGameFlow
     {
-        private class TileType { public string e = "FFFF"; public bool mon, shield; public int count;
-            public TileType(string e, bool m, bool s, int c) { this.e = e; mon = m; shield = s; count = c; } }
+        // One entry per PHYSICAL tile of the official base game (new edition) — art extracted from
+        // the print-and-play PDF, each copy has its own painting. `e` = edges N,E,S,W as drawn
+        // (F=field, R=road, C=city). `split` = the tile's city edges are SEPARATE cities (two caps),
+        // not one connected city. `bag` = false keeps it out of the draw bag (start tile / bonus).
+        private class TileType
+        {
+            public string e = "FFFF"; public string art = ""; public bool mon, shield, split, bag;
+            public TileType(string e, string art, bool mon = false, bool shield = false, bool split = false, bool bag = true)
+            { this.e = e; this.art = art; this.mon = mon; this.shield = shield; this.split = split; this.bag = bag; }
+        }
 
-        // Curated base-style bag (edges N,E,S,W). Counts sum to the deck size.
+        // 72 physical tiles: 71 in the bag + the labyrinth bonus (excluded) ; index 72 = the start
+        // tile (a "city cap + straight road", same as the official start). Distribution verified
+        // against the official base game: A2 B4 C1 D4 E5 F/G3 H3 I2 J3 K3 L3 M2 N3 O2 P3 Q1 R3 S2 T1 U8 V9 W4 X1.
         private static readonly List<TileType> TYPES = new()
         {
-            new("FFFF", true,  false, 4),   // 0 monastery
-            new("FFRF", true,  false, 2),   // 1 monastery + road (south)
-            new("RFRF", false, false, 8),   // 2 straight road
-            new("RRFF", false, false, 9),   // 3 road curve
-            new("RRRF", false, false, 4),   // 4 road T-junction
-            new("RRRR", false, false, 1),   // 5 crossroads
-            new("CFFF", false, false, 5),   // 6 city cap (one edge)
-            new("CFRF", false, false, 4),   // 7 city cap + road opposite? (city N, road S)
-            new("CFRR", false, false, 3),   // 8 city + road bend
-            new("CCFF", false, false, 3),   // 9 city corner (adjacent)
-            new("CCFF", false, true,  2),   // 10 city corner + shield
-            new("CFCF", false, false, 3),   // 11 city across (tunnel)
-            new("CCCF", false, false, 3),   // 12 city three sides
-            new("CCCF", false, true,  1),   // 13 city three sides + shield
-            new("CCCC", false, true,  1),   // 14 full city + shield
-            new("CCRR", false, false, 3),   // 15 city corner + road curve
+            new("RCCR", "p00.png", shield: true),           // 0  city corner + road + shield (O)
+            new("CFCC", "p01.png", shield: true),           // 1  city three sides + shield (Q)
+            new("FFCF", "p02.png"),                          // 2  city cap S (E)
+            new("RCRF", "p03.png"),                          // 3  city cap + straight road (D)
+            new("CCRR", "p04.png", shield: true),           // 4  city corner + road + shield (O)
+            new("CCCC", "p05.png", shield: true),           // 5  full city + shield (C)
+            new("CRCC", "p06.png"),                          // 6  city three + road (T)
+            new("RRRR", "p07.png"),                          // 7  crossroads (X)
+            new("RFRF", "p08.png"),                          // 8  straight road (U)
+            new("CFCF", "p09.png", shield: true),           // 9  city tunnel + shield (F)
+            new("CFFF", "p10.png"),                          // 10 city cap (E)
+            new("RRRR", "p11.png", bag: false),             // 11 labyrinth bonus tile — not base game
+            new("FCCC", "p12.png"),                          // 12 city three (R)
+            new("RRCC", "p13.png"),                          // 13 city corner + road (P)
+            new("CRRR", "p14.png"),                          // 14 city cap + road T (L)
+            new("FFRR", "p15.png"),                          // 15 road curve (V)
+            new("CFFF", "p16.png"),                          // 16 city cap (E)
+            new("CCFF", "p17.png"),                          // 17 city corner (N)
+            new("RRFC", "p18.png"),                          // 18 city cap + road curve (J)
+            new("RFFR", "p19.png"),                          // 19 road curve (V)
+            new("FCFC", "p20.png", split: true),            // 20 two separate city caps (H)
+            new("FRRC", "p21.png"),                          // 21 city cap + road curve (K)
+            new("FRFR", "p22.png"),                          // 22 straight road (U)
+            new("FFRR", "p23.png"),                          // 23 road curve (V)
+            new("FCCC", "p24.png"),                          // 24 city three (R)
+            new("RRCC", "p25.png"),                          // 25 city corner + road (P)
+            new("CRRR", "p26.png"),                          // 26 city cap + road T (L)
+            new("FFRR", "p27.png"),                          // 27 road curve (V)
+            new("CFFF", "p28.png"),                          // 28 city cap (E)
+            new("CCFF", "p29.png"),                          // 29 city corner (N)
+            new("RRFC", "p30.png"),                          // 30 city cap + road curve (J)
+            new("RFFR", "p31.png"),                          // 31 road curve (V)
+            new("FCFC", "p32.png", split: true),            // 32 two separate city caps (H)
+            new("FRRC", "p33.png"),                          // 33 city cap + road curve (K)
+            new("FRFR", "p34.png"),                          // 34 straight road (U)
+            new("FFRR", "p35.png"),                          // 35 road curve (V)
+            new("FCCC", "p36.png"),                          // 36 city three (R)
+            new("RRCC", "p37.png"),                          // 37 city corner + road (P)
+            new("CRRR", "p38.png"),                          // 38 city cap + road T (L)
+            new("FFRR", "p39.png"),                          // 39 road curve (V)
+            new("CFFF", "p40.png"),                          // 40 city cap (E)
+            new("CCFF", "p41.png"),                          // 41 city corner (N)
+            new("RRFC", "p42.png"),                          // 42 city cap + road curve (J)
+            new("RFFR", "p43.png"),                          // 43 road curve (V)
+            new("FCFC", "p44.png", split: true),            // 44 two separate city caps (H)
+            new("FRRC", "p45.png"),                          // 45 city cap + road curve (K)
+            new("FRFR", "p46.png"),                          // 46 straight road (U)
+            new("FFRR", "p47.png"),                          // 47 road curve (V)
+            new("CFFC", "p48.png", split: true),            // 48 two separate adjacent caps (I)
+            new("FRFF", "p49.png", mon: true),              // 49 monastery + road (A)
+            new("FRRR", "p50.png"),                          // 50 road T-junction (W)
+            new("FRFR", "p51.png"),                          // 51 straight road (U)
+            new("FFFF", "p52.png", mon: true),              // 52 monastery (B)
+            new("FCCF", "p53.png", shield: true),           // 53 city corner + shield (M)
+            new("RFRC", "p54.png"),                          // 54 city cap + straight road (D)
+            new("FFFF", "p55.png", mon: true),              // 55 monastery (B)
+            new("FCFC", "p56.png"),                          // 56 city tunnel (G)
+            new("CRCC", "p57.png", shield: true),           // 57 city three + road + shield (S)
+            new("RRFR", "p58.png"),                          // 58 road T-junction (W)
+            new("FRFR", "p59.png"),                          // 59 straight road (U)
+            new("CFFC", "p60.png", split: true),            // 60 two separate adjacent caps (I)
+            new("FRFF", "p61.png", mon: true),              // 61 monastery + road (A)
+            new("FRRR", "p62.png"),                          // 62 road T-junction (W)
+            new("FRFR", "p63.png"),                          // 63 straight road (U)
+            new("FFFF", "p64.png", mon: true),              // 64 monastery (B)
+            new("FCCF", "p65.png", shield: true),           // 65 city corner + shield (M)
+            new("RFRC", "p66.png"),                          // 66 city cap + straight road (D)
+            new("FFFF", "p67.png", mon: true),              // 67 monastery (B)
+            new("FCFC", "p68.png"),                          // 68 city tunnel (G)
+            new("CRCC", "p69.png", shield: true),           // 69 city three + road + shield (S)
+            new("RRFR", "p70.png"),                          // 70 road T-junction (W)
+            new("FRFR", "p71.png"),                          // 71 straight road (U)
+            new("RFRC", "p54.png", bag: false),             // 72 START tile (a 4th D, official start)
         };
         private const double SZ = 4.0;      // world size per tile
 
@@ -63,7 +130,9 @@ namespace MG.Server.GameFlows
         {
             internal static AssetData TEXT   => new Text3dAssetData("carc");
             internal static AssetData MARKER => new CylinderAssetData("carcmark");
-            internal static AssetData MEEPLE => new CylinderAssetData("carcmeeple");
+            // real meeple silhouette (traced from the box's meeple sheet, extruded to a 3D STL);
+            // per-item "tint" colours it per player
+            internal static AssetData MEEPLE => new ObjectAssetData("carcassonne/meeple.stl");
             internal static AssetData MAT    => new CylinderAssetData("carcmat");
         }
 
@@ -77,8 +146,9 @@ namespace MG.Server.GameFlows
             for (int i = 0; i < 5; i++)   // 2..5 players
                 new PlayerData(this.GameData) { Type = PlayerTypeEnum.EMPTY_SEAT }
                     .AddAttribute("type", "p" + (i + 1)).SetCameraPosition(0, 28, 18).SetAvatarPosition(0, 0, 30);
-            // pre-register tile face assets so they resolve
-            for (int i = 0; i < TYPES.Count; i++) addAsset(new TokenAssetData($"carcassonne/tiles/t{i}.svg"));
+            // pre-register tile face assets + the scoreboard art so they resolve
+            for (int i = 0; i < TYPES.Count; i++) TileAsset(i);
+            addAsset(new TokenAssetData("carcassonne/scoreboard.png"));
             return Task.CompletedTask;
         }
 
@@ -92,12 +162,11 @@ namespace MG.Server.GameFlows
             GameData.CurrentTurnId = seats[0];
             foreach (var s in seats) { GameData.Attributes["pts:" + s] = "0"; GameData.Attributes["meeplesLeft:" + s] = "7"; }
 
-            // Build the bag (start tile 3 placed at 0,0 rot0 — a road curve is fine as a start).
+            // Build the bag: every physical tile flagged bag=true (71 of them, official distribution).
             var bag = new List<int>();
-            for (int t = 0; t < TYPES.Count; t++) for (int k = 0; k < TYPES[t].count; k++) bag.Add(t);
-            // start tile: a straight road across the middle (type 2)
-            SetBoard(new() { ["0,0"] = "2,0" });
-            bag.Remove(2);
+            for (int t = 0; t < TYPES.Count; t++) if (TYPES[t].bag) bag.Add(t);
+            // the official start tile (city cap + straight road) at the origin
+            SetBoard(new() { ["0,0"] = "72,0" });
             Shuffle(bag, rnd);
             GameData.Attributes["bag"] = string.Join(",", bag);
             GameData.Attributes["meeples"] = "";
@@ -235,8 +304,9 @@ namespace MG.Server.GameFlows
                 var p = key.Split(','); int x = int.Parse(p[0]), y = int.Parse(p[1]);
                 var v = b[key].Split(','); int t = int.Parse(v[0]), r = int.Parse(v[1]);
                 var sides = Enumerable.Range(0, 4).Where(s => EdgeAt(t, r, s) == terrain).ToList();
-                // intra-tile unions
-                if (terrain == 'C') { for (int i = 1; i < sides.Count; i++) Union((x, y, sides[0]), (x, y, sides[i])); }
+                // intra-tile unions. A `split` tile's city edges are SEPARATE cities (two caps) —
+                // they never union inside the tile, only across to their neighbours.
+                if (terrain == 'C') { if (!TYPES[t].split) for (int i = 1; i < sides.Count; i++) Union((x, y, sides[0]), (x, y, sides[i])); }
                 else if (terrain == 'R') { if (sides.Count == 2) Union((x, y, sides[0]), (x, y, sides[1])); }
                 else /* F */ {
                     var roadSides = Enumerable.Range(0, 4).Where(s => EdgeAt(t, r, s) == 'R').ToList();
@@ -365,7 +435,12 @@ namespace MG.Server.GameFlows
             var res = new List<(string, int, string)>();
             if (TYPES[t].mon && FeatureFree(x, y, "M", -1)) res.Add(("M", -1, "Monk (monastery)"));
             var cSides = Enumerable.Range(0, 4).Where(s => EdgeAt(t, r, s) == 'C').ToList();
-            if (cSides.Count > 0 && FeatureFree(x, y, "C", cSides[0])) res.Add(("C", cSides[0], "Knight (city)"));
+            if (TYPES[t].split)
+            {   // two SEPARATE cities on this tile — offer each cap on its own, labelled by direction
+                var DIRN = new[] { "N", "E", "S", "W" };
+                foreach (var cs in cSides) if (FeatureFree(x, y, "C", cs)) res.Add(("C", cs, $"Knight (city {DIRN[cs]})"));
+            }
+            else if (cSides.Count > 0 && FeatureFree(x, y, "C", cSides[0])) res.Add(("C", cSides[0], "Knight (city)"));
             // road groups: each straight/curve pair once, each end once
             var rSides = Enumerable.Range(0, 4).Where(s => EdgeAt(t, r, s) == 'R').ToList();
             var seen = new HashSet<int>();
@@ -430,9 +505,10 @@ namespace MG.Server.GameFlows
             double hudTopZ = -halfZ - 5;    // title/scores row, above the far edge
             double hudBotZ = halfZ + 6;     // current tile / meeple buttons, below the near edge
 
-            // The server owns the camera: pull it up/back as the board grows so map + HUD always fit.
+            // The server owns the camera: pull it up/back as the board grows so map + HUD always fit
+            // (the +26 covers the HUD rows and the scoreboard behind the far edge).
             // The client re-applies a camera only when this value CHANGES (manual orbit stays free).
-            double span = Math.Max(maxX - minX, (maxZ - minZ) + 14);
+            double span = Math.Max(maxX - minX, (maxZ - minZ) + 26);
             double zoom = Math.Max(1.0, span / 36.0);
             int camY = (int)Math.Round(28 * zoom), camZ = (int)Math.Round(18 * zoom);
             foreach (var p in GameData.Players.Where(p => p.Type != PlayerTypeEnum.EMPTY_SEAT))
@@ -455,7 +531,7 @@ namespace MG.Server.GameFlows
             {
                 var pm = Parse(m); int oi = Math.Max(0, order.IndexOf(pm.seat));
                 double ox = pm.side == 1 ? 1.1 : pm.side == 3 ? -1.1 : 0, oz = pm.side == 0 ? -1.1 : pm.side == 2 ? 1.1 : 0;
-                addItem(Assets.MEEPLE).SetPosition(pm.x * SZ + ox - cx, 0.6, pm.y * SZ + oz - cz).SetScale(0.9, 1.6, 0.9)
+                addItem(Assets.MEEPLE).SetPosition(pm.x * SZ + ox - cx, 0.05, pm.y * SZ + oz - cz).SetScale(1.5)
                     .AddAttribute("tint", MEEPLE_COLORS[oi % MEEPLE_COLORS.Length]).AddAttribute("meeple", "1");
             }
 
@@ -463,6 +539,11 @@ namespace MG.Server.GameFlows
             // anchored to the CURRENT board bounds (hudTopZ/hudBotZ/cx) so it tracks the map as it
             // grows. Scores across the far edge, the current tile + meeple choices across the near
             // edge. Text laid flat (-90) to read from above.
+
+            // the real scoreboard art from the box, flat on the mat behind the score row (decor)
+            addItem(addAsset(new TokenAssetData("carcassonne/scoreboard.png")))
+                .SetPosition(0, 0.02, hudTopZ - 8.5).SetScale(11, 0.1, 7.6);
+
             addTextItem(Assets.TEXT).SetText(over ? GameData.Attributes.GetValueOrDefault("result", "Game over")
                 : $"CARCASSONNE   ·   {Name(cur)}'s turn   ·   {Bag().Count} tiles left")
                 .SetPosition(0, 6, hudTopZ - 3).SetScale(1.3).SetRotation(-90, 0, 0).AddAttribute("textColor", "ffd166");
@@ -514,8 +595,9 @@ namespace MG.Server.GameFlows
             }
         }
 
-        private static readonly string[] MEEPLE_COLORS = { "0xef4444", "0x2563eb", "0x16a34a", "0xf59e0b", "0x9333ea" };
-        private AssetData TileAsset(int t) => addAsset(new TokenAssetData($"carcassonne/tiles/t{t}.svg"));
+        // player colours sampled from the meeple set's paint palette (orange, turquoise, purple, pink, lime)
+        private static readonly string[] MEEPLE_COLORS = { "0xff9000", "0x2cccc0", "0x903078", "0xff768a", "0xabcb5c" };
+        private AssetData TileAsset(int t) => addAsset(new TokenAssetData("carcassonne/tiles/" + TYPES[t].art));
 
         // ============================ state helpers ============================
         private string Phase() => GameData.Attributes.GetValueOrDefault("phase", "place");

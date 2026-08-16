@@ -120,7 +120,7 @@ namespace MG.Server.GameFlows
             GameData.Attributes["mnum"] = "1";
             GameData.Attributes["voteTrack"] = "0";
             GameData.Attributes["results"] = "";
-            GameData.Attributes["log"] = "";
+            GameData.Attributes["hist"] = "";
             GameData.Attributes["leader"] = seats[rnd.Next(n)];
             GameData.Attributes["phase"] = "reveal";
             ClearRoundState();
@@ -366,25 +366,72 @@ namespace MG.Server.GameFlows
             }
         }
 
-        // ============================ logging (public info) ============================
+        // ============================ history (public info) ============================
         // Votes are public in The Resistance — record who voted how so everyone can reason from it.
+        // Stored STRUCTURED (not prose) so the screen can render it graphically; one record per line:
+        //   P|mission|leaderId|teamIds(csv)|approved(1/0)|approves|rejects|votes(id:1/0 csv)
+        //   M|mission|success(1/0)|sabotages
         private void LogVote(bool approved, int approves, int rejects)
         {
-            var occ = Occupied();
-            string who = string.Join("  ", occ.Select(x =>
-                Name(x) + (GameData.Attributes["vote:" + x] == "approve" ? " [approve]" : " [reject]")));
-            string team = string.Join(", ", Team.Select(Name));
-            AppendLog($"M{MissionNum}: {Name(Leader)} proposed [{team}] - {(approved ? "APPROVED" : "REJECTED")} {approves}-{rejects}");
-            AppendLog("   " + who);
+            var votes = string.Join(",", Occupied().Select(x =>
+                x + ":" + (GameData.Attributes["vote:" + x] == "approve" ? "1" : "0")));
+            AppendHist($"P|{MissionNum}|{Leader}|{string.Join(",", Team)}|{(approved ? 1 : 0)}|{approves}|{rejects}|{votes}");
         }
 
         private void LogMission(int m, bool success, int fails)
-            => AppendLog(success ? $"Mission {m}: SUCCESS" : $"Mission {m}: FAILED — {fails} sabotage" + (fails == 1 ? "" : "s"));
+            => AppendHist($"M|{m}|{(success ? 1 : 0)}|{fails}");
 
-        private void AppendLog(string line)
+        private void AppendHist(string rec)
         {
-            var cur = GameData.Attributes.GetValueOrDefault("log", "");
-            GameData.Attributes["log"] = string.IsNullOrEmpty(cur) ? line : cur + "\n" + line;
+            var cur = GameData.Attributes.GetValueOrDefault("hist", "");
+            GameData.Attributes["hist"] = string.IsNullOrEmpty(cur) ? rec : cur + "\n" + rec;
+        }
+
+        // The game history rendered GRAPHICALLY (chips + colours), newest events first:
+        //   [M2] Misha → Misha, Lime Donkey, Orange Husky   [APPROVED 4–1]
+        //   [✔ Misha] [✔ Lime Donkey] [✔ Orange Husky] [✖ Platinum Pony] [✔ Green Horse]
+        //   [M2] Mission FAILED ✖ (1 sabotage)
+        private UiNode? HistoryNode()
+        {
+            var recs = Attr("hist").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            if (recs.Length == 0) return null;
+
+            // build one visual block per record, then show newest block on top (the fresh
+            // information is what players reason about; older rounds scroll below)
+            var blocks = new List<List<UiNode>>();
+            foreach (var rec in recs)
+            {
+                var f = rec.Split('|');
+                if (f[0] == "P")
+                {
+                    bool ok = f[4] == "1";
+                    var team = string.Join(", ", f[3].Split(',', StringSplitOptions.RemoveEmptyEntries).Select(Name));
+                    var head = UiNode.Row(
+                        UiNode.Chip("M" + f[1], "6a4a25"),
+                        UiNode.Text_($"{Name(f[2])} → {team}", "e8d9be", 14),
+                        UiNode.Chip($"{(ok ? "APPROVED" : "REJECTED")} {f[5]}–{f[6]}", ok ? "2f7a45" : "7a2f2f"));
+                    var votes = f[7].Split(',', StringSplitOptions.RemoveEmptyEntries).Select(v =>
+                    {
+                        var kv = v.Split(':'); bool ap = kv[1] == "1";
+                        return UiNode.Chip((ap ? "✔ " : "✖ ") + Name(kv[0]), ap ? "1d3325" : "33201d", ap ? "9fd7ae" : "d7a49f");
+                    }).ToList();
+                    blocks.Add(new() { head, new UiNode { Type = "row", Children = votes, Size = 5 } });
+                }
+                else if (f[0] == "M")
+                {
+                    bool success = f[2] == "1";
+                    int fails = int.TryParse(f[3], out var x) ? x : 0;
+                    blocks.Add(new() { UiNode.Row(
+                        UiNode.Chip("M" + f[1], "6a4a25"),
+                        UiNode.Text_(success ? "Mission SUCCESS ✔" : $"Mission FAILED ✖ ({fails} sabotage{(fails == 1 ? "" : "s")})",
+                                     success ? "5fd882" : "ff8a80", 15, "big")) });
+                }
+            }
+            blocks.Reverse();
+
+            var kids = new List<UiNode> { UiNode.Text_("GAME LOG · latest first", "8a765e", 12) };
+            foreach (var bl in blocks) kids.AddRange(bl);
+            return new UiNode { Type = "col", Children = kids, Size = 4 }.SetStyle("hist");
         }
 
         // ============================ helpers ============================
@@ -449,6 +496,25 @@ namespace MG.Server.GameFlows
         // button and its layout — and hands it to the (dumb) client as a UiNode tree per seat.
         // =====================================================================================
         private static string A(string file) => "resistance/" + file;   // relative asset path (client prepends its games base)
+
+        // Centres of the mission hexes 01..05, in PERCENT of map.png (measured on the art).
+        private static readonly (double x, double y)[] HEX =
+            { (11.5, 51.5), (19.0, 16.5), (55.3, 27.5), (41.5, 73.5), (86.5, 39.0) };
+
+        // The mission map with server-positioned markers layered on top ("item over item"):
+        // target.png = the mission being played NOW, x.png (allied) = succeeded, a.png (axis) = failed.
+        private UiNode MapNode()
+        {
+            var map = UiNode.Image(A("map.png"), null, "full");
+            var res = Results;
+            bool over = GameData.Attributes.ContainsKey("over");
+            for (int m = 1; m <= 5; m++)
+            {
+                if (m <= res.Count) map.WithOverlay(A(res[m - 1] == "S" ? "x.png" : "a.png"), HEX[m - 1].x, HEX[m - 1].y, 12);
+                else if (m == MissionNum && !over) map.WithOverlay(A("target.png"), HEX[m - 1].x, HEX[m - 1].y, 13.5);
+            }
+            return map;
+        }
         private string Attr(string k) => GameData.Attributes.GetValueOrDefault(k, "");
 
         private void BuildScreens()
@@ -495,7 +561,7 @@ namespace MG.Server.GameFlows
             // ---------- PHASE 2+: THE GAME (map + progress on top, controls under) ----------
             s.Add(UiNode.Text_($"Mission {MissionNum} · {PhaseLabel(phase)}", "d9b98a"));
             s.Add(MissionTrackNode(n));
-            s.Add(UiNode.Image(A("map.png"), null, "full"));
+            s.Add(MapNode());
             s.Add(UiNode.Text_($"Rejected teams this round: {VoteTrack}/5", "cbb493"));
             s.Add(UiNode.Text_("Leader: " + Name(Leader) + (Leader == id ? " (you)" : ""), "ffe0a8", 19, "big"));
 
@@ -539,8 +605,8 @@ namespace MG.Server.GameFlows
                 else s.Add(UiNode.Note($"Mission underway… ({MissionCount()}/{Team.Count} cards in)"));
             }
 
-            string log = Attr("log");
-            if (!string.IsNullOrEmpty(log)) s.Add(UiNode.Log(log));
+            var hist = HistoryNode();
+            if (hist != null) s.Add(hist);
             return s;
         }
 
