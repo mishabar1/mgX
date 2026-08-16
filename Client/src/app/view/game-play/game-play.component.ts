@@ -303,6 +303,28 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
         if (data) img.src = data;
       }
     }, 0);
+
+    this.fillPendingAnimpicks(body);
+  }
+
+  // An animpick <select> can render BEFORE its item's model (and animation clips) finished
+  // loading — it would then show only "none" forever, because the panel only rebuilds when the
+  // server screen changes. Poll briefly and refill any empty pickers once the clips arrive.
+  private fillPendingAnimpicks(body: HTMLElement, tries = 0) {
+    const sels = Array.from(body.querySelectorAll('select[data-animpick]')) as HTMLSelectElement[];
+    const pending = sels.filter(s => s.options.length <= 1);
+    if (!pending.length || tries > 50) return;
+    for (const s of pending) {
+      const id = s.getAttribute('data-animpick') || '';
+      const it: any = (this.mgGame as any)?.allItems?.[id];
+      const clips = it?.mesh?.userData?.['clips'] || [];
+      if (!clips.length) continue;
+      const cur = it?.animationIdx ?? -1;
+      const clean = (v: any) => String(v ?? '').replace(/[&<>]/g, '');
+      s.innerHTML = ['<option value="-1">🎬 none</option>'].concat(
+        clips.map((c: any, i: number) => `<option value="${i}" ${i === cur ? 'selected' : ''}>${clean(c.name || ('Clip ' + i))}</option>`)).join('');
+    }
+    if (pending.some(s => s.options.length <= 1)) setTimeout(() => this.fillPendingAnimpicks(body, tries + 1), 400);
   }
 
   // Render one server UiNode (+ children) to HTML. Unknown types fall back to text, so a new
@@ -347,7 +369,8 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
         const cur = it?.animationIdx ?? -1;
         const opts = ['<option value="-1">🎬 none</option>'].concat(
           clips.map((c: any, i: number) => `<option value="${i}" ${i === cur ? 'selected' : ''}>${esc(c.name || ('Clip ' + i))}</option>`)).join('');
-        return `<select class="sp-input" data-act="${esc(nd.action)}" data-onchange="1" data-argkey="${esc(nd.argKey || 'idx')}">${opts}</select>`;
+        // data-animpick lets fillPendingAnimpicks refill this select once the model's clips load
+        return `<select class="sp-input" data-animpick="${esc(nd.id)}" data-act="${esc(nd.action)}" data-onchange="1" data-argkey="${esc(nd.argKey || 'idx')}">${opts}</select>`;
       }
       case 'input':
         return `<input class="sp-input" data-id="${esc(nd.id)}" placeholder="${esc(nd.placeholder || '')}">`;

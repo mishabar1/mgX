@@ -365,6 +365,7 @@ export class MgGame{
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
     const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;   // canvas colours are sRGB — keep labels crisp, not washed out
     tex.needsUpdate = true;
     const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
     const spr = new THREE.Sprite(mat);
@@ -459,7 +460,9 @@ export class MgGame{
               mixer = new THREE.AnimationMixer(group);
               this.mgThree.animationMixers.push(mixer);
               if (itemData.animationIdx != null && itemData.animationIdx >= 0) {
-                mixer.clipAction(gltf.animations[itemData.animationIdx % gltf.animations.length]).play();
+                const action = mixer.clipAction(gltf.animations[itemData.animationIdx % gltf.animations.length]);
+                if (itemData.attributes?.['animOnce'] === '1') { action.setLoop(THREE.LoopOnce, 1); action.clampWhenFinished = true; }
+                action.play();
               }
             }
 
@@ -781,10 +784,14 @@ export class MgGame{
     old_item.clickActions = new_item.clickActions;
     old_item.visible = new_item.visible;
     old_item.hoverActions = new_item.hoverActions;
+    const prevAnimOnce = old_item.attributes?.['animOnce'], prevAnimNonce = old_item.attributes?.['animNonce'];
     old_item.attributes = new_item.attributes;
 
-    // Swap the playing animation live if the DM changed it (CycleAnim).
-    if (new_item.animationIdx !== old_item.animationIdx) {
+    // Swap the playing animation live if the DM changed the clip, flipped the recursive/once
+    // mode, or re-triggered the same clip (the server bumps animNonce so one-shots can replay).
+    if (new_item.animationIdx !== old_item.animationIdx
+        || new_item.attributes?.['animOnce'] !== prevAnimOnce
+        || new_item.attributes?.['animNonce'] !== prevAnimNonce) {
       old_item.animationIdx = new_item.animationIdx;
       this.applyAnimation(old_item);
     }
@@ -1095,7 +1102,13 @@ export class MgGame{
     if (!mixer || !clips || !clips.length) return;
     mixer.stopAllAction();
     const idx: any = (item as any).animationIdx;
-    if (idx != null && idx >= 0) mixer.clipAction(clips[idx % clips.length]).reset().play();
+    if (idx != null && idx >= 0) {
+      const action = mixer.clipAction(clips[idx % clips.length]).reset();
+      // server-driven loop mode: attribute animOnce="1" = play the clip ONCE and freeze on the
+      // last frame; otherwise loop forever (default).
+      if (item.attributes?.['animOnce'] === '1') { action.setLoop(THREE.LoopOnce, 1); action.clampWhenFinished = true; }
+      action.play();
+    }
   }
 
   // A canvas texture for a die face: ivory background, big number (or "?"), small "dN" caption.

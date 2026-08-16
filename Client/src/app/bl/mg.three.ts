@@ -69,6 +69,9 @@ export class MgThree{
       e = { tex: null, ready: false, waiters: [] };
       this.texCache[url] = e;
       e.tex = this.textureLoader.load(url, (t: any) => { e.ready = true; e.waiters.forEach(w => w(t)); e.waiters = []; });
+      // Art files are authored in sRGB. Without declaring that, three samples them as linear and
+      // the sRGB output transform washes them out (pale, low-saturation tiles/cards).
+      e.tex.colorSpace = THREE.SRGBColorSpace;
     }
     if (onReady) { if (e.ready) onReady(e.tex); else e.waiters.push(onReady); }
     return e.tex;
@@ -251,6 +254,7 @@ export class MgThree{
       'assets/skyboxes/afterrain/afterrain_rt.jpg',
       'assets/skyboxes/afterrain/afterrain_lf.jpg'
     ]);
+    texture.colorSpace = THREE.SRGBColorSpace;   // sky photos are sRGB too
     this.scene.background = texture;
 
 

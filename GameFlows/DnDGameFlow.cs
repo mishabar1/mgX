@@ -550,7 +550,32 @@ namespace MG.Server.GameFlows
             if (GameData.Attributes.TryGetValue("selectedItem", out var id) && !string.IsNullOrEmpty(id))
             {
                 var it = GameData.FindItem(id);
-                if (it != null && int.TryParse(Arg(data, "idx"), out var idx)) it.AnimationIdx = idx;
+                if (it != null && int.TryParse(Arg(data, "idx"), out var idx))
+                {
+                    it.AnimationIdx = idx;
+                    // bump a nonce so re-picking the SAME clip replays it (matters for one-shot mode)
+                    it.AddAttribute("animNonce", (it.GetIntAttribute("animNonce") + 1).ToString());
+                }
+            }
+            await Task.CompletedTask;
+        }
+
+        // "Recursive" checkbox next to the action picker: checked = the clip loops forever
+        // (default), unchecked = it plays ONCE and freezes on the last frame.
+        [GameAction]
+        public async Task SetAnimLoop(ExecuteActionData data)
+        {
+            if (!IsDm(data)) { await Task.CompletedTask; return; }
+            if (GameData.Attributes.TryGetValue("selectedItem", out var id) && !string.IsNullOrEmpty(id))
+            {
+                var it = GameData.FindItem(id);
+                if (it != null)
+                {
+                    if (Arg(data, "loop") == "1") it.Attributes?.Remove("animOnce");
+                    else it.AddAttribute("animOnce", "1");
+                    // re-trigger the current clip under the new mode
+                    it.AddAttribute("animNonce", (it.GetIntAttribute("animNonce") + 1).ToString());
+                }
             }
             await Task.CompletedTask;
         }
@@ -811,6 +836,8 @@ namespace MG.Server.GameFlows
                 : UiNode.Select("die", dieOpts, nameof(RollSelected), "sides", true));
 
             nodes.Add(new UiNode { Type = "animpick", Id = sel.Id, Action = nameof(SetAnim), ArgKey = "idx" });
+            // recursive = the chosen animation loops forever; unchecked = it plays once and freezes
+            nodes.Add(UiNode.Check("recursive (loop the action)", nameof(SetAnimLoop), "loop", sel.GetStringAttribute("animOnce") != "1"));
             nodes.Add(UiNode.Check("show label", nameof(ToggleLabel), "on", sel.GetStringAttribute("hidelabel") != "1"));
 
             nodes.Add(UiNode.Row(
