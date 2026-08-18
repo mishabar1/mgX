@@ -10,11 +10,11 @@ import {
   ChangeDetectionStrategy,
   NgZone
 } from '@angular/core';
-import * as THREE from 'three';
 import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
 // import {InteractionManager} from 'three.interactive';
 import {SignalrService} from '../../services/SignalrService';
+import {MgPanel3d} from '../../bl/mg.panel3d';
 import { HttpClient } from '@angular/common/http';
 import {DALService} from '../../dal/dal.service';
 import {GameData} from '../../entities/game.data';
@@ -45,7 +45,7 @@ import {environment} from '../../../environments/environment';
 import {Group} from 'three/src/objects/Group.js';
 import {GeneralService} from '../../bl/general.service';
 import {UnsubscriberService} from '../../services/unsubscriber.service';
-import {MgThree, GAMES_BASE} from '../../bl/mg.three';
+import {MgThree} from '../../bl/mg.three';
 import {MgGame} from '../../bl/mg.game';
 import {VoiceService} from '../../bl/voice.service';
 
@@ -173,6 +173,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     this.signalRService.hubConnection.off('GameUpdated');
     this.signalRService.hubConnection.off('GameDeleted');
     this.voice.leave();   // drop out of the voice call when leaving the game view
+    this.disposePanel3d();   // unregister the in-scene panel's clickables before the scene goes
     this.mgThree?.dispose();
   }
 
@@ -186,6 +187,11 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
 
       this.mgGame = new MgGame();
       this.mgGame.gameData = game;
+      // Models arrive asynchronously, AFTER the panel has already been built from the server tree.
+      // An "animpick" lists the clips found on the loaded mesh, so it has to be rebuilt once those
+      // exist — otherwise it reads "model still loading" forever (which is exactly what happened
+      // after a page refresh).
+      this.mgGame.onMeshesReady = () => this.updateServerPanel(this.mgGame?.gameData);
 
       // If opening an already-finished game (e.g. to analyse it), show the result once.
       this.lastStatus = String(game.gameStatus);
@@ -211,61 +217,36 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
   // The client is DUMB. The server sends this seat's ENTIRE panel as PlayerData.Screen (a UiNode
   // tree) and this ONE renderer draws whatever it's given — for EVERY game. No game logic lives
   // here: not the texts, not the buttons, not the layout, not the rules. Swap this framework out
-  // tomorrow and only renderNode() is rewritten; the games never change.
+  // tomorrow and only mg.panel3d.ts is rewritten; the games never change.
   private panelEl?: HTMLElement;
   private panelWrap?: HTMLElement;
   private panelSeatId = '';
-  private lastPanelKey = '';
+  private panel3d?: MgPanel3d;
 
+  // The control panel is drawn IN THE SCENE (see mg.panel3d.ts). The only HTML left here is the
+  // app's own chrome — a "back to games" button — which is navigation, not game content, and so
+  // has no business being geometry. Everything the SERVER sends for a seat goes to the 3D panel.
   private setupServerPanel() {
-    // One-time: build the panel shell + styles + a single delegated click handler.
     const el = document.createElement('div');
     el.style.pointerEvents = 'auto';
-    el.innerHTML = `<style>${this.panelStyles()}</style>`
-      + `<div class="sp"><div class="sp-topbar"><button class="sp-btn ghost" data-leave="1">← Games</button></div><div id="spBody"></div></div>`;
+    // Always-on chrome. This deliberately does NOT live in the template's bottom bar, which is
+    // hidden for a full-screen panel (see panelFull) — VR has to stay reachable in every game.
+    el.innerHTML = `<style>
+        .sp-chrome{position:absolute;top:10px;left:10px;z-index:30;display:flex;gap:8px;}
+        .sp-chrome button{font:600 15px system-ui,sans-serif;color:#e8edf5;background:rgba(12,9,7,.92);
+          border:1px solid #5a4632;border-radius:10px;padding:8px 14px;cursor:pointer;}
+        .sp-chrome button:hover{background:rgba(32,24,18,.96);}
+        .sp-chrome button.vr{border-color:#2b6cb0;}
+      </style><div class="sp-chrome">
+        <button data-leave="1">← Games</button>
+        <button data-vr="1" class="vr" title="Enter VR">VR</button>
+      </div>`;
 
-    // Clicks on buttons (SELECT/checkbox fire 'change' below instead).
     el.addEventListener('click', (ev: any) => {
       if (ev.target.closest('[data-leave]')) { this.zone.run(() => this.router.navigate([RouteNames.GamesList])); return; }
-      const t = ev.target.closest('button[data-act]');
-      if (!t || !this.panelSeatId) return;
-      const confirm = t.getAttribute('data-confirm');
-      if (confirm && !window.confirm(confirm)) return;
-      const act = t.getAttribute('data-act');
-      let args: any = {};
-      try { args = JSON.parse(t.getAttribute('data-args') || '{}'); } catch {}
-      // "checks" submit: gather the checked values in this group into the named arg key.
-      const argKey = t.getAttribute('data-argkey');
-      if (argKey) {
-        const group = t.closest('.sp-checks');
-        const vals = group ? Array.from(group.querySelectorAll('input[type=checkbox]:checked')).map((c: any) => c.getAttribute('data-val')) : [];
-        const need = Number(t.getAttribute('data-need') || 0);
-        if (need > 0 && vals.length !== need) { window.alert(`Pick exactly ${need}.`); return; }
-        args[argKey] = vals.join(',');
-      }
-      // "gather": read named input/select fields into args (keyed by their id).
-      const gather = t.getAttribute('data-gather');
-      if (gather) gather.split(',').filter(Boolean).forEach((id: string) => {
-        const f = this.panelEl!.querySelector(`[data-id="${id}"]`) as any;
-        if (f) args[id] = f.value;
-      });
-      this.signalRService.executeActionArgs(this.gameId!, this.panelSeatId, act, args);
+      if (ev.target.closest('[data-vr]')) this.zone.run(() => this.onVrClick());
     });
 
-    // Change on an on-change select / checkbox → dispatch immediately with its value.
-    el.addEventListener('change', (ev: any) => {
-      const t = ev.target.closest('[data-act][data-onchange]');
-      if (!t || !this.panelSeatId) return;
-      if (t.tagName === 'SELECT' && !t.value) return;   // ignore the empty placeholder
-      const act = t.getAttribute('data-act');
-      let args: any = {};
-      try { args = JSON.parse(t.getAttribute('data-args') || '{}'); } catch {}
-      const argKey = t.getAttribute('data-argkey');
-      if (argKey) args[argKey] = t.type === 'checkbox' ? (t.checked ? '1' : '0') : t.value;
-      this.signalRService.executeActionArgs(this.gameId!, this.panelSeatId, act, args);
-    });
-
-    // A wrapper we re-style per update (full-screen vs docked) based on the server's panelMode.
     this.panelWrap = document.createElement('div');
     this.panelWrap.appendChild(el);
     this.rendererContainer.nativeElement.appendChild(this.panelWrap);
@@ -273,170 +254,58 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     this.updateServerPanel(this.mgGame?.gameData);
   }
 
+
+  // Build/refresh the in-scene panel from the seat's Screen tree. Placement defaults to 'hud'
+  // (parented to the camera, sized from its frustum) so EVERY game gets a usable panel with no
+  // per-game setup; a game that wants the panel standing on the table sets panel3dAnchor /
+  // panel3dRot / panel3dWidth and gets 'world' placement instead. Positioning is a SERVER
+  // decision either way — the client only obeys.
+  private updatePanel3d(g: any, screen: any): boolean {
+    if (!this.mgThree) return false;
+    if (!this.panel3d) {
+      this.panel3d = new MgPanel3d(
+        this.mgThree,
+        (action: string, args: any) => {
+          if (this.panelSeatId && action) this.signalRService.executeActionArgs(this.gameId!, this.panelSeatId, action, args);
+        });
+      // The panel parents ITSELF (camera for 'hud', scene for 'world', a controller in VR), so
+      // there is no scene.add() here on purpose.
+      // uikit computes layout and flushes transforms once per frame, so it needs a slot in the
+      // render loop. mg.three isolates each frame hook so a throw can never skip the render.
+      this.panel3d.frameHook = (deltaMs: number) => this.panel3d?.tick(deltaMs);
+      // animpick reads the animation clips off the already-loaded model.
+      this.panel3d.items = () => (this.mgGame as any)?.allItems || {};
+      this.mgThree.addFrameHook?.(this.panel3d.frameHook);
+      // A purely local widget change (e.g. ticking one box of a "checks" group) has no server
+      // round-trip, so the panel asks us to re-render it from the state we already hold.
+      this.panel3d.onNeedRebuild = () => this.updateServerPanel(this.mgGame?.gameData);
+      // Desktop <-> VR: on the table, or carried on the left controller.
+      this.mgThree.onXrSessionChange = (presenting: boolean) => {
+        const ctrl = presenting ? (this.mgThree.controllers?.[0] || null) : null;
+        this.panel3d?.attachTo(ctrl);
+      };
+    }
+    // Placement is entirely the client's business now: panels dock to the edges of the view on
+    // screen, and to the player's hand in VR. The server only names the edge, per panel.
+    return this.panel3d.update(screen, this.panelSeatId);
+  }
+
+  private disposePanel3d() {
+    if (!this.panel3d) return;
+    this.panel3d.dispose();
+    this.panel3d = undefined;
+    if (this.mgThree) this.mgThree.onXrSessionChange = undefined;
+  }
+
   private updateServerPanel(g: any) {
-    if (!this.panelEl || !this.panelWrap || !g) return;
+    if (!g) return;
+    // Find THIS user's seat and hand its Screen tree to the in-scene renderer. There is no HTML
+    // path any more and deliberately no fallback: one renderer means a panel bug shows up as a
+    // panel bug instead of silently reverting to a different UI.
     const me = this.generalService.User?.id;
     const mine = (g.players || []).find((p: any) => p.user?.id === me && p.screen);
     this.panelSeatId = mine?.id || '';
-    const screen = mine?.screen || null;
-    const mode = g.attributes?.['panelMode'] || 'side';
-
-    const wrap = this.panelWrap;
-    if (!screen) { wrap.style.display = 'none'; this.lastPanelKey = ''; return; }   // no panel for this game/seat
-    wrap.style.cssText = mode === 'full'
-      ? 'position:absolute;inset:0;z-index:30;overflow-y:auto;pointer-events:auto;display:flex;justify-content:center;align-items:flex-start;box-sizing:border-box;padding:10px;background:radial-gradient(circle at 50% -10%,#2a2018,#0b0806);'
-      : 'position:absolute;top:0;right:0;height:100%;z-index:30;overflow-y:auto;pointer-events:auto;display:flex;align-items:flex-start;padding:14px;';
-
-    // Rebuild only when the screen actually changed (so in-progress checkbox picks survive).
-    const key = mode + '#' + JSON.stringify(screen);
-    if (key === this.lastPanelKey) return;
-    this.lastPanelKey = key;
-    const body = this.panelEl.querySelector('#spBody') as HTMLElement;
-    body.innerHTML = (screen as any[]).map(n => this.renderNode(n)).join('');
-
-    // "model" nodes: the client renders the 3D model into a thumbnail image (a generic client
-    // capability — the SERVER only says "show this model as a picture").
-    setTimeout(async () => {
-      for (const img of Array.from(body.querySelectorAll('img[data-model]')) as HTMLImageElement[]) {
-        const u = img.getAttribute('data-model'); if (!u) continue;
-        const data = await this.mgThree.renderModelThumbnail(u);
-        if (data) img.src = data;
-      }
-    }, 0);
-
-    this.fillPendingAnimpicks(body);
-  }
-
-  // An animpick <select> can render BEFORE its item's model (and animation clips) finished
-  // loading — it would then show only "none" forever, because the panel only rebuilds when the
-  // server screen changes. Poll briefly and refill any empty pickers once the clips arrive.
-  private fillPendingAnimpicks(body: HTMLElement, tries = 0) {
-    const sels = Array.from(body.querySelectorAll('select[data-animpick]')) as HTMLSelectElement[];
-    const pending = sels.filter(s => s.options.length <= 1);
-    if (!pending.length || tries > 50) return;
-    for (const s of pending) {
-      const id = s.getAttribute('data-animpick') || '';
-      const it: any = (this.mgGame as any)?.allItems?.[id];
-      const clips = it?.mesh?.userData?.['clips'] || [];
-      if (!clips.length) continue;
-      const cur = it?.animationIdx ?? -1;
-      const clean = (v: any) => String(v ?? '').replace(/[&<>]/g, '');
-      s.innerHTML = ['<option value="-1">🎬 none</option>'].concat(
-        clips.map((c: any, i: number) => `<option value="${i}" ${i === cur ? 'selected' : ''}>${clean(c.name || ('Clip ' + i))}</option>`)).join('');
-    }
-    if (pending.some(s => s.options.length <= 1)) setTimeout(() => this.fillPendingAnimpicks(body, tries + 1), 400);
-  }
-
-  // Render one server UiNode (+ children) to HTML. Unknown types fall back to text, so a new
-  // game can never crash the client.
-  private renderNode(nd: any): string {
-    const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, (c: string) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
-    const bg = nd.bg ? `background:#${nd.bg};` : '';
-    const style = (nd.color ? `color:#${nd.color};` : '') + (nd.size ? `font-size:${nd.size}px;` : '') + bg;
-    const kids = () => (nd.children || []).map((k: any) => this.renderNode(k)).join('');
-    switch (nd.type) {
-      case 'col':   return `<div class="sp-col ${nd.style || ''}" style="${nd.size ? `gap:${nd.size}px;` : ''}${bg}">${kids()}</div>`;
-      case 'row':   return `<div class="sp-row ${nd.style || ''}" style="${nd.size ? `gap:${nd.size}px;` : ''}${bg}">${kids()}</div>`;
-      case 'title': return `<h3>${esc(nd.text)}</h3>`;
-      case 'note':  return `<div class="sp-note">${esc(nd.text)}</div>`;
-      case 'banner':return `<div class="sp-banner ${nd.style || ''}">${esc(nd.text)}</div>`;
-      case 'log':   return `<div class="sp-log">${esc(nd.text)}</div>`;
-      case 'space': return `<div style="height:${nd.size || 8}px"></div>`;
-      case 'image': {
-        const img = `<img class="sp-img ${nd.style || ''}" src="${GAMES_BASE}${nd.url}"${nd.size ? ` style="height:${nd.size}px"` : ''}>`;
-        // Generic "item over item": the server can layer marker images on top of a base image
-        // (nd.overlays: url + x/y centre + width, all in % of the base) — e.g. Resistance stamps
-        // the current mission + past results onto the map. Percent units keep markers glued to
-        // the same map spot at any panel size.
-        if (!nd.overlays?.length) return img;
-        const marks = nd.overlays.map((o: any) =>
-          `<img src="${GAMES_BASE}${o.url}" style="position:absolute;left:${o.x}%;top:${o.y}%;width:${o.w}%;transform:translate(-50%,-50%);pointer-events:none;">`).join('');
-        return `<span style="position:relative;display:inline-block;line-height:0;">${img}${marks}</span>`;
-      }
-      case 'model': return `<img class="sp-img sp-model ${nd.style || ''}" data-model="${nd.url}"${nd.size ? ` style="height:${nd.size}px"` : ''}>`;
-      case 'button': {
-        const isModel = nd.url && /\.(gltf|glb|obj|stl)$/i.test(nd.url);  // model icon → client thumbnail
-        const icon = nd.url ? (isModel ? `<img data-model="${nd.url}">` : `<img src="${GAMES_BASE}${nd.url}">`) : '';
-        const extra = (nd.confirm ? ` data-confirm="${esc(nd.confirm)}"` : '')
-                    + (nd.gather ? ` data-gather="${esc((nd.gather || []).join(','))}"` : '');
-        return `<button class="sp-btn ${nd.style || ''}" style="${bg}" data-act="${esc(nd.action)}" data-args='${esc(JSON.stringify(nd.args || {}))}'${extra}>${icon}<span>${esc(nd.text)}</span></button>`;
-      }
-      case 'animpick': {
-        // Model-inspection capability (not game logic): fill a dropdown from the loaded model's
-        // animation clips and dispatch the server action (SetAnim) with the chosen index.
-        const it = (this.mgGame as any)?.allItems?.[nd.id];
-        const clips = it?.mesh?.userData?.['clips'] || [];
-        const cur = it?.animationIdx ?? -1;
-        const opts = ['<option value="-1">🎬 none</option>'].concat(
-          clips.map((c: any, i: number) => `<option value="${i}" ${i === cur ? 'selected' : ''}>${esc(c.name || ('Clip ' + i))}</option>`)).join('');
-        // data-animpick lets fillPendingAnimpicks refill this select once the model's clips load
-        return `<select class="sp-input" data-animpick="${esc(nd.id)}" data-act="${esc(nd.action)}" data-onchange="1" data-argkey="${esc(nd.argKey || 'idx')}">${opts}</select>`;
-      }
-      case 'input':
-        return `<input class="sp-input" data-id="${esc(nd.id)}" placeholder="${esc(nd.placeholder || '')}">`;
-      case 'select': {
-        const opts = (nd.options || []).map((o: any) =>
-          `<option value="${esc(o.value)}" ${o.selected ? 'selected' : ''}>${esc(o.label)}</option>`).join('');
-        const act = nd.action ? ` data-act="${esc(nd.action)}"` : '';
-        const oc = nd.onChange ? ' data-onchange="1"' : '';
-        const ak = nd.argKey ? ` data-argkey="${esc(nd.argKey)}"` : '';
-        const ar = nd.args ? ` data-args='${esc(JSON.stringify(nd.args))}'` : '';
-        return `<select class="sp-input" data-id="${esc(nd.id)}"${act}${oc}${ak}${ar}>${opts}</select>`;
-      }
-      case 'check':
-        return `<label class="sp-check"><input type="checkbox" data-act="${esc(nd.action)}" data-onchange="1" data-argkey="${esc(nd.argKey)}" data-args='${esc(JSON.stringify(nd.args || {}))}' ${nd.checked ? 'checked' : ''}> ${esc(nd.text)}</label>`;
-      case 'checks': {
-        const opts = (nd.options || []).map((o: any) =>
-          `<label class="sp-check"><input type="checkbox" data-val="${esc(o.value)}" ${o.checked ? 'checked' : ''}> ${esc(o.label)}</label>`).join('');
-        return `<div class="sp-checks">${opts}<button class="sp-btn ok" data-act="${esc(nd.action)}" data-argkey="${esc(nd.argKey)}" data-need="${nd.need || 0}" data-args='${esc(JSON.stringify(nd.args || {}))}'>${esc(nd.text || 'Submit')}</button></div>`;
-      }
-      case 'text':
-      default:      return `<div class="sp-text ${nd.style || ''}" style="${style}">${esc(nd.text)}</div>`;
-    }
-  }
-
-  private panelStyles(): string {
-    return `
-      .sp{width:min(560px,100%);margin:0 auto 24px;box-sizing:border-box;font:600 16px system-ui,sans-serif;color:#e8edf5;
-           background:linear-gradient(180deg,rgba(22,17,14,.98),rgba(12,9,7,.98));border:1px solid #5a4632;
-           border-radius:18px;padding:16px 18px;box-shadow:0 12px 48px rgba(0,0,0,.6);}
-      .sp h3{margin:0 0 6px;font-size:22px;letter-spacing:.04em;}
-      .sp-topbar{display:flex;margin-bottom:10px;}
-      .sp-col{display:flex;flex-direction:column;}
-      .sp-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0;}
-      .sp-text{margin:4px 0;} .sp-text.big{font-size:19px;font-weight:800;}
-      .sp-note{color:#b7a488;font-size:14px;font-style:italic;margin:6px 0;}
-      .sp-img{border-radius:10px;border:1px solid #5a4632;display:block;margin:6px 0;} .sp-img.full{width:100%;}
-      .sp-log{margin-top:12px;border-top:1px solid #5a4632;padding-top:8px;max-height:180px;overflow-y:auto;
-           font:500 12px ui-monospace,monospace;color:#b7a488;white-space:pre-wrap;}
-      .sp-banner{font-size:20px;font-weight:800;text-align:center;padding:14px;border-radius:12px;margin:8px 0;}
-      .sp-banner.res,.sp-banner.win{background:#123a20;color:#8fffb0;}
-      .sp-banner.spy,.sp-banner.lose{background:#3a1414;color:#ff9b9b;}
-      .sp-text.pill{flex:1;text-align:center;padding:8px 0;border-radius:8px;background:#241a12;border:1px solid #5a4632;font-size:14px;margin:0;}
-      .sp-text.chip{padding:2px 10px;border-radius:999px;font-size:12.5px;margin:0;border:1px solid rgba(255,255,255,.14);white-space:nowrap;}
-      .sp-col.hist{margin-top:12px;border-top:1px solid #5a4632;padding-top:8px;max-height:260px;overflow-y:auto;}
-      .sp-col.hist .sp-row{margin:2px 0;}
-      .sp-text.pill.cur{outline:2px solid #d9b98a;}
-      .sp-text.pill.s{background:#123a20;border-color:#2f7a45;} .sp-text.pill.f{background:#3a1414;border-color:#7a2f2f;}
-      .sp-text.teamrow{font-size:18px;font-weight:700;color:#ffe0a8;padding:8px 12px;background:#241a12;border:1px solid #5a4632;border-radius:9px;margin-bottom:6px;}
-      .sp-btn{font:800 16px system-ui;color:#fff;background:#6a4a25;border:0;border-radius:10px;padding:10px 16px;margin:4px 8px 4px 0;cursor:pointer;display:inline-flex;align-items:center;gap:8px;}
-      .sp-btn:hover{background:#8a6431;}
-      .sp-btn.ghost{background:#3a2c1e;padding:7px 14px;font-size:14px;margin:0;}
-      .sp-btn.big{width:100%;justify-content:center;font-size:17px;padding:14px;box-sizing:border-box;}
-      .sp-btn.ok{background:#2f7a45;} .sp-btn.ok:hover{background:#3a9455;}
-      .sp-btn.no{background:#7a2f2f;} .sp-btn.no:hover{background:#984040;}
-      .sp-btn.votebtn{flex-direction:column;gap:6px;background:#241a12;border:2px solid #5a4632;padding:10px 14px;}
-      .sp-btn.votebtn img{height:64px;border-radius:6px;}
-      .sp-checks{display:flex;flex-direction:column;gap:2px;margin:6px 0;}
-      .sp-check{display:flex;align-items:center;gap:8px;font-size:16px;padding:5px 0;cursor:pointer;}
-      .sp-check input{width:18px;height:18px;}
-      .sp-input{box-sizing:border-box;padding:8px 10px;border-radius:9px;border:1px solid #5a4632;background:#0e0b08;color:#e8edf5;font:600 15px system-ui;margin:4px 0;min-width:140px;}
-      .sp-model{width:74px;height:74px;object-fit:contain;background:#0a0705;border-radius:8px;}
-      .sp-btn.tile{flex-direction:column;gap:4px;width:86px;background:#241a12;border:1px solid #5a4632;font-size:12px;padding:6px;}
-      .sp-btn.tile img{width:68px;height:68px;object-fit:contain;border-radius:6px;background:#0a0705;}
-      .sp-chip{display:inline-flex;align-items:center;gap:6px;background:#241a12;border:1px solid #5a4632;border-radius:9px;padding:5px 9px;margin:0 6px 6px 0;}
-      .sp-col.tile{border:1px solid #2a3a55;border-radius:10px;padding:8px;min-width:104px;gap:5px;}
-    `;
+    this.updatePanel3d(g, mine?.screen || null);
   }
 
 

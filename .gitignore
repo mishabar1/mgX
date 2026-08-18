@@ -416,3 +416,7 @@ Database/app.db
 # generated SVG/PNG art in GameContent, not these — keep the multi-MB PDFs out of git.
 GameContent/**/*.pdf
 *.pdf
+
+# Small World raw PnP sources (~1.1GB incl. 100MB map scans — GitHub rejects files > 100MB).
+# The runtime will use downscaled map_N.png files generated from these.
+GameContent/games/smallworld/src/

@@ -757,32 +757,44 @@ namespace MG.Server.GameFlows
 
         private List<UiNode> BuildDmScreen()
         {
-            var s = new List<UiNode> { UiNode.Title("🎲 DM Console") };
-
+            // The DM's controls fall into two natural groups, so they go into two PANELS:
+            //  * right  — what you are acting on right now (the selected figure), read top-to-bottom;
+            //  * bottom — the world tools (scenes, monsters, sounds), whose wide rows of tiles fit
+            //             the bottom edge far better than a narrow sidebar.
+            // Where those edges actually are is the client's business: on screen they dock to the
+            // view, and in VR they ride the player's hand. This only says which edge each belongs to.
+            var selected = new List<UiNode> { UiNode.Title("🎲 DM Console") };
             var sel = getItemsByAttribute("selected").FirstOrDefault();
-            if (sel != null) s.AddRange(BuildSelectedSection(sel));
+            if (sel != null) selected.AddRange(BuildSelectedSection(sel));
+            else selected.Add(UiNode.Note("Click a figure on the table to select it."));
 
-            s.Add(UiNode.Text_("SCENE", "8aa0c0", 12));
-            s.Add(UiNode.Row(SCENES.Select(sc =>
+            var tools = new List<UiNode>();
+
+            tools.Add(UiNode.Text_("SCENE", "8aa0c0", 12));
+            tools.Add(UiNode.Row(SCENES.Select(sc =>
                 UiNode.Button(sc.label, nameof(LoadScene), new() { { "sceneUrl", sc.url } }, ASSETS + sc.url, "tile")).ToArray()));
 
-            s.Add(UiNode.Text_("ADD MONSTER", "8aa0c0", 12));
-            s.Add(UiNode.Row(MONSTERS.Select(m =>
+            tools.Add(UiNode.Text_("ADD MONSTER", "8aa0c0", 12));
+            tools.Add(UiNode.Row(MONSTERS.Select(m =>
                 UiNode.Button(m.label, nameof(AddMonster), new() { { "monsterUrl", m.url } }, m.url, "tile")).ToArray()));
 
-            s.Add(UiNode.Text_("SOUND", "8aa0c0", 12));
+            tools.Add(UiNode.Text_("SOUND", "8aa0c0", 12));
             var sounds = SOUNDS.Select(sd => UiNode.Button((sd.loop ? "🎵 " : "🔊 ") + sd.label, nameof(PlaySound),
                 new() { { "soundUrl", sd.url }, { "loop", sd.loop ? "1" : "0" } })).ToList();
             sounds.Add(UiNode.Button("⏹ Stop", nameof(StopSound)));
-            s.Add(UiNode.Row(sounds.ToArray()));
+            tools.Add(UiNode.Row(sounds.ToArray()));
 
-            s.Add(UiNode.Text_("ALL CHARACTERS", "8aa0c0", 12));
-            s.Add(UiNode.Row(
+            tools.Add(UiNode.Text_("ALL CHARACTERS", "8aa0c0", 12));
+            tools.Add(UiNode.Row(
                 UiNode.Button("👁 Show labels", nameof(ShowAllLabels)),
                 UiNode.Button("🚫 Hide labels", nameof(HideAllLabels)),
                 UiNode.Button("🎲 Clear dice", nameof(ClearAllRolls))));
 
-            return s;
+            return new List<UiNode>
+            {
+                UiNode.Panel("right", selected.ToArray()),
+                UiNode.Panel("bottom", tools.ToArray()),
+            };
         }
 
         private List<UiNode> BuildSelectedSection(ItemData sel)

@@ -16,9 +16,6 @@
     <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <!-- ML.NET (used by MLModel.*.cs). Kept and bumped to the current major. -->
-    <PackageReference Include="Microsoft.ML" Version="5.0.0" />
-    <PackageReference Include="Microsoft.ML.FastTree" Version="5.0.0" />
     <!-- Swagger/OpenAPI UI. v10.x is the first release supporting .NET 10. -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
     <!-- VS container tooling target. -->
@@ -30,15 +27,20 @@
     <!-- Ensure native SQLite provider is pinned to a non-vulnerable build. -->
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12-pre20260709125052" />
   </ItemGroup>
-  <ItemGroup Label="MLModel">
-    <None Include="MLModel.mlnet">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
 
   <!-- Game CONTENT (art/models/sounds/heads) is served by the server from GameContent/ — the
-       single source of truth. Ship it with the published app. -->
+       single source of truth. Ship it with the published app.
+       The Remove BEFORE the Include is required, not cosmetic: the Web SDK's implicit Content glob
+       already picks up some file types under the project dir (.json among them), so a GameContent
+       file of such a type would be included twice and fail the build with NETSDK1022. Dropping the
+       SDK's copies first and re-adding the whole tree on our own terms keeps ONE item per file
+       whatever extensions a game's assets use (Small World ships regions_N.json). -->
   <ItemGroup>
+    <!-- GameContent holds ASSETS only. Never compile code from it: a stray .cs scratch file in an
+         asset folder would otherwise be built into the server (and can even add a second entry
+         point). Assets are shipped as Content by the two lines below. -->
+    <Compile Remove="GameContent\**" />
+    <Content Remove="GameContent\**" />
     <Content Include="GameContent\**" CopyToPublishDirectory="PreserveNewest" CopyToOutputDirectory="Never" />
   </ItemGroup>
   <!--

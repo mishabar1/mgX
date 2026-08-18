@@ -78,6 +78,13 @@ export class MgThree{
   }
 
   controllers: any;
+
+  /**
+   * Notified when a WebXR session starts or ends. Features that must move between the desktop
+   * layout and the headset subscribe here instead of polling `xr.isPresenting` every frame —
+   * the in-scene panel uses it to hop from the table onto a controller and back.
+   */
+  onXrSessionChange?: (presenting: boolean) => void;
   // Set by MgGame: dispatch a game click for the item a VR controller pointed at.
   vrClickHandler?: (mesh: any, point: any) => void;
   // Set by MgGame: the item currently under a VR controller ray (or null) — drives the hover glow.
@@ -351,6 +358,7 @@ export class MgThree{
       // Clear any stale pose left from a previous VR session, so alignXrToDesktopView only fires
       // once THIS session's first real headset pose has been written (identity = not yet tracked).
       this.renderer.xr.getCamera().matrixWorld.identity();
+      try { this.onXrSessionChange?.(true); } catch (err) { console.error('[xr] onXrSessionChange(true) threw', err); }
     });
     this.renderer.xr.addEventListener('sessionend', () => {
       // Leaving VR: restore the desktop camera to where it was before the session (WebXR has
@@ -362,6 +370,7 @@ export class MgThree{
         this.orbitControls.update();
         this.cameraBeforeVr = null;
       }
+      try { this.onXrSessionChange?.(false); } catch (err) { console.error('[xr] onXrSessionChange(false) threw', err); }
     });
 
 
@@ -447,6 +456,41 @@ export class MgThree{
 
   }
 
+  // Per-frame callbacks from features that need one (e.g. the in-scene panel's UI library).
+  private frameHooks: ((deltaMs: number) => void)[] = [];
+  private frameClock = { last: undefined as number | undefined };
+  private loggedFrameErrors = new Set<string>();
+
+  addFrameHook(fn: (deltaMs: number) => void) { this.frameHooks.push(fn); }
+  removeFrameHook(fn: (deltaMs: number) => void) {
+    const i = this.frameHooks.indexOf(fn);
+    if (i >= 0) this.frameHooks.splice(i, 1);
+  }
+
+  private frameDelta(): number {
+    const now = performance.now();
+    const d = this.frameClock.last == null ? 0 : now - this.frameClock.last;
+    this.frameClock.last = now;
+    return d;
+  }
+
+  /**
+   * Run one frame participant, isolated. A throw here must never skip renderer.render() below —
+   * that blanks the whole canvas, board included. The participant is KEPT (a UI library needs
+   * every frame; dropping it turns one bad frame into a permanently invisible panel) and the
+   * error is reported once so the log does not fill up at 60fps.
+   */
+  private safeFrame(label: string, fn: () => void): boolean {
+    try { fn(); return true; }
+    catch (err) {
+      if (!this.loggedFrameErrors.has(label)) {
+        this.loggedFrameErrors.add(label);
+        console.error(`[frame] "${label}" threw and was disabled for this session; the scene keeps rendering.`, err);
+      }
+      return false;
+    }
+  }
+
   animationLoop(){
     // Glide any moving pieces toward their target (smooth movement, no "jump").
     for (let i = this.movers.length - 1; i >= 0; i--) {
@@ -465,7 +509,13 @@ export class MgThree{
       })
     }
 
-    ThreeMeshUI.update()
+    // Third-party UI libraries need a per-frame update, and this runs BEFORE renderer.render()
+    // below — so an exception in one of them skips the render and blanks the entire canvas, board
+    // included. Each is therefore isolated: a hook that throws is reported once and dropped, and
+    // the frame still draws.
+    this.safeFrame('three-mesh-ui', () => ThreeMeshUI.update());
+    const delta = this.frameDelta();
+    for (const hook of this.frameHooks) this.safeFrame('frameHook', () => hook(delta));
 
     if (this.controllers) {
       this.controllers.forEach((controller: any) => {

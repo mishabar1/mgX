@@ -54,6 +54,20 @@ namespace MG.Server.Entities
         // in PERCENT of the base image so they stay glued to the right spot at any render size.
         public List<UiOverlay>? Overlays { get; set; }
 
+        // ---- panels -------------------------------------------------------------------
+        // A seat's Screen can be split into SEVERAL panels, each pinned to an edge of the player's
+        // view: "right" | "left" | "top" | "bottom" (anything else falls back to right). Panels
+        // sharing an edge stack along it, in the order the game lists them.
+        //
+        // This is deliberately just another node type, so nothing else changes: a Screen with no
+        // Panel node is drawn as ONE panel docked right, which is what every existing game already
+        // gets. A game opts in only when it wants the split.
+        //
+        // Where a panel physically ends up is the CLIENT's business (it docks to the edges of the
+        // view on screen, and rides the player's hand in VR). The server only names the edge.
+        public static UiNode Panel(string dock, params UiNode[] kids) =>
+            new UiNode { Type = "panel", Style = dock, Children = new(kids) };
+
         // ---- tiny fluent helpers so game flows read cleanly ----
         public static UiNode Col(params UiNode[] kids) => new UiNode { Type = "col", Children = new(kids) };
         public static UiNode Row(params UiNode[] kids) => new UiNode { Type = "row", Children = new(kids) };

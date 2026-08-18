@@ -152,6 +152,9 @@ namespace MG.Server.Database
                 case GameTypeEnum.ONE_NIGHT_WEREWOLF:
                     game.GameFlow = new OneNightWerewolfGameFlow(game);
                     break;
+                case GameTypeEnum.SMALL_WORLD:
+                    game.GameFlow = new SmallWorldGameFlow(game);
+                    break;
             }
         }
 

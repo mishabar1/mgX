@@ -17,7 +17,27 @@
     "importHelpers": true,
     "target": "ES2022",
     "module": "ES2022",
-    "useDefineForClassFields": false
+    "useDefineForClassFields": false,
+    /* @pmndrs/uikit and @pmndrs/pointer-events BOTH augment three's Object3DEventMap, declaring the
+       same event names with DIFFERENT types (uikit's ThreePointerEvent vs pointer-events' own
+       PointerEvent) — TS2717 on every one of them. Neither package depends on the other (uikit
+       carries its own internal pointer-events types), so this is structural rather than a version
+       mismatch: pointer-events was only conflict-free at 6.0.0, and pinning an input library to an
+       ancient release to dodge a type clash is a worse trap than this flag. Unlike the paths entry
+       below there is no precise fix — you cannot redirect an interface augmentation.
+       NOTE this disables type-checking INSIDE .d.ts files only; our own code is still fully checked
+       under "strict" above. */
+    "skipLibCheck": true,
+    /* WORKAROUND for a packaging bug in @pmndrs/uikit-default 1.0.75: its .d.ts files import
+       types from "@pmndrs/uikit/src/...", but @pmndrs/uikit only publishes "dist" (its
+       package.json has files:["dist"]), so those imports cannot resolve and every build fails
+       with TS2307. dist mirrors the src layout, so redirecting src/* -> dist/* fixes all 67
+       references. Kept even though skipLibCheck (below) would also hide it, because this one is a
+       CORRECTION — it points at the real files — and it keeps working if that flag is ever
+       removed. Delete once upstream ships either its src or corrected type paths. */
+    "paths": {
+      "@pmndrs/uikit/src/*": ["./node_modules/@pmndrs/uikit/dist/*"]
+    }
   },
   "angularCompilerOptions": {
     "enableI18nLegacyMessageIdFormat": false,

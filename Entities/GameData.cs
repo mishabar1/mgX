@@ -126,6 +126,7 @@ namespace MG.Server.Entities
         public const string CARCASSONNE = "CARCASSONNE";
         public const string CATAN = "CATAN";
         public const string ONE_NIGHT_WEREWOLF = "ONE_NIGHT_WEREWOLF";
+        public const string SMALL_WORLD = "SMALL_WORLD";
     }
 
     public class GameStatusEnum

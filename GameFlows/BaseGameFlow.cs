@@ -43,6 +43,7 @@ namespace MG.Server.GameFlows
             new(GameTypeEnum.CARCASSONNE, "Carcassonne",         "pi pi-map",        "covers/carcassonne.svg"),
             new(GameTypeEnum.CATAN,       "Catan",               "pi pi-sitemap",    "covers/catan.svg"),
             new(GameTypeEnum.ONE_NIGHT_WEREWOLF, "One Night Werewolf", "pi pi-moon", "covers/werewolf.svg"),
+            new(GameTypeEnum.SMALL_WORLD, "Small World",     "pi pi-globe",      "covers/smallworld.svg"),
             new(GameTypeEnum.DEMO,        "Demo (dev reference)","pi pi-code",       "covers/demo.svg"),
         };
 
@@ -61,6 +62,7 @@ namespace MG.Server.GameFlows
             GameTypeEnum.CARCASSONNE => "Carcassonne",
             GameTypeEnum.CATAN => "Catan",
             GameTypeEnum.ONE_NIGHT_WEREWOLF => "One Night Werewolf",
+            GameTypeEnum.SMALL_WORLD => "Small World",
             _ => type
         };
 
@@ -108,6 +110,9 @@ namespace MG.Server.GameFlows
                     break;
                 case GameTypeEnum.ONE_NIGHT_WEREWOLF:
                     game.GameFlow = new OneNightWerewolfGameFlow(game);
+                    break;
+                case GameTypeEnum.SMALL_WORLD:
+                    game.GameFlow = new SmallWorldGameFlow(game);
                     break;
                 default:
                     break;

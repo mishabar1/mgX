@@ -16,6 +16,46 @@ import {Vector3} from "three/src/math/Vector3.js";
 import {Box3} from "three/src/math/Box3.js";
 import {Group} from "three/src/objects/Group.js";
 
+// three-mesh-ui CRASHES on any character missing from its MSDF atlas: it logs "The character
+// 'x' is not included in the font characters set." and then dereferences the absent glyph in
+// mapUVs. That throw lands inside ThreeMeshUI.update() in the render loop, i.e. before the frame
+// is drawn, so one stray character costs the whole scene.
+//
+// Do NOT assume "ASCII is safe" — this atlas is missing '>' as well as '·'. The only reliable
+// answer is the atlas's own character list, so read it from the font JSON and filter against it.
+// Until that arrives, letters/digits/space are the conservative subset every atlas carries.
+const MSDF_FONT_JSON = '/assets/fonts/Roboto-msdf.json';   // absolute: a relative path resolves
+                                                           // against /game-play/<id>/ and the SPA
+                                                           // fallback answers it with index.html
+let msdfCharset: Set<string> | null = null;
+fetch(MSDF_FONT_JSON).then(r => r.json()).then(j => {
+  const cs = new Set<string>();
+  if (typeof j?.info?.charset === 'string') for (const c of j.info.charset) cs.add(c);
+  if (Array.isArray(j?.chars)) for (const c of j.chars) if (c?.char) cs.add(c.char);
+  cs.add(' ');
+  msdfCharset = cs;
+}).catch(() => { /* keep the conservative fallback */ });
+
+// Fold the typographic characters the server actually uses onto plain ones. Note arrows collapse
+// to '-' rather than '->' precisely because '>' is NOT in this atlas.
+const MSDF_MAP: [RegExp, string][] = [
+  [/[\u00b7\u2022]/g, '-'], [/[\u2014\u2013]/g, '-'],
+  [/[\u2192\u2190]/g, '-'],
+  [/[\u2018\u2019]/g, "'"], [/[\u201c\u201d]/g, '"'],
+  [/[\u2714\u2713]/g, 'v'], [/\u00d7/g, 'x'], [/\u2026/g, '...'],
+];
+
+function msdfSafe(s: any): string {
+  let t = String(s ?? '');
+  for (const [re, to] of MSDF_MAP) t = t.replace(re, to);
+  if (msdfCharset) {
+    let out = '';
+    for (const c of t) out += msdfCharset.has(c) ? c : ' ';
+    return out;
+  }
+  return t.replace(/[^A-Za-z0-9 ]/g, ' ');
+}
+
 export class MgGame{
 
   gameData!: GameData;
@@ -662,8 +702,12 @@ export class MgGame{
           height: 100,
           justifyContent: 'center',
           textAlign: 'center',
-          fontFamily: 'assets/fonts/Roboto-msdf.json',
-          fontTexture: 'assets/fonts/Roboto-msdf.png',
+          // ABSOLUTE (leading slash): three-mesh-ui resolves these against the CURRENT PAGE URL,
+          // so a relative path becomes '/game-play/<id>/assets/...', which the SPA fallback answers
+          // with index.html (HTTP 200!) instead of the font — every glyph metric then comes back
+          // undefined and the library crashes in BufferGeometry.translate.
+          fontFamily: '/assets/fonts/Roboto-msdf.json',
+          fontTexture: '/assets/fonts/Roboto-msdf.png',
           fontColor: new THREE.Color(0x000000),
           // borderRadius: 0.05,
           backgroundOpacity: 0
@@ -673,7 +717,7 @@ export class MgGame{
         // container.rotation.x = -0.55;
         // this.scene.add( container );
 
-        const t1: any = new ThreeMeshUI.Text({content: itemData.text});
+        const t1: any = new ThreeMeshUI.Text({content: msdfSafe(itemData.text)});
         container.add(t1);
 
         this.processItem(itemData, container, parentMesh);
@@ -947,7 +991,7 @@ export class MgGame{
   updateItemText(item: ItemData, text?: string) {
     if (item.asset == "TEXTBLOCK") {
       item.text = text;
-      (item.mesh! as any).childrenTexts[0].set({content: text});
+      (item.mesh! as any).childrenTexts[0].set({content: msdfSafe(text)});
     }
   }
 
@@ -987,6 +1031,11 @@ export class MgGame{
 
     mesh.userData['ItemData'] = itemData;
     itemData.mesh = mesh
+    // Models load ASYNCHRONOUSLY, so anything derived from a mesh was computed before this point
+    // and has to be re-run now. On a page refresh that is why a selected piece did not glow (the
+    // OutlinePass was handed an item with no mesh yet) and why an animation picker stayed stuck on
+    // "model still loading" (its clips live on the mesh). Debounced, because a scene loads many.
+    this.meshReady();
 
     // Cast & receive shadows so pieces separate visually (contact + inter-piece shadows).
     mesh.traverse((o: any) => {
@@ -1126,6 +1175,25 @@ export class MgGame{
     ctx.fillText(label, 128, 224);
     const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true;
     return tex;
+  }
+
+  /** Set by the host: a model finished loading, so mesh-derived UI must be rebuilt. */
+  onMeshesReady?: () => void;
+
+  private meshReadyPending = false;
+
+  /**
+   * Called whenever a model load attaches a mesh. Coalesced: loading a scene attaches dozens of
+   * meshes in a burst, and re-running the dependent work once at the end is enough.
+   */
+  private meshReady() {
+    if (this.meshReadyPending) return;
+    this.meshReadyPending = true;
+    setTimeout(() => {
+      this.meshReadyPending = false;
+      this.refreshOutline();     // a selected item that had no mesh yet can finally be outlined
+      try { this.onMeshesReady?.(); } catch (e) { console.error('[mg.game] onMeshesReady threw', e); }
+    }, 60);
   }
 
   // Collect the meshes of all currently-selected items and hand them to the OutlinePass so it
