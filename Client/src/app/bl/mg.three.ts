@@ -12,6 +12,11 @@ import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader.js';
 import {AnimationMixer, BufferGeometry, Line, Matrix4, Raycaster, TextureLoader, Vector3} from 'three';
 import {FontLoader} from 'three/examples/jsm/loaders/FontLoader.js';
 import {InteractionManager} from '../services/mg.interaction.manager';
+// The input layer @pmndrs/uikit officially asks for. Its vanilla docs are explicit: "since three.js
+// ships no event system, no event system is available out of the box", and they point at exactly
+// this package. It is the same monorepo (pmndrs/xr) and the same version line as @react-three/xr,
+// so it is also the path that carries VR controller rays later.
+import {forwardHtmlEvents} from '@pmndrs/pointer-events';
 import {RoomEnvironment} from 'three/examples/jsm/environments/RoomEnvironment.js';
 import * as ThreeMeshUI from 'three-mesh-ui';
 import * as TWEEN from '@tweenjs/tween.js';
@@ -59,6 +64,23 @@ export class MgThree{
   textureLoader!: TextureLoader;
   fontLoader!: FontLoader;
   interactionManager!: InteractionManager;
+  /** @pmndrs/pointer-events, forwarding canvas pointer events into the scene. See initThree. */
+  pointerEvents?: { update: () => void, destroy: () => void };
+
+  private uiHover = false;
+  /**
+   * Called by the in-scene UI while the cursor is over one of its panels.
+   *
+   * OrbitControls and the panel listen for wheel and drag on the SAME canvas, and neither yields —
+   * @pmndrs/pointer-events deliberately never calls stopPropagation, which is what makes it safe to
+   * add but also means a scroll gesture over a panel zooms the camera at the same time. Whoever is
+   * under the cursor should win, and that is the panel; the camera gets the rest of the screen.
+   */
+  setUiHover(over: boolean) {
+    if (this.uiHover === over) return;
+    this.uiHover = over;
+    if (this.orbitControls) this.orbitControls.enabled = !over;
+  }
 
   // Cache textures by URL so re-created items (e.g. cards rebuilt every action) reuse the
   // same THREE.Texture instead of re-fetching/decoding the image each time.
@@ -226,6 +248,8 @@ export class MgThree{
   dispose() {
     window.removeEventListener('resize', this.onWindowResize);
     try { this.renderer?.setAnimationLoop(null); } catch {}
+    // Its listeners sit on a canvas we are about to throw away — detach or they leak per view.
+    try { this.pointerEvents?.destroy(); this.pointerEvents = undefined; } catch {}
     try {
       this.renderer?.domElement.removeEventListener('mousemove', this.magMouseMove);
       this.renderer?.domElement.removeEventListener('mouseleave', this.magMouseLeave);
@@ -426,6 +450,30 @@ export class MgThree{
 
     this.interactionManager = new InteractionManager(this.renderer, this.camera, this.renderer.domElement);
 
+    // ---- @pmndrs/pointer-events: the input system @pmndrs/uikit needs (the 3D panel) ----------
+    // It only ADDS listeners to the canvas (pointermove / pointerover / pointerdown / pointerup /
+    // wheel / pointercancel / pointerleave) and never calls preventDefault or stopPropagation —
+    // read out of its own forward.js, not assumed. So OrbitControls above and the
+    // InteractionManager keep receiving every event exactly as before; this is additive.
+    //
+    // SCOPING, and this is the part that matters: `pointerEvents` is INHERITED down the scene graph
+    // (`object.pointerEvents ?? parentPointerEvents`), and uikit sets `defaultPointerEvents = 'auto'`
+    // on its components. Switching the SCENE off here means board items — meshes that carry click
+    // listeners for the InteractionManager — are never targeted by this system, so no action can
+    // fire twice. The 3D panel opts its own subtree back in (mg.panel3d.ts sets pointerEvents on the
+    // pane root). One system per kind of object, decided in one place.
+    (this.scene as any).pointerEvents = 'none';
+    this.pointerEvents = forwardHtmlEvents(this.renderer.domElement, () => this.camera, this.scene, {
+      // NOT the library default (false). The default only re-intersects the scene when the POINTER
+      // moves, which assumes the scene holds still while the pointer does. Ours does the opposite:
+      // the panel is parented to the CAMERA, so it moves whenever the view moves, and it is rebuilt
+      // from scratch after most actions — the object that was under the cursor no longer exists.
+      //
+      // Observed: HP "+" took 8 -> 9, a second identical click at the same pixel did nothing, and a
+      // 1px mouse nudge made the next one land. Re-intersecting every frame is the documented cure.
+      intersectEveryFrame: true,
+    });
+
     this.clock = new THREE.Clock();
 
     // Start the animation loop
@@ -527,6 +575,9 @@ export class MgThree{
     if (this.renderer.xr.isPresenting && this.xrDesiredView) this.alignXrToDesktopView();
 
     this.orbitControls.update();
+    // pointer-events batches per frame and flushes here (its docs: call update() every frame).
+    // Isolated like the other frame participants — a throw must not skip the render below.
+    this.safeFrame('pointer-events', () => this.pointerEvents?.update());
     this.interactionManager.update();
     // EffectComposer (OutlinePass) can't render to the WebXR framebuffer — use the plain
     // renderer in VR, the composer (with the selection/hover glow) otherwise.

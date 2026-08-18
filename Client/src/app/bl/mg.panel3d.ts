@@ -13,11 +13,6 @@ import { Checkbox, RadioGroup, RadioGroupItem } from '@pmndrs/uikit-default';
 import {
   Dice6, Music, Volume2, Eye, Ban, Trash2, X, RotateCcw, RotateCw, Square, Play,
 } from '@pmndrs/uikit-lucide';
-// NOTE on scrolling: uikit's overflow:'scroll' needs a pointer system feeding it wheel and drag
-// events (@pmndrs/pointer-events, forwardHtmlEvents). That was tried and REVERTED: its canvas
-// listeners compete with the app's own InteractionManager on the same element and left every panel
-// control dead. Re-attempt it deliberately — prove it delivers a click BEFORE removing the
-// InteractionManager path below, and expect to have to arbitrate which system owns the canvas.
 import { GAMES_BASE } from './mg.three';
 
 // =====================================================================================
@@ -49,6 +44,45 @@ export type UiNode = {
   children?: UiNode[]; id?: string; placeholder?: string; onChange?: boolean; checked?: boolean;
   confirm?: string; gather?: string[]; overlays?: { url: string, x: number, y: number, w: number }[];
 };
+
+/**
+ * Which system delivers DESKTOP clicks to the panel. VR is unaffected either way — a headset goes
+ * through mg.three's controller raycast, which reads the `userData` that makeInteractive() writes.
+ *
+ *  'interaction-manager' — the app's own three.interactive wrapper. Known to work; it is what
+ *        shipped. It only knows about clicks: no wheel, no drag. Switching back to it therefore
+ *        also disables SCROLLING, and a panel taller than its slice will be clipped with no way to
+ *        reach the rest — so it is a fallback for proving a regression, not a place to live.
+ *  'pointer-events'      — @pmndrs/pointer-events, the layer uikit's own vanilla docs prescribe:
+ *        "since three.js ships no event system, no event system is available out of the box". It
+ *        brings wheel, drag, capture and proper pointerover/out, and it is the same package the
+ *        R3F/XR stack uses, so a VR ray pointer can later be fed through the same pipeline.
+ *
+ * Exactly ONE of them owns the panel. Both were live at once briefly and that is a trap: they each
+ * dispatch 'click' on the same object, so every action ran twice (which reads as "nothing happened"
+ * on anything idempotent, and as a double spend on anything that is not). Flipping this constant is
+ * the whole revert — the other path stays fully wired underneath.
+ *
+ * A previous attempt at 'pointer-events' was abandoned on a false diagnosis: an HP "+5" that did
+ * nothing was read as a dead click path, when in fact HP was already at max and the server was
+ * correctly ignoring it. Hence panelClickStats below — the verdict is counted, not eyeballed.
+ */
+const PANEL_INPUT: 'interaction-manager' | 'pointer-events' = 'pointer-events';
+
+/**
+ * Tally of what actually arrived, per input system, exposed as `window.__panel3dClicks`. Cheap,
+ * and it settles "is the new path delivering?" with a number instead of an impression.
+ */
+const panelClickStats: { [source: string]: number } = {};
+function notePanelClick(source: string) {
+  panelClickStats[source] = (panelClickStats[source] || 0) + 1;
+  (window as any).__panel3dClicks = panelClickStats;
+  // Also on the DOM. `window` is not readable from a browser extension's isolated world and the
+  // console buffer resets on every dev-server reload, so a page attribute is the only channel that
+  // survives both — and it is what let this be measured instead of guessed.
+  try { document.body.dataset['panel3dClicks'] = JSON.stringify(panelClickStats); } catch { }
+  console.log('[panel3d] click delivered via %s', source, panelClickStats);
+}
 
 /**
  * Authored width in px per dock. A side dock is a narrow column; a top/bottom dock is a wide
@@ -168,6 +202,8 @@ const DOCKS: Dock[] = ['right', 'left', 'top', 'bottom'];
 const HUD_DIST = 2;
 /** How wide a panel is when carried in VR, in metres. */
 const HAND_WIDTH = 0.42;
+/** How tall a hand-carried panel may get before it scrolls, in metres. */
+const HAND_MAX_HEIGHT = 0.30;
 
 interface Pane {
   dock: Dock;
@@ -176,8 +212,8 @@ interface Pane {
   group: THREE.Group;       // positions the panel; a child of MgPanel3d.group
   root: Container;          // the uikit tree
   wPx: number;              // authored width in px (depends on the dock)
-  estH: number;             // estimated content height in px, for fitting and stacking
   px: number;               // current pixelSize
+  maxHPx: number;           // current maxHeight in px; content past it scrolls
 }
 
 function dockOf(style: string | undefined): Dock {
@@ -215,6 +251,27 @@ function setPixelSize(p: Pane, v: number) {
   p.root.setProperties({ pixelSize: v });
 }
 
+/** Same deal for maxHeight: pushing it every frame would re-run yoga every frame. */
+function setMaxHeightPx(p: Pane, v: number) {
+  if (!isFinite(v) || v <= 0 || Math.abs(v - p.maxHPx) < 0.5) return;
+  p.maxHPx = v;
+  p.root.setProperties({ maxHeight: v });
+}
+
+/**
+ * The panel's REAL laid-out height in px, straight from yoga — or null before the first layout.
+ *
+ * This replaced a hand-written estimator that walked the UiNode tree guessing at row heights,
+ * wrapped-text growth and dropdown states. Guessing was only ever needed because the panel had to
+ * be shrunk to fit its content; now it scrolls instead, so the one remaining use is stacking
+ * panels on the same edge, and for that the actual number is available for free.
+ */
+function measuredHeightPx(p: Pane): number | null {
+  const s: any = (p.root as any).size?.value;
+  const h = Array.isArray(s) ? s[1] : undefined;
+  return typeof h === 'number' && isFinite(h) && h > 0 ? h : null;
+}
+
 export class MgPanel3d {
 
   /** Everything this seat's panels live under. Parented to the camera, or to a hand in VR. */
@@ -229,6 +286,14 @@ export class MgPanel3d {
   private picks: { [argKey: string]: string[] } = {};      // "checks" groups, mid-selection
   private fields: { [id: string]: string } = {};           // "input" values, for `gather`
   private open: { [id: string]: boolean } = {};            // which dropdowns are expanded
+
+  /** Panes the cursor is currently inside. A set, because docks can sit edge to edge. */
+  private hovered = new Set<Pane>();
+
+  private setHover(p: Pane, on: boolean) {
+    if (on) this.hovered.add(p); else this.hovered.delete(p);
+    this.mgThree?.setUiHover?.(this.hovered.size > 0);
+  }
 
   /** Non-null while the panels ride a VR controller. */
   private attachedTo: THREE.Object3D | null = null;
@@ -321,28 +386,72 @@ export class MgPanel3d {
     this.group.add(paneGroup);
 
     const wPx = widthFor(spec.dock);
-    // No height: yoga derives it from the content.
+    // No height: yoga derives it from the content, up to the maxHeight place() sets.
     const root = new Container({
       width: wPx,
       flexDirection: 'column',
       alignItems: 'stretch',
       padding: 18,
-      gap: 10,
       backgroundColor: '#0b0f14',
       opacity: 0.92,
       borderRadius: 18,
       borderWidth: 2,
       borderColor: '#1f2937',
+      // mg.three sets scene.pointerEvents = 'none' so board items belong to the InteractionManager
+      // alone. That 'none' is INHERITED, so the panel has to opt its own subtree back in here or
+      // @pmndrs/pointer-events would never see a single widget. 'auto' is what uikit itself uses
+      // (defaultPointerEvents = 'auto' on every component), so this restores uikit's own default
+      // rather than inventing a policy; individual nodes still override it — the dropdown list
+      // toggles between 'auto' and 'none' to stop a closed list swallowing clicks.
+      pointerEvents: PANEL_INPUT === 'pointer-events' ? 'auto' : 'none',
+      // A panel is no longer shrunk until it fits — it keeps a readable size and SCROLLS. That is
+      // only possible because a pointer system now feeds uikit the wheel and drag events it needs
+      // (see PANEL_INPUT); under the InteractionManager, which has neither, this would clip the
+      // overflow with no way to reach it.
+      overflow: 'scroll',
+      scrollbarWidth: 6,
+      scrollbarColor: '#475569',
+      scrollbarBorderTopLeftRadius: 3,
+      scrollbarBorderTopRightRadius: 3,
+      scrollbarBorderBottomLeftRadius: 3,
+      scrollbarBorderBottomRightRadius: 3,
     });
     paneGroup.add(root);
 
+    // The classic scroll-viewport / content pair, and it is NOT optional. `root` is the viewport:
+    // it has the maxHeight and clips. Every node goes into `content`, which carries flexShrink: 0
+    // so yoga lays it out at its natural height and lets it overflow.
+    //
+    // Building straight into a height-capped root instead does what flexbox always does when a
+    // column is too small: it SHRINKS the children. Rows collapsed into each other and section
+    // labels drew on top of the buttons below them — which looked like a rendering bug and is
+    // really just flex-shrink doing its job.
+    const content = new Container({
+      flexDirection: 'column',
+      alignItems: 'stretch',
+      gap: 10,
+      width: '100%',
+      flexShrink: 0,
+    });
+    root.add(content);
+
     const pane: Pane = {
       dock: spec.dock, key: spec.key, clickables: [],
-      group: paneGroup, root, wPx, estH: this.estimate(spec.nodes), px: 0,
+      group: paneGroup, root, wPx, px: 0, maxHPx: 0,
     };
+
+    // Hand the camera controls off while the cursor is on this panel — otherwise scrolling the
+    // panel also zooms the view. enter/leave rather than over/out on purpose: those two bubble, so
+    // moving between a panel's own children would report leaving the panel it never left.
+    (root as any).addEventListener('pointerenter', () => this.setHover(pane, true));
+    (root as any).addEventListener('pointerleave', () => this.setHover(pane, false));
     this.building = pane;
-    try { for (const nd of spec.nodes) this.build(nd, root); }
+    try { for (const nd of spec.nodes) this.build(nd, content); }
     finally { this.building = undefined; }
+    // Run one layout NOW so place() below has a real height to stack with on the very first frame.
+    // Yoga works in px and knows nothing about pixelSize or maxHeight yet, so this is safe to do
+    // before either is set — and it is what keeps a fresh panel from being positioned off a guess.
+    try { root.update(0); } catch { /* first layout can wait for the next frame */ }
     return pane;
   }
 
@@ -402,6 +511,15 @@ export class MgPanel3d {
     const margin = viewW * 0.015;
     const gap = viewH * 0.02;
 
+    // ONE text size for the whole HUD, taken from a side panel filling its column. Every dock then
+    // uses it, so a wide bottom strip reads exactly like a narrow side column.
+    //
+    // Scaling each dock to fill its own width instead — the obvious thing — makes the 1100px edge
+    // panels about 2.3x larger than the 520px side panels, which on a wide monitor is comically big
+    // and pushes rows into each other. Deriving the size once, from the view rather than from the
+    // panel, is what keeps a game looking the same on every screen.
+    const hudPx = (viewW * 0.30) / PANEL_PX_SIDE;
+
     for (const dock of DOCKS) {
       const group = this.panes.filter(p => p.dock === dock);
       if (!group.length) continue;
@@ -409,15 +527,25 @@ export class MgPanel3d {
       const vertical = dock === 'right' || dock === 'left';
 
       // Share the edge between the panels pinned to it: along the edge each gets a slice, across
-      // it they all get the same allowance. Fit BOTH, so a tall panel shrinks instead of running
-      // off the screen.
+      // it they all get the same allowance. allowH is now a SCROLL LIMIT rather than something to
+      // shrink into — a panel taller than its slice keeps its size and scrolls.
       const allowW = vertical ? viewW * 0.30 : (viewW * 0.94) / n;
       const allowH = vertical ? (viewH * 0.94) / n : (viewH * 0.42) / n;
       for (const p of group) {
-        setPixelSize(p, Math.min(allowW / p.wPx, allowH / Math.max(1, p.estH)));
+        // The shared HUD size, narrowed only if this panel would not otherwise fit its slice.
+        // Height is NOT part of this any more: the old code fitted both axes, so a content-heavy
+        // panel shrank itself until its text was unreadable. Too tall now means scrolling.
+        setPixelSize(p, Math.min(hudPx, allowW / p.wPx));
+        setMaxHeightPx(p, allowH / p.px);
       }
 
-      const size = (p: Pane) => ({ w: p.wPx * p.px, h: p.estH * p.px });
+      // Stack with the height yoga actually produced, clamped to the slot. Before the first layout
+      // (or if uikit has not published a size yet) assume a full slot: erring tall keeps panels
+      // from overlapping, and place() runs every frame so it corrects itself immediately.
+      const size = (p: Pane) => ({
+        w: p.wPx * p.px,
+        h: Math.min((measuredHeightPx(p) ?? p.maxHPx) * p.px, allowH),
+      });
       const total = group.reduce((a, p) => a + (vertical ? size(p).h : size(p).w), 0) + gap * (n - 1);
 
       // Stack along the edge, centred on it: top-to-bottom on a side edge, left-to-right on a
@@ -455,47 +583,19 @@ export class MgPanel3d {
     let cursor = 0;
     for (const p of this.panes) {
       setPixelSize(p, HAND_WIDTH / p.wPx);
-      const h = p.estH * p.px;
+      setMaxHeightPx(p, HAND_MAX_HEIGHT / p.px);
+      const h = Math.min((measuredHeightPx(p) ?? p.maxHPx) * p.px, HAND_MAX_HEIGHT);
       p.group.position.set(0, -cursor - h / 2, 0);
       p.group.rotation.set(0, 0, 0);
       cursor += h + gap;
     }
   }
 
-  /**
-   * A rough content height in px, used ONLY for fitting and stacking. yoga still does the real
-   * layout; this never positions anything inside a panel, so being a little off is harmless.
-   */
-  private estimate(nodes: UiNode[]): number {
-    const one = (nd: UiNode): number => {
-      const t = (nd.type || 'text').toLowerCase();
-      switch (t) {
-        case 'panel': case 'col': return (nd.children || []).reduce((a, k) => a + one(k), 0) + (nd.size ?? 8);
-        case 'row': return Math.max(24, ...(nd.children || []).map(one)) + (nd.size ?? 8);
-        case 'space': return nd.size ?? 8;
-        case 'image': case 'model': return (nd.size ?? 84) + 8;
-        case 'title': return 42;
-        case 'banner': return 62;
-        case 'note': return 24;
-        case 'log': return String(nd.text || '').split('\n').length * 21 + 20;
-        case 'button': case 'check': return 48;
-        case 'select': case 'animpick': {
-          const n = this.choiceCount(nd);
-          if (!n) return 24;                                    // nothing to offer yet
-          if (!this.asDropdown(nd.style, n)) return n * 34 + 8;  // a plain list of radios
-          return 46;   // a dropdown is always one row tall: its open list floats above, absolutely
-        }
-        case 'checks': return ((nd.options || []).length + 1) * 46;
-        case 'input': return 46;
-        default: return (nd.size ?? 21) * 1.5;
-      }
-    };
-    const raw = nodes.reduce((a, n) => a + one(n) + 10, 0) + 36;   // + root gaps and padding
-    return raw * 1.3;                                             // headroom: wrapped text grows
-  }
-
   dispose() {
     this.clear();
+    // clear() releases the hover set pane by pane, but say it once more outright: leaving the view
+    // with the cursor on a panel must not leave the camera controls switched off.
+    this.mgThree?.setUiHover?.(false);
     if (this.frameHook) { this.mgThree?.removeFrameHook?.(this.frameHook); this.frameHook = undefined; }
     this.group.removeFromParent();
   }
@@ -510,6 +610,9 @@ export class MgPanel3d {
 
   /** Release ONE panel: unregister its interactive objects, drop its uikit tree and its group. */
   private clearPane(p: Pane) {
+    // A pane destroyed while the cursor was on it never gets its pointerleave, so the camera
+    // controls would stay switched off for good. Drop it from the hover set explicitly.
+    this.setHover(p, false);
     for (const b of p.clickables) {
       try {
         b.removeEventListener('click', b.userData['__onClick']);
@@ -880,15 +983,6 @@ export class MgPanel3d {
       : (nd.id || ('sel' + (nd.action || '')));
   }
 
-  /** The options a choice node will actually offer, so height and content agree. */
-  private choiceCount(nd: UiNode): number {
-    if ((nd.type || '').toLowerCase() === 'animpick') {
-      const it: any = this.items?.()?.[nd.id || ''];
-      return ((it?.mesh?.userData?.['clips'] || []).length) + 1;      // + "none"
-    }
-    return (nd.options || []).filter(o => o.value !== '').length;
-  }
-
   /** Dropdown or plain list? Server style wins; otherwise it is down to how many options there are. */
   private asDropdown(style: string | undefined, count: number): boolean {
     if (has(style, 'dropdown')) return true;
@@ -958,8 +1052,10 @@ export class MgPanel3d {
 
   /**
    * @param selfHandled true for a uikit-default WIDGET (Checkbox, RadioGroupItem, ...), which binds
-   *   its own click handler at construction. Those only need to be REGISTERED so the dispatched
-   *   'click' reaches them — adding our listener as well would run the action twice.
+   *   its own click handler at construction. Adding ours as well would run the action twice, so it
+   *   only gets the userData (for VR) and, under 'interaction-manager', the registration that makes
+   *   the dispatched 'click' reach it at all. Under 'pointer-events' nothing is needed: the widget
+   *   is inside the panel subtree, so the pointer system finds it and its own handler runs.
    */
   private makeInteractive(obj: any, activate?: () => void, selfHandled = false) {
     // VR: mg.three's controller raycast walks up parents looking for exactly this userData shape
@@ -968,17 +1064,22 @@ export class MgPanel3d {
     obj.userData['ItemData'] = { id: '', clickActions: { [this.seatId]: '__panel3d' }, attributes: {} };
     if (activate) obj.userData['uiArgs'] = { fire: activate };
 
-    // DESKTOP: the app's InteractionManager. @pmndrs/pointer-events is also wired up (it is what
-    // will make wheel/drag scrolling possible), but it is NOT yet proven to deliver clicks here —
-    // and removing this registration on the assumption that it would left the entire panel dead.
-    // Both systems dispatch 'click' on the object, so if pointer-events is later confirmed to
-    // work, THIS is the line to drop — not the other way round.
+    // DESKTOP: one 'click' listener, fed by whichever system PANEL_INPUT selects. Both dispatch
+    // the same event name on the same object, so the listener itself does not care — which is
+    // exactly why only one of them may be attached at a time.
     if (activate && !selfHandled) {
-      const fire = () => activate();
+      const fire = (ev?: any) => {
+        // pointer-events wraps the DOM event (HtmlEvent.nativeEvent); the InteractionManager passes
+        // its own plain object. That difference is the only honest way to tell who delivered this.
+        notePanelClick(ev?.nativeEvent != null ? 'pointer-events' : 'interaction-manager');
+        activate();
+      };
       obj.userData['__onClick'] = fire;
       obj.addEventListener('click', fire);
     }
-    this.mgThree.interactionManager?.add(obj);
+    // Registering with the InteractionManager is what makes it raycast this object. Skipping it
+    // under 'pointer-events' is what keeps the two systems from both firing the action.
+    if (PANEL_INPUT === 'interaction-manager') this.mgThree.interactionManager?.add(obj);
     (this.building?.clickables ?? []).push(obj);
   }
 
