@@ -15,6 +15,10 @@ namespace MG.Server.Entities
         public string CurrentTurnId { get; set; }
         public List<PlayerData> Winners { get; set; }
 
+        // Minimum occupied seats (HUMAN or AI) required before the game can start. Set from the
+        // game flow's MinPlayers at creation; the client uses it to gate the Start button.
+        public int MinPlayers { get; set; }
+
         public LocationData Observer { get; set; }
 
         [JsonIgnore] public BaseGameFlow GameFlow { get; set; }
@@ -47,10 +51,16 @@ namespace MG.Server.Entities
 
         public ItemData? FindItem(string itemId)
         {
-
-                return Table.FindItem(itemId);
-
-            
+            // Search the main table first, then each player's hand/table zones — so cards held
+            // in a hand (e.g. Durak) are clickable, not just items on the shared table.
+            var found = Table.FindItem(itemId);
+            if (found != null) return found;
+            foreach (var p in Players)
+            {
+                if (p.Hand != null) { found = p.Hand.FindItem(itemId); if (found != null) return found; }
+                if (p.Table != null) { found = p.Table.FindItem(itemId); if (found != null) return found; }
+            }
+            return null;
         }
         public void RemoveItem(string itemId)
         {            
@@ -109,6 +119,14 @@ namespace MG.Server.Entities
         public const string GOMOKU = "GOMOKU";
         public const string REVERSI = "REVERSI";
         public const string CHECKERS = "CHECKERS";
+        public const string DURAK = "DURAK";
+        public const string RESISTANCE = "RESISTANCE";
+        public const string DEMO = "DEMO";
+        public const string SPLENDOR = "SPLENDOR";
+        public const string CARCASSONNE = "CARCASSONNE";
+        public const string CATAN = "CATAN";
+        public const string ONE_NIGHT_WEREWOLF = "ONE_NIGHT_WEREWOLF";
+        public const string SMALL_WORLD = "SMALL_WORLD";
     }
 
     public class GameStatusEnum

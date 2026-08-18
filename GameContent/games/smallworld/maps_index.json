@@ -1,0 +1,38 @@
+{
+ "2": {
+  "file": "map_2.png",
+  "size": [
+   2200,
+   1173
+  ],
+  "regions": 25,
+  "land": 22
+ },
+ "3": {
+  "file": "map_3.png",
+  "size": [
+   2200,
+   1173
+  ],
+  "regions": 36,
+  "land": 29
+ },
+ "4": {
+  "file": "map_4.png",
+  "size": [
+   2200,
+   2201
+  ],
+  "regions": 51,
+  "land": 45
+ },
+ "5": {
+  "file": "map_5.png",
+  "size": [
+   2200,
+   2201
+  ],
+  "regions": 73,
+  "land": 65
+ }
+}

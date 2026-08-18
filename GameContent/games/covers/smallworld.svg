@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" width="160" height="120">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a6fb0"/><stop offset="1" stop-color="#4aa3d8"/>
+    </linearGradient>
+    <linearGradient id="land" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7cbf4f"/><stop offset="1" stop-color="#4e8f36"/>
+    </linearGradient>
+  </defs>
+  <rect width="160" height="120" fill="url(#sky)"/>
+  <!-- three little continents, white borders like the board -->
+  <path d="M14 74 Q30 52 56 58 Q78 62 86 80 Q70 100 44 98 Q20 94 14 74 Z"
+        fill="url(#land)" stroke="#fff" stroke-width="2.5"/>
+  <path d="M92 44 Q104 24 128 28 Q148 32 148 52 Q140 70 118 68 Q96 64 92 44 Z"
+        fill="#d9a13c" stroke="#fff" stroke-width="2.5"/>
+  <path d="M100 82 Q116 74 134 82 Q146 90 140 104 Q118 112 102 102 Q94 92 100 82 Z"
+        fill="#b3703c" stroke="#fff" stroke-width="2.5"/>
+  <!-- grey mountain range -->
+  <path d="M34 78 l10 -16 8 12 6 -8 10 20 Z" fill="#cfd6dd" stroke="#fff" stroke-width="1.5"/>
+  <!-- race tokens on the map -->
+  <g stroke="#00000055">
+    <circle cx="52" cy="86" r="6" fill="#d94444"/>
+    <circle cx="120" cy="50" r="6" fill="#2b6fd9"/>
+    <circle cx="120" cy="94" r="6" fill="#e8a33d"/>
+  </g>
+  <!-- title band -->
+  <rect x="0" y="0" width="160" height="24" fill="#00000066"/>
+  <text x="80" y="17" text-anchor="middle" font-family="Georgia,serif" font-size="15"
+        font-weight="bold" fill="#ffd166">SMALL WORLD</text>
+</svg>

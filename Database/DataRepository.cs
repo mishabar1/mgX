@@ -131,6 +131,30 @@ namespace MG.Server.Database
                 case GameTypeEnum.CHECKERS:
                     game.GameFlow = new CheckersGameFlow(game);
                     break;
+                case GameTypeEnum.DURAK:
+                    game.GameFlow = new DurakGameFlow(game);
+                    break;
+                case GameTypeEnum.RESISTANCE:
+                    game.GameFlow = new ResistanceGameFlow(game);
+                    break;
+                case GameTypeEnum.DEMO:
+                    game.GameFlow = new DemoGameFlow(game);
+                    break;
+                case GameTypeEnum.SPLENDOR:
+                    game.GameFlow = new SplendorGameFlow(game);
+                    break;
+                case GameTypeEnum.CARCASSONNE:
+                    game.GameFlow = new CarcassonneGameFlow(game);
+                    break;
+                case GameTypeEnum.CATAN:
+                    game.GameFlow = new CatanGameFlow(game);
+                    break;
+                case GameTypeEnum.ONE_NIGHT_WEREWOLF:
+                    game.GameFlow = new OneNightWerewolfGameFlow(game);
+                    break;
+                case GameTypeEnum.SMALL_WORLD:
+                    game.GameFlow = new SmallWorldGameFlow(game);
+                    break;
             }
         }
 

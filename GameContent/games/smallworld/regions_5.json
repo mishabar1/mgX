@@ -1,0 +1,1306 @@
+{
+ "players": 5,
+ "w": 2200,
+ "h": 2201,
+ "regions": [
+  {
+   "id": 1,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 21.32,
+   "cy": 1.36,
+   "symbols": [],
+   "adj": [
+    7,
+    8
+   ],
+   "isBorder": true,
+   "area": 9743
+  },
+  {
+   "id": 2,
+   "terrain": "SWAMP",
+   "water": "",
+   "cx": 34.5,
+   "cy": 5.46,
+   "symbols": [
+    "MAGIC"
+   ],
+   "adj": [
+    3,
+    8,
+    10,
+    12,
+    14,
+    15,
+    16
+   ],
+   "isBorder": true,
+   "area": 128908
+  },
+  {
+   "id": 3,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 47.71,
+   "cy": 2.21,
+   "symbols": [],
+   "adj": [
+    2,
+    4,
+    10,
+    67
+   ],
+   "isBorder": true,
+   "area": 40387
+  },
+  {
+   "id": 4,
+   "terrain": "FOREST",
+   "water": "",
+   "cx": 60.86,
+   "cy": 5.43,
+   "symbols": [
+    "MAGIC"
+   ],
+   "adj": [
+    3,
+    5,
+    10,
+    13,
+    20
+   ],
+   "isBorder": true,
+   "area": 145330
+  },
+  {
+   "id": 5,
+   "terrain": "FARM",
+   "water": "",
+   "cx": 76.07,
+   "cy": 6.07,
+   "symbols": [
+    "CAVERN",
+    "TRIBE"
+   ],
+   "adj": [
+    4,
+    6,
+    9,
+    17,
+    18,
+    19,
+    20,
+    70
+   ],
+   "isBorder": true,
+   "area": 161391
+  },
+  {
+   "id": 6,
+   "terrain": "FARM",
+   "water": "",
+   "cx": 97.61,
+   "cy": 2.36,
+   "symbols": [],
+   "adj": [
+    5,
+    9
+   ],
+   "isBorder": true,
+   "area": 43773
+  },
+  {
+   "id": 7,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 17.39,
+   "cy": 5.21,
+   "symbols": [],
+   "adj": [
+    1,
+    8,
+    11,
+    66
+   ],
+   "isBorder": true,
+   "area": 62644
+  },
+  {
+   "id": 8,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 26.11,
+   "cy": 2.75,
+   "symbols": [],
+   "adj": [
+    1,
+    2,
+    7,
+    11,
+    12
+   ],
+   "isBorder": true,
+   "area": 49476
+  },
+  {
+   "id": 9,
+   "terrain": "FARM",
+   "water": "",
+   "cx": 87.0,
+   "cy": 12.75,
+   "symbols": [],
+   "adj": [
+    5,
+    6,
+    18,
+    22,
+    25
+   ],
+   "isBorder": true,
+   "area": 248840
+  },
+  {
+   "id": 10,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 42.21,
+   "cy": 8.85,
+   "symbols": [
+    "CAVERN"
+   ],
+   "adj": [
+    2,
+    3,
+    4,
+    13,
+    14,
+    67
+   ],
+   "isBorder": false,
+   "area": 32435
+  },
+  {
+   "id": 11,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 11.96,
+   "cy": 8.78,
+   "symbols": [],
+   "adj": [
+    7,
+    8,
+    12,
+    42,
+    66,
+    68
+   ],
+   "isBorder": false,
+   "area": 52296
+  },
+  {
+   "id": 12,
+   "terrain": "SWAMP",
+   "water": "",
+   "cx": 24.93,
+   "cy": 19.35,
+   "symbols": [],
+   "adj": [
+    2,
+    8,
+    11,
+    15,
+    16,
+    24,
+    26,
+    27,
+    68,
+    69
+   ],
+   "isBorder": false,
+   "area": 77923
+  },
+  {
+   "id": 13,
+   "terrain": "FARM",
+   "water": "",
+   "cx": 47.75,
+   "cy": 32.31,
+   "symbols": [
+    "CAVERN",
+    "TRIBE"
+   ],
+   "adj": [
+    4,
+    10,
+    14,
+    20,
+    23,
+    29,
+    30,
+    32,
+    33,
+    72
+   ],
+   "isBorder": false,
+   "area": 296497
+  },
+  {
+   "id": 14,
+   "terrain": "FARM",
+   "water": "",
+   "cx": 41.29,
+   "cy": 19.49,
+   "symbols": [
+    "MINE",
+    "TRIBE"
+   ],
+   "adj": [
+    2,
+    10,
+    13,
+    16,
+    29
+   ],
+   "isBorder": false,
+   "area": 139812
+  },
+  {
+   "id": 15,
+   "terrain": "SWAMP",
+   "water": "",
+   "cx": 31.14,
+   "cy": 12.85,
+   "symbols": [],
+   "adj": [
+    2,
+    12,
+    16,
+    69
+   ],
+   "isBorder": false,
+   "area": 8308
+  },
+  {
+   "id": 16,
+   "terrain": "SWAMP",
+   "water": "",
+   "cx": 33.5,
+   "cy": 15.53,
+   "symbols": [],
+   "adj": [
+    2,
+    12,
+    14,
+    15,
+    27,
+    29,
+    69
+   ],
+   "isBorder": false,
+   "area": 28242
+  },
+  {
+   "id": 17,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 74.46,
+   "cy": 13.5,
+   "symbols": [
+    "MINE"
+   ],
+   "adj": [
+    5,
+    18,
+    70
+   ],
+   "isBorder": false,
+   "area": 7397
+  },
+  {
+   "id": 18,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 76.39,
+   "cy": 15.67,
+   "symbols": [],
+   "adj": [
+    5,
+    9,
+    17,
+    25,
+    70
+   ],
+   "isBorder": false,
+   "area": 11329
+  },
+  {
+   "id": 19,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 68.57,
+   "cy": 15.35,
+   "symbols": [],
+   "adj": [
+    5,
+    20,
+    23,
+    70
+   ],
+   "isBorder": false,
+   "area": 7047
+  },
+  {
+   "id": 20,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 65.5,
+   "cy": 17.74,
+   "symbols": [],
+   "adj": [
+    4,
+    5,
+    13,
+    19,
+    23
+   ],
+   "isBorder": false,
+   "area": 14354
+  },
+  {
+   "id": 21,
+   "terrain": "SWAMP",
+   "water": "",
+   "cx": 29.61,
+   "cy": 17.57,
+   "symbols": [],
+   "adj": [
+    69
+   ],
+   "isBorder": false,
+   "area": 5473
+  },
+  {
+   "id": 22,
+   "terrain": "FOREST",
+   "water": "",
+   "cx": 90.96,
+   "cy": 28.45,
+   "symbols": [
+    "MINE",
+    "MAGIC",
+    "CAVERN",
+    "TRIBE"
+   ],
+   "adj": [
+    9,
+    25,
+    28,
+    30,
+    32,
+    33,
+    34,
+    36,
+    37,
+    71,
+    72
+   ],
+   "isBorder": true,
+   "area": 577819
+  },
+  {
+   "id": 23,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 64.57,
+   "cy": 21.67,
+   "symbols": [],
+   "adj": [
+    13,
+    19,
+    20,
+    28,
+    30,
+    70,
+    71
+   ],
+   "isBorder": false,
+   "area": 24567
+  },
+  {
+   "id": 24,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 18.46,
+   "cy": 19.67,
+   "symbols": [],
+   "adj": [
+    12,
+    68
+   ],
+   "isBorder": false,
+   "area": 4586
+  },
+  {
+   "id": 25,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 76.14,
+   "cy": 20.81,
+   "symbols": [],
+   "adj": [
+    9,
+    18,
+    22,
+    28,
+    70
+   ],
+   "isBorder": false,
+   "area": 7342
+  },
+  {
+   "id": 26,
+   "terrain": "SWAMP",
+   "water": "",
+   "cx": 21.04,
+   "cy": 21.96,
+   "symbols": [],
+   "adj": [
+    12,
+    68
+   ],
+   "isBorder": false,
+   "area": 4697
+  },
+  {
+   "id": 27,
+   "terrain": "SWAMP",
+   "water": "",
+   "cx": 24.82,
+   "cy": 23.53,
+   "symbols": [],
+   "adj": [
+    12,
+    16,
+    29,
+    68
+   ],
+   "isBorder": false,
+   "area": 14005
+  },
+  {
+   "id": 28,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 70.93,
+   "cy": 23.67,
+   "symbols": [],
+   "adj": [
+    22,
+    23,
+    25,
+    70,
+    71
+   ],
+   "isBorder": false,
+   "area": 16518
+  },
+  {
+   "id": 29,
+   "terrain": "HILL",
+   "water": "",
+   "cx": 32.64,
+   "cy": 38.2,
+   "symbols": [
+    "MAGIC",
+    "MAGIC",
+    "TRIBE",
+    "TRIBE",
+    "TRIBE"
+   ],
+   "adj": [
+    13,
+    14,
+    16,
+    27,
+    35,
+    38,
+    39,
+    40,
+    46,
+    48,
+    68,
+    72
+   ],
+   "isBorder": false,
+   "area": 626939
+  },
+  {
+   "id": 30,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 60.57,
+   "cy": 25.78,
+   "symbols": [],
+   "adj": [
+    13,
+    22,
+    23,
+    32,
+    71
+   ],
+   "isBorder": false,
+   "area": 45296
+  },
+  {
+   "id": 31,
+   "terrain": "HILL",
+   "water": "",
+   "cx": 9.25,
+   "cy": 24.63,
+   "symbols": [],
+   "adj": [
+    68
+   ],
+   "isBorder": false,
+   "area": 8751
+  },
+  {
+   "id": 32,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 60.57,
+   "cy": 31.99,
+   "symbols": [],
+   "adj": [
+    13,
+    22,
+    30,
+    33
+   ],
+   "isBorder": false,
+   "area": 35242
+  },
+  {
+   "id": 33,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 56.46,
+   "cy": 36.06,
+   "symbols": [],
+   "adj": [
+    13,
+    22,
+    32,
+    72
+   ],
+   "isBorder": false,
+   "area": 9825
+  },
+  {
+   "id": 34,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 85.21,
+   "cy": 40.88,
+   "symbols": [],
+   "adj": [
+    22
+   ],
+   "isBorder": false,
+   "area": 21626
+  },
+  {
+   "id": 35,
+   "terrain": "FOREST",
+   "water": "",
+   "cx": 18.71,
+   "cy": 47.27,
+   "symbols": [],
+   "adj": [
+    29,
+    38,
+    68
+   ],
+   "isBorder": false,
+   "area": 56464
+  },
+  {
+   "id": 36,
+   "terrain": "HILL",
+   "water": "",
+   "cx": 88.93,
+   "cy": 62.44,
+   "symbols": [
+    "MAGIC",
+    "CAVERN",
+    "TRIBE",
+    "TRIBE",
+    "TRIBE"
+   ],
+   "adj": [
+    22,
+    37,
+    49,
+    50,
+    51,
+    53,
+    57,
+    58,
+    72
+   ],
+   "isBorder": true,
+   "area": 687092
+  },
+  {
+   "id": 37,
+   "terrain": "FARM",
+   "water": "",
+   "cx": 74.54,
+   "cy": 51.09,
+   "symbols": [
+    "MINE",
+    "TRIBE"
+   ],
+   "adj": [
+    22,
+    36,
+    41,
+    72
+   ],
+   "isBorder": false,
+   "area": 164977
+  },
+  {
+   "id": 38,
+   "terrain": "FARM",
+   "water": "",
+   "cx": 28.43,
+   "cy": 52.37,
+   "symbols": [
+    "TRIBE"
+   ],
+   "adj": [
+    29,
+    35,
+    44,
+    45,
+    48,
+    68
+   ],
+   "isBorder": false,
+   "area": 158681
+  },
+  {
+   "id": 39,
+   "terrain": "FOREST",
+   "water": "",
+   "cx": 54.36,
+   "cy": 52.09,
+   "symbols": [],
+   "adj": [
+    29,
+    40,
+    43,
+    72
+   ],
+   "isBorder": false,
+   "area": 35433
+  },
+  {
+   "id": 40,
+   "terrain": "HILL",
+   "water": "",
+   "cx": 47.75,
+   "cy": 51.66,
+   "symbols": [],
+   "adj": [
+    29,
+    39
+   ],
+   "isBorder": false,
+   "area": 7204
+  },
+  {
+   "id": 41,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 66.07,
+   "cy": 52.52,
+   "symbols": [],
+   "adj": [
+    37,
+    72
+   ],
+   "isBorder": false,
+   "area": 4095
+  },
+  {
+   "id": 42,
+   "terrain": "FOREST",
+   "water": "",
+   "cx": 5.29,
+   "cy": 58.8,
+   "symbols": [
+    "MINE"
+   ],
+   "adj": [
+    11,
+    44,
+    66,
+    68
+   ],
+   "isBorder": true,
+   "area": 122020
+  },
+  {
+   "id": 43,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 59.07,
+   "cy": 55.91,
+   "symbols": [],
+   "adj": [
+    39,
+    72
+   ],
+   "isBorder": false,
+   "area": 6073
+  },
+  {
+   "id": 44,
+   "terrain": "SWAMP",
+   "water": "",
+   "cx": 15.0,
+   "cy": 73.76,
+   "symbols": [
+    "CAVERN",
+    "TRIBE",
+    "TRIBE",
+    "TRIBE"
+   ],
+   "adj": [
+    38,
+    42,
+    45,
+    47,
+    48,
+    52,
+    55,
+    59,
+    60,
+    68
+   ],
+   "isBorder": true,
+   "area": 730443
+  },
+  {
+   "id": 45,
+   "terrain": "HILL",
+   "water": "",
+   "cx": 33.18,
+   "cy": 58.3,
+   "symbols": [],
+   "adj": [
+    38,
+    44,
+    48
+   ],
+   "isBorder": false,
+   "area": 19611
+  },
+  {
+   "id": 46,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 48.21,
+   "cy": 59.87,
+   "symbols": [
+    "MINE"
+   ],
+   "adj": [
+    29,
+    47,
+    48,
+    72
+   ],
+   "isBorder": false,
+   "area": 14178
+  },
+  {
+   "id": 47,
+   "terrain": "SWAMP",
+   "water": "",
+   "cx": 49.21,
+   "cy": 63.16,
+   "symbols": [],
+   "adj": [
+    44,
+    46,
+    48,
+    52,
+    72
+   ],
+   "isBorder": false,
+   "area": 27610
+  },
+  {
+   "id": 48,
+   "terrain": "HILL",
+   "water": "",
+   "cx": 42.61,
+   "cy": 62.19,
+   "symbols": [
+    "CAVERN"
+   ],
+   "adj": [
+    29,
+    38,
+    44,
+    45,
+    46,
+    47
+   ],
+   "isBorder": false,
+   "area": 45334
+  },
+  {
+   "id": 49,
+   "terrain": "FARM",
+   "water": "",
+   "cx": 61.86,
+   "cy": 75.54,
+   "symbols": [
+    "MAGIC"
+   ],
+   "adj": [
+    36,
+    52,
+    53,
+    56,
+    72
+   ],
+   "isBorder": false,
+   "area": 164707
+  },
+  {
+   "id": 50,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 80.68,
+   "cy": 81.04,
+   "symbols": [
+    "MINE"
+   ],
+   "adj": [
+    36,
+    51,
+    56,
+    57
+   ],
+   "isBorder": false,
+   "area": 109270
+  },
+  {
+   "id": 51,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 75.07,
+   "cy": 75.19,
+   "symbols": [],
+   "adj": [
+    36,
+    50,
+    53,
+    56
+   ],
+   "isBorder": false,
+   "area": 17189
+  },
+  {
+   "id": 52,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 57.57,
+   "cy": 88.04,
+   "symbols": [
+    "CAVERN",
+    "TRIBE"
+   ],
+   "adj": [
+    44,
+    47,
+    49,
+    54,
+    55,
+    56,
+    61,
+    62,
+    64,
+    65,
+    72
+   ],
+   "isBorder": false,
+   "area": 302030
+  },
+  {
+   "id": 53,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 71.5,
+   "cy": 77.08,
+   "symbols": [],
+   "adj": [
+    36,
+    49,
+    51,
+    56
+   ],
+   "isBorder": false,
+   "area": 10523
+  },
+  {
+   "id": 54,
+   "terrain": "SWAMP",
+   "water": "",
+   "cx": 50.39,
+   "cy": 78.29,
+   "symbols": [],
+   "adj": [
+    52,
+    72
+   ],
+   "isBorder": false,
+   "area": 8675
+  },
+  {
+   "id": 55,
+   "terrain": "FARM",
+   "water": "",
+   "cx": 30.93,
+   "cy": 83.29,
+   "symbols": [],
+   "adj": [
+    44,
+    52,
+    60,
+    61
+   ],
+   "isBorder": false,
+   "area": 106763
+  },
+  {
+   "id": 56,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 76.68,
+   "cy": 91.32,
+   "symbols": [],
+   "adj": [
+    49,
+    50,
+    51,
+    52,
+    53,
+    57,
+    62,
+    64
+   ],
+   "isBorder": true,
+   "area": 186521
+  },
+  {
+   "id": 57,
+   "terrain": "FOREST",
+   "water": "",
+   "cx": 86.75,
+   "cy": 89.9,
+   "symbols": [
+    "CAVERN"
+   ],
+   "adj": [
+    36,
+    50,
+    56,
+    58,
+    63
+   ],
+   "isBorder": true,
+   "area": 125548
+  },
+  {
+   "id": 58,
+   "terrain": "FOREST",
+   "water": "",
+   "cx": 97.93,
+   "cy": 85.36,
+   "symbols": [],
+   "adj": [
+    36,
+    57,
+    63,
+    73
+   ],
+   "isBorder": true,
+   "area": 18211
+  },
+  {
+   "id": 59,
+   "terrain": "SWAMP",
+   "water": "",
+   "cx": 7.54,
+   "cy": 93.18,
+   "symbols": [
+    "MINE",
+    "TRIBE"
+   ],
+   "adj": [
+    44,
+    60
+   ],
+   "isBorder": true,
+   "area": 154582
+  },
+  {
+   "id": 60,
+   "terrain": "FOREST",
+   "water": "",
+   "cx": 21.93,
+   "cy": 93.0,
+   "symbols": [
+    "MAGIC",
+    "TRIBE"
+   ],
+   "adj": [
+    44,
+    55,
+    59,
+    61
+   ],
+   "isBorder": true,
+   "area": 168416
+  },
+  {
+   "id": 61,
+   "terrain": "HILL",
+   "water": "",
+   "cx": 37.96,
+   "cy": 93.5,
+   "symbols": [
+    "MINE"
+   ],
+   "adj": [
+    52,
+    55,
+    60,
+    65
+   ],
+   "isBorder": true,
+   "area": 120542
+  },
+  {
+   "id": 62,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 68.57,
+   "cy": 93.43,
+   "symbols": [],
+   "adj": [
+    52,
+    56
+   ],
+   "isBorder": false,
+   "area": 28370
+  },
+  {
+   "id": 63,
+   "terrain": "FOREST",
+   "water": "",
+   "cx": 88.5,
+   "cy": 96.82,
+   "symbols": [],
+   "adj": [
+    57,
+    58,
+    73
+   ],
+   "isBorder": false,
+   "area": 8822
+  },
+  {
+   "id": 64,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 51.89,
+   "cy": 96.79,
+   "symbols": [
+    "MAGIC"
+   ],
+   "adj": [
+    52,
+    56,
+    65
+   ],
+   "isBorder": true,
+   "area": 64485
+  },
+  {
+   "id": 65,
+   "terrain": "MOUNTAIN",
+   "water": "",
+   "cx": 46.29,
+   "cy": 97.82,
+   "symbols": [],
+   "adj": [
+    52,
+    61,
+    64
+   ],
+   "isBorder": true,
+   "area": 17687
+  },
+  {
+   "id": 66,
+   "terrain": "WATER",
+   "water": "lake",
+   "cx": 7.0,
+   "cy": 1.5,
+   "symbols": [],
+   "adj": [
+    7,
+    11,
+    42
+   ],
+   "isBorder": false,
+   "area": 29235
+  },
+  {
+   "id": 67,
+   "terrain": "WATER",
+   "water": "lake",
+   "cx": 48.54,
+   "cy": 9.82,
+   "symbols": [],
+   "adj": [
+    3,
+    10
+   ],
+   "isBorder": false,
+   "area": 38963
+  },
+  {
+   "id": 68,
+   "terrain": "WATER",
+   "water": "lake",
+   "cx": 13.64,
+   "cy": 52.77,
+   "symbols": [],
+   "adj": [
+    11,
+    12,
+    24,
+    26,
+    27,
+    29,
+    31,
+    35,
+    38,
+    42,
+    44
+   ],
+   "isBorder": false,
+   "area": 542906
+  },
+  {
+   "id": 69,
+   "terrain": "WATER",
+   "water": "lake",
+   "cx": 28.07,
+   "cy": 12.71,
+   "symbols": [],
+   "adj": [
+    12,
+    15,
+    16,
+    21
+   ],
+   "isBorder": false,
+   "area": 29685
+  },
+  {
+   "id": 70,
+   "terrain": "WATER",
+   "water": "lake",
+   "cx": 71.57,
+   "cy": 13.85,
+   "symbols": [],
+   "adj": [
+    5,
+    17,
+    18,
+    19,
+    23,
+    25,
+    28
+   ],
+   "isBorder": false,
+   "area": 34038
+  },
+  {
+   "id": 71,
+   "terrain": "WATER",
+   "water": "lake",
+   "cx": 66.29,
+   "cy": 29.17,
+   "symbols": [],
+   "adj": [
+    22,
+    23,
+    28,
+    30
+   ],
+   "isBorder": false,
+   "area": 20764
+  },
+  {
+   "id": 72,
+   "terrain": "WATER",
+   "water": "lake",
+   "cx": 50.11,
+   "cy": 70.4,
+   "symbols": [],
+   "adj": [
+    13,
+    22,
+    29,
+    33,
+    36,
+    37,
+    39,
+    41,
+    43,
+    46,
+    47,
+    49,
+    52,
+    54
+   ],
+   "isBorder": false,
+   "area": 367005
+  },
+  {
+   "id": 73,
+   "terrain": "WATER",
+   "water": "lake",
+   "cx": 95.79,
+   "cy": 95.79,
+   "symbols": [],
+   "adj": [
+    58,
+    63
+   ],
+   "isBorder": false,
+   "area": 82563
+  }
+ ]
+}
