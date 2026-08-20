@@ -1,0 +1,67 @@
+diff -ruN -x node_modules -x package-lock.json -x .angular -x .git applytest2/Client/src/app/bl/mg.panel3d.ts mgx/Client/src/app/bl/mg.panel3d.ts
+--- applytest2/Client/src/app/bl/mg.panel3d.ts	2026-08-19 08:18:47.193922312 +0000
++++ mgx/Client/src/app/bl/mg.panel3d.ts	2026-08-19 18:42:26.784030083 +0000
+@@ -731,7 +731,8 @@
+       }
+ 
+       case 'button':
+-        this.addButton(parent, nd.text || '', nd.style, nd.url, () => this.fire(nd, nd.args || {}), nd.bg);
++        this.addButton(parent, nd.text || '', nd.style, nd.url, () => this.fire(nd, nd.args || {}),
++                       nd.bg, nd.color, nd.size);
+         return;
+ 
+       case 'check': {
+@@ -1027,11 +1028,15 @@
+    *    marks it as a UI activation rather than a clicked board item.
+    */
+   private addButton(parent: Container, rawLabel: string, style: string | undefined,
+-                    iconUrl: string | undefined, onClick: () => void, bg?: string) {
++                    iconUrl: string | undefined, onClick: () => void,
++                    bg?: string, color?: string, size?: number) {
+     const big = has(style, 'big');
+-    // UiNode.cs documents Bg as valid on a button; it used to be dropped, so a game could only
+-    // pick from the FILL style keywords. An explicit Bg now wins over the keyword.
++    // Bg / Color / Size were all dropped here, so a button could only be styled through the FILL
++    // style keywords — the one node type that ignored the common fields every other type honours.
++    // An explicit value now wins over the keyword default.
+     const base = col(bg, fill(style));
++    const ink = col(color, '#ffffff');
++    const fontSize = size ?? (big ? 26 : 21);
+     const { Icon, rest: label } = splitIcon(rawLabel);
+ 
+     const btn = new Container({
+@@ -1048,8 +1053,8 @@
+     parent.add(btn);
+ 
+     if (Icon) {
+-      const sz = big ? 26 : 20;
+-      btn.add(new Icon({ width: sz, height: sz, color: '#ffffff', flexShrink: 0 }));
++      const sz = fontSize * 0.95;
++      btn.add(new Icon({ width: sz, height: sz, color: ink, flexShrink: 0 }));
+     }
+     if (iconUrl) {
+       const isModel = /\.(gltf|glb|obj|stl)$/i.test(iconUrl);
+@@ -1058,7 +1063,7 @@
+       if (isModel) this.thumbnail(iconUrl, icon);
+       else icon.setProperties({ src: gamesUrl(iconUrl) });
+     }
+-    if (label) btn.add(new Text({ text: txt(label), fontSize: big ? 26 : 21, fontWeight: 'bold', color: '#ffffff' }));
++    if (label) btn.add(new Text({ text: txt(label), fontSize, fontWeight: 'bold', color: ink }));
+ 
+     // Hover and cursor are uikit's own now that it receives pointerover / pointerout.
+     this.makeInteractive(btn, onClick);
+diff -ruN -x node_modules -x package-lock.json -x .angular -x .git applytest2/Entities/UiNode.cs mgx/Entities/UiNode.cs
+--- applytest2/Entities/UiNode.cs	2026-08-19 08:18:47.196512453 +0000
++++ mgx/Entities/UiNode.cs	2026-08-19 18:42:26.784784534 +0000
+@@ -22,8 +22,9 @@
+     //   "note"   - muted hint            (Text, Color, Size)
+     //   "image"  - a picture             (Url, Size=height px, Overlays)
+     //   "model"  - a 3D model shown as a picture (Url, Size=height px)
+-    //   "button" - a button              (Text, Url=optional icon or model, Action, Args, Bg,
+-    //                                     Confirm, Gather, Style: fill keyword + optional "big")
++    //   "button" - a button              (Text, Color=label/icon ink, Size=label px, Bg=fill,
++    //                                     Url=optional icon or model, Action, Args, Confirm,
++    //                                     Gather, Style: fill keyword + optional "big")
+     //   "check"  - one checkbox          (Text, Action, ArgKey, Checked) — sends "1"/"0"
+     //   "select" - a choice list         (Id, Options, Action, ArgKey, OnChange, Args).
+     //                                     Renders as radio buttons up to 5 options and as a

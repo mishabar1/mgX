@@ -1120,7 +1120,11 @@ export class MgGame{
   }
 
   MeshMouseOutFunc(event: any) {
-    document.body.style.cursor = 'default';
+    // Don't steal the cursor back from the UI. uikit sets 'pointer' once, on pointerenter, and
+    // never re-applies it; the InteractionManager runs afterwards in the same frame and used to
+    // stamp 'default' over it the moment the pointer crossed off a board item onto a panel — so
+    // panel buttons showed an arrow.
+    if (!this.mgThree?.isUiHovered) document.body.style.cursor = 'default';
     this.mgThree.setHovered([]);
   }
 

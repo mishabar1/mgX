@@ -3,6 +3,8 @@
   <div class="mg-header">
     <p-button (onClick)="backClick()" icon="fa-solid fa-chevron-left" severity="secondary"></p-button>
     <div class="mg-title">Hello, {{user.name}}</div>
+    <div class="mg-spacer"></div>
+    <p-button (onClick)="logout()" label="Sign out" icon="pi pi-sign-out" severity="secondary"></p-button>
   </div>
 
   <div class="mg-section">Your games</div>

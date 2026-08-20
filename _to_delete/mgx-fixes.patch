@@ -1,0 +1,1311 @@
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/BL/GameBL.cs mgx/BL/GameBL.cs
+--- mgx-orig/BL/GameBL.cs	2026-08-19 06:34:23.256452934 +0000
++++ mgx/BL/GameBL.cs	2026-08-19 06:45:15.079678866 +0000
+@@ -45,20 +45,22 @@
+             return game;
+         }
+ 
+-        internal async Task<object?> ExecuteAction(ExecuteActionData data)
++        // callerUserId is the AUTHENTICATED user from the SignalR context — never a value the
++        // client put in the payload. The game flow uses it to prove the caller owns the seat.
++        internal async Task<object?> ExecuteAction(ExecuteActionData data, string? callerUserId)
+         {
++            if (data == null) return new { error = "no action data" };
++
+             // find game in db
+             var game = _dataRepository.Games.Where(x => x.Id == data.gameId).FirstOrDefault();
+ 
+-            if (game != null)
+-            {
+-
+-                await game.GameFlow.ExecuteAction(data);
++            // A persisted game whose type is no longer known reloads with a null flow
++            // (DataRepository.AttachGameFlow has no default case) — don't NRE on it.
++            if (game?.GameFlow == null) return new { error = "game not found", gameId = data.gameId };
+ 
+-               
+-            }
++            await game.GameFlow.ExecuteAction(data, callerUserId);
+ 
+-            return new { x = "TODO !!! ExecuteAction" };
++            return new { ok = true };
+         }
+ 
+         internal async Task<object?> SetupGame(SetupGameData data)
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/CLAUDE.md mgx/CLAUDE.md
+--- mgx-orig/CLAUDE.md	2026-08-19 06:34:23.256595324 +0000
++++ mgx/CLAUDE.md	2026-08-19 06:45:15.079912085 +0000
+@@ -17,8 +17,13 @@
+   (asset + position/scale/rotation/attributes). The client renders whatever items it's given.
+ - **The 2D panel / control UI** → the server builds `PlayerData.Screen` (a `UiNode` tree:
+   title/text/image/model/button/select/input/check/checks/banner/log/animpick/row/col). The client
+-  has ONE generic renderer (`renderNode` in `game-play.component.ts`) that draws it and dispatches
+-  button actions via `executeActionArgs`. `panelMode` attribute = `full` (covers screen) or `side` (docked).
++  has ONE generic renderer (`MgPanel3d.build()` in `bl/mg.panel3d.ts`) that draws it and dispatches
++  button actions via `executeActionArgs`. The panel is real geometry in the scene, not HTML — a DOM
++  overlay is invisible to a headset, so this is what makes every game's UI work in VR unchanged.
++  Where each panel sits is the CLIENT's business; the server only names an edge, per panel, with
++  `UiNode.Panel(dock, …)` where dock = `right` (default) | `left` | `top` | `bottom`. The optional
++  `panelMode` attribute (`full` | `side`) is only a hint to trim the app's own bottom chrome for a
++  content-heavy panel — it no longer changes the panel's layout.
+   Rebuilt every action via the `BaseGameFlow.RefreshScreens()` hook (override it per game).
+ - **The "Create a game" list** → from the server catalog `BaseGameFlow.GameCatalog()` via
+   `GET /api/Game/GameTypes`. The client renders the buttons dynamically.
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/Client/src/app/app.component.ts mgx/Client/src/app/app.component.ts
+--- mgx-orig/Client/src/app/app.component.ts	2026-08-19 06:34:23.257500626 +0000
++++ mgx/Client/src/app/app.component.ts	2026-08-19 06:45:15.080064462 +0000
+@@ -19,13 +19,20 @@
+ 
+     this.titleService.setTitle("MGx - v"+environment.appVersion);
+ 
+-    let savedUser: any = localStorage.getItem('user');
++    // Restore the signed-in user. This used to lean on the throw: JSON.parse(null) returns null
++    // rather than throwing, so User was set to null and `User!.id` was what raised — leaving
++    // hubConnection undefined for the rest of the session while looking like a parse failure.
++    let savedUser: any = undefined;
+     try {
+-      savedUser = JSON.parse(savedUser);
+-      this.generalService.User = savedUser;
+-      this.signalRService.startConnection(this.generalService.User!.id);
+-    } catch (e) {
+-      this.generalService.User = undefined;
++      const raw = localStorage.getItem('user');
++      savedUser = raw ? JSON.parse(raw) : undefined;
++    } catch {
++      savedUser = undefined;
++    }
++    this.generalService.User = savedUser || undefined;
++
++    if (this.generalService.User?.id) {
++      this.signalRService.startConnection(this.generalService.User.id);
+     }
+   }
+ }
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/Client/src/app/bl/mg.panel3d.ts mgx/Client/src/app/bl/mg.panel3d.ts
+--- mgx-orig/Client/src/app/bl/mg.panel3d.ts	2026-08-19 06:34:23.258052881 +0000
++++ mgx/Client/src/app/bl/mg.panel3d.ts	2026-08-19 06:45:15.080462464 +0000
+@@ -30,11 +30,14 @@
+ // widths, no explicit heights. Sizes below are in PIXELS, exactly the units the server already
+ // sends in `UiNode.Size`, and the whole panel is scaled once at the end.
+ //
+-// PLACEMENT: default is 'hud' — the panel is parented to the CAMERA and sized from the camera's
+-// own frustum, so it sits in view at a sensible size in every game with zero per-game setup
+-// (the closest like-for-like replacement for the old overlay). A game can opt into 'world'
+-// placement via the panel3dAnchor / panel3dRot / panel3dWidth attributes when we get to
+-// per-game positioning.
++// PLACEMENT is entirely the CLIENT's business. On screen the panels are parented to the CAMERA
++// and sized from its frustum, then docked to the edges of the view; in VR they ride the player's
++// hand, where screen edges mean nothing. The SERVER only names an edge, per panel, via
++// UiNode.Panel(dock, ...) — 'right' (the default) | 'left' | 'top' | 'bottom'.
++//
++// There is deliberately no world-anchored placement: nothing has asked for a panel pinned to the
++// table rather than the view, and an unused second placement mode is a second thing to keep
++// working. Add it here (with the per-game attributes to drive it) the day a game needs it.
+ // =====================================================================================
+ 
+ export type UiNode = {
+@@ -46,43 +49,22 @@
+ };
+ 
+ /**
+- * Which system delivers DESKTOP clicks to the panel. VR is unaffected either way — a headset goes
+- * through mg.three's controller raycast, which reads the `userData` that makeInteractive() writes.
+- *
+- *  'interaction-manager' — the app's own three.interactive wrapper. Known to work; it is what
+- *        shipped. It only knows about clicks: no wheel, no drag. Switching back to it therefore
+- *        also disables SCROLLING, and a panel taller than its slice will be clipped with no way to
+- *        reach the rest — so it is a fallback for proving a regression, not a place to live.
+- *  'pointer-events'      — @pmndrs/pointer-events, the layer uikit's own vanilla docs prescribe:
+- *        "since three.js ships no event system, no event system is available out of the box". It
+- *        brings wheel, drag, capture and proper pointerover/out, and it is the same package the
+- *        R3F/XR stack uses, so a VR ray pointer can later be fed through the same pipeline.
++ * DESKTOP clicks reach the panel through @pmndrs/pointer-events, the layer uikit's own vanilla
++ * docs prescribe ("since three.js ships no event system, no event system is available out of the
++ * box"). It brings wheel, drag, capture and proper pointerover/out — the panel SCROLLS rather
++ * than shrinking to fit, and that needs wheel and drag events the app's own three.interactive
++ * wrapper does not have. It is also the package the R3F/XR stack uses, so a VR ray pointer can be
++ * fed through the same pipeline later.
+  *
+- * Exactly ONE of them owns the panel. Both were live at once briefly and that is a trap: they each
+- * dispatch 'click' on the same object, so every action ran twice (which reads as "nothing happened"
+- * on anything idempotent, and as a double spend on anything that is not). Flipping this constant is
+- * the whole revert — the other path stays fully wired underneath.
++ * Exactly one system may own the panel. Both were live at once briefly and that is a trap: they
++ * each dispatch 'click' on the same object, so every action ran twice — which reads as "nothing
++ * happened" on anything idempotent, and as a double spend on anything that is not. The
++ * three.interactive path stays wired for board items (mg.three registers those); it is simply not
++ * attached to panel widgets.
+  *
+- * A previous attempt at 'pointer-events' was abandoned on a false diagnosis: an HP "+5" that did
+- * nothing was read as a dead click path, when in fact HP was already at max and the server was
+- * correctly ignoring it. Hence panelClickStats below — the verdict is counted, not eyeballed.
++ * VR is unaffected either way — a headset goes through mg.three's controller raycast, which reads
++ * the `userData` that makeInteractive() writes.
+  */
+-const PANEL_INPUT: 'interaction-manager' | 'pointer-events' = 'pointer-events';
+-
+-/**
+- * Tally of what actually arrived, per input system, exposed as `window.__panel3dClicks`. Cheap,
+- * and it settles "is the new path delivering?" with a number instead of an impression.
+- */
+-const panelClickStats: { [source: string]: number } = {};
+-function notePanelClick(source: string) {
+-  panelClickStats[source] = (panelClickStats[source] || 0) + 1;
+-  (window as any).__panel3dClicks = panelClickStats;
+-  // Also on the DOM. `window` is not readable from a browser extension's isolated world and the
+-  // console buffer resets on every dev-server reload, so a page attribute is the only channel that
+-  // survives both — and it is what let this be measured instead of guessed.
+-  try { document.body.dataset['panel3dClicks'] = JSON.stringify(panelClickStats); } catch { }
+-  console.log('[panel3d] click delivered via %s', source, panelClickStats);
+-}
+ 
+ /**
+  * Authored width in px per dock. A side dock is a narrow column; a top/bottom dock is a wide
+@@ -225,20 +207,46 @@
+ /**
+  * Split a seat's Screen into panels.
+  *
+- * A `panel` node becomes one panel, pinned to the edge named in its Style. Anything at the top
+- * level that is NOT a panel node is collected into one implicit panel docked right — which is
+- * exactly what every game that never mentions panels already gets, so this is backward
+- * compatible by construction.
++ * A `panel` node becomes one panel, pinned to the edge named in its Style. Anything that is NOT
++ * a panel node is collected into one implicit panel docked right — which is exactly what every
++ * game that never mentions panels already gets, so this is backward compatible by construction.
++ *
++ * Panels are HOISTED from anywhere in the tree, not just the top level. UiNode.Panel() is an
++ * ordinary node server-side, so a game can legally build one inside a col/row; when only the top
++ * level was inspected such a node fell through to the `default` branch of build() and rendered as
++ * one empty Text — silently discarding its whole subtree. A panel is a placement instruction, so
++ * hoisting it out of its container is the only reading that makes sense.
+  */
+ function splitPanels(screen: UiNode[]): { dock: Dock, nodes: UiNode[] }[] {
+   const out: { dock: Dock, nodes: UiNode[] }[] = [];
+   let loose: UiNode[] | null = null;
++
++  /** Strip panel descendants out of a subtree, pushing each onto `out`; return what's left. */
++  const hoist = (nodes: UiNode[]): UiNode[] => {
++    const kept: UiNode[] = [];
++    for (const nd of nodes) {
++      if ((nd.type || '').toLowerCase() === 'panel') {
++        out.push({ dock: dockOf(nd.style), nodes: hoist(nd.children || []) });
++      } else if (nd.children?.length) {
++        // Copy rather than mutate: `screen` is the server's payload and the pane fingerprint is
++        // taken from it, so rewriting it in place would make the cache key disagree with itself.
++        kept.push({ ...nd, children: hoist(nd.children) });
++      } else {
++        kept.push(nd);
++      }
++    }
++    return kept;
++  };
++
+   for (const nd of screen) {
+     if ((nd.type || '').toLowerCase() === 'panel') {
+-      out.push({ dock: dockOf(nd.style), nodes: nd.children || [] });
++      out.push({ dock: dockOf(nd.style), nodes: hoist(nd.children || []) });
+     } else {
+-      if (!loose) { loose = []; out.push({ dock: 'right', nodes: loose }); }
+-      loose.push(nd);
++      const [rest] = hoist([nd]);
++      if (rest) {
++        if (!loose) { loose = []; out.push({ dock: 'right', nodes: loose }); }
++        loose.push(rest);
++      }
+     }
+   }
+   return out;
+@@ -403,11 +411,10 @@
+       // (defaultPointerEvents = 'auto' on every component), so this restores uikit's own default
+       // rather than inventing a policy; individual nodes still override it — the dropdown list
+       // toggles between 'auto' and 'none' to stop a closed list swallowing clicks.
+-      pointerEvents: PANEL_INPUT === 'pointer-events' ? 'auto' : 'none',
++      pointerEvents: 'auto',
+       // A panel is no longer shrunk until it fits — it keeps a readable size and SCROLLS. That is
+-      // only possible because a pointer system now feeds uikit the wheel and drag events it needs
+-      // (see PANEL_INPUT); under the InteractionManager, which has neither, this would clip the
+-      // overflow with no way to reach it.
++      // only possible because @pmndrs/pointer-events feeds uikit the wheel and drag events it
++      // needs; the InteractionManager has neither, and would clip the overflow unreachably.
+       overflow: 'scroll',
+       scrollbarWidth: 6,
+       scrollbarColor: '#475569',
+@@ -616,7 +623,6 @@
+     for (const b of p.clickables) {
+       try {
+         b.removeEventListener('click', b.userData['__onClick']);
+-        this.mgThree.interactionManager?.remove(b);
+       } catch { /* already gone */ }
+     }
+     p.clickables = [];
+@@ -649,14 +655,17 @@
+       case 'title': {
+         const { Icon, rest } = splitIcon(nd.text || '');
+         const colour = col(nd.color, '#ffd166');
++        // Size/Color are honoured here now; both were hardcoded, so a server that set them on a
++        // title was ignored (UiNode.cs documents them as valid on any node).
++        const size = nd.size ?? 30;
+         if (!Icon) {
+-          parent.add(new Text({ text: txt(rest), fontSize: 30, fontWeight: 'bold', color: colour }));
++          parent.add(new Text({ text: txt(rest), fontSize: size, fontWeight: 'bold', color: colour }));
+           return;
+         }
+         const row = new Container({ flexDirection: 'row', alignItems: 'center', gap: 10 });
+         parent.add(row);
+-        row.add(new Icon({ width: 28, height: 28, color: colour, flexShrink: 0 }));
+-        row.add(new Text({ text: txt(rest), fontSize: 30, fontWeight: 'bold', color: colour }));
++        row.add(new Icon({ width: size * 0.94, height: size * 0.94, color: colour, flexShrink: 0 }));
++        row.add(new Text({ text: txt(rest), fontSize: size, fontWeight: 'bold', color: colour }));
+         return;
+       }
+ 
+@@ -670,17 +679,17 @@
+           alignItems: 'center', justifyContent: 'center',
+         });
+         parent.add(box);
+-        box.add(new Text({ text: txt(nd.text), fontSize: 26, fontWeight: 'bold', color: '#ffffff' }));
++        box.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? 26, fontWeight: 'bold', color: col(nd.color, '#ffffff') }));
+         return;
+       }
+ 
+       case 'log': {
+         const box = new Container({
+-          backgroundColor: '#030712', opacity: 0.9, borderRadius: 8, padding: 10,
++          backgroundColor: col(nd.bg, '#030712'), opacity: 0.9, borderRadius: 8, padding: 10,
+           flexDirection: 'column', alignItems: 'flex-start',
+         });
+         parent.add(box);
+-        box.add(new Text({ text: txt(nd.text), fontSize: 15, color: '#9ca3af' }));
++        box.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? 15, color: col(nd.color, '#9ca3af') }));
+         return;
+       }
+ 
+@@ -722,7 +731,7 @@
+       }
+ 
+       case 'button':
+-        this.addButton(parent, nd.text || '', nd.style, nd.url, () => this.fire(nd, nd.args || {}));
++        this.addButton(parent, nd.text || '', nd.style, nd.url, () => this.fire(nd, nd.args || {}), nd.bg);
+         return;
+ 
+       case 'check': {
+@@ -740,7 +749,10 @@
+         const all = nd.options || [];
+         const opts = all.filter(o => o.value !== '');
+         const placeholder = all.find(o => o.value === '')?.label || '';
+-        const chosen = this.fields[id] ?? all.find(o => o.selected)?.value;
++        // `selected` is the documented field for a dropdown's current value, but UiOption also
++        // carries `checked` (which "checks" uses) and games set it on selects too — honour both
++        // rather than silently rendering nothing as chosen.
++        const chosen = this.fields[id] ?? all.find(o => o.selected || o.checked)?.value;
+ 
+         const pick = (v: string) => {
+           this.fields[id] = v;                       // remembered either way, so `gather` can read it
+@@ -1015,9 +1027,11 @@
+    *    marks it as a UI activation rather than a clicked board item.
+    */
+   private addButton(parent: Container, rawLabel: string, style: string | undefined,
+-                    iconUrl: string | undefined, onClick: () => void) {
++                    iconUrl: string | undefined, onClick: () => void, bg?: string) {
+     const big = has(style, 'big');
+-    const base = fill(style);
++    // UiNode.cs documents Bg as valid on a button; it used to be dropped, so a game could only
++    // pick from the FILL style keywords. An explicit Bg now wins over the keyword.
++    const base = col(bg, fill(style));
+     const { Icon, rest: label } = splitIcon(rawLabel);
+ 
+     const btn = new Container({
+@@ -1064,22 +1078,13 @@
+     obj.userData['ItemData'] = { id: '', clickActions: { [this.seatId]: '__panel3d' }, attributes: {} };
+     if (activate) obj.userData['uiArgs'] = { fire: activate };
+ 
+-    // DESKTOP: one 'click' listener, fed by whichever system PANEL_INPUT selects. Both dispatch
+-    // the same event name on the same object, so the listener itself does not care — which is
+-    // exactly why only one of them may be attached at a time.
++    // DESKTOP: one 'click' listener, delivered by @pmndrs/pointer-events. The panel is
++    // deliberately NOT registered with the InteractionManager — that is what keeps the two
++    // systems from both firing the same action.
+     if (activate && !selfHandled) {
+-      const fire = (ev?: any) => {
+-        // pointer-events wraps the DOM event (HtmlEvent.nativeEvent); the InteractionManager passes
+-        // its own plain object. That difference is the only honest way to tell who delivered this.
+-        notePanelClick(ev?.nativeEvent != null ? 'pointer-events' : 'interaction-manager');
+-        activate();
+-      };
+-      obj.userData['__onClick'] = fire;
+-      obj.addEventListener('click', fire);
++      obj.userData['__onClick'] = activate;
++      obj.addEventListener('click', activate);
+     }
+-    // Registering with the InteractionManager is what makes it raycast this object. Skipping it
+-    // under 'pointer-events' is what keeps the two systems from both firing the action.
+-    if (PANEL_INPUT === 'interaction-manager') this.mgThree.interactionManager?.add(obj);
+     (this.building?.clickables ?? []).push(obj);
+   }
+ 
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/Client/src/app/entities/player.data.ts mgx/Client/src/app/entities/player.data.ts
+--- mgx-orig/Client/src/app/entities/player.data.ts	2026-08-19 06:34:23.259169848 +0000
++++ mgx/Client/src/app/entities/player.data.ts	2026-08-19 06:45:15.080621548 +0000
+@@ -2,6 +2,7 @@
+ import {V3} from './V3';
+ import {ItemData} from './item.data';
+ import { LocationData } from './location.data';
++import type { UiNode } from '../bl/mg.panel3d';
+ 
+ export class PlayerData {
+   id!: string;
+@@ -15,4 +16,13 @@
+ 
+   table!: ItemData;
+   hand!: ItemData;
++
++  /**
++   * The complete 2D control panel the SERVER built for this seat (Entities/UiNode.cs), rendered
++   * verbatim by MgPanel3d. Absent/null = this seat shows no panel.
++   *
++   * This was missing from the model entirely, so every read of it went through `as any` — which
++   * is how the panel path stayed untyped end to end.
++   */
++  screen?: UiNode[];
+ }
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/Client/src/app/services/SignalrService.ts mgx/Client/src/app/services/SignalrService.ts
+--- mgx-orig/Client/src/app/services/SignalrService.ts	2026-08-19 06:34:23.259306609 +0000
++++ mgx/Client/src/app/services/SignalrService.ts	2026-08-19 06:45:15.080755661 +0000
+@@ -15,6 +15,14 @@
+     SignalrService.singletone = this;
+   }
+   startConnection (userId:string) {
++    // The hub is [Authorize]d now, so a connection without a token is refused at the handshake.
++    // Bail early rather than opening a socket that can only fail.
++    if (!this.general.Token) { console.warn('[signalr] no token — not connecting'); return; }
++
++    // startConnection is reachable twice (app boot and again after login). Stopping the previous
++    // connection first stops it leaking an open socket with its handlers still attached.
++    if (this.hubConnection) { this.hubConnection.stop().catch(() => { }); }
++
+     this.hubConnection = new signalR.HubConnectionBuilder()
+       .withUrl(environment.serverURL+ '/notifications', {
+         // sends ?access_token=... on the handshake; the server reads it for the hub path
+@@ -22,6 +30,14 @@
+       })
+       .withAutomaticReconnect()
+       .build();
++
++    // A reconnect gets a NEW connection id, so the old one's group membership is gone. Re-register
++    // or this connection silently drops out of its user group for the rest of the session.
++    this.hubConnection.onreconnected(() => {
++      console.log('[signalr] reconnected');
++      this.hubConnection.send('SetConnectionIDUser', userId).catch(() => { });
++    });
++
+     this.hubConnection
+       .start()
+       .then(() => {
+@@ -32,6 +48,17 @@
+ 
+   }
+ 
++  /**
++   * Fire-and-forget send that survives a closed / reconnecting connection.
++   * `HubConnection.send` REJECTS when the connection isn't in the Connected state, and no call
++   * site here ever attached a catch — so a click during a reconnect produced an unhandled
++   * rejection instead of a no-op.
++   */
++  private send(method: string, ...args: any[]) {
++    this.hubConnection?.send(method, ...args)
++      .catch(err => console.warn('[signalr] %s not sent:', method, err));
++  }
++
+   executeAction(gameId: string, playerId: string, itemId: string, actionId: string, dragTargetItemId: string, point: V3){
+     const data = {
+       gameId,
+@@ -41,28 +68,27 @@
+       dragTargetItemId,
+       point
+     }
+-    this.hubConnection.send("ExecuteAction", data);
+-    // this.hubConnection.invoke("ExecuteAction", data);
++    this.send("ExecuteAction", data);
+   }
+ 
+   // Invoke an action from a UI (the DM console) with key/value params instead of a clicked
+   // 3D item — server reads these from ExecuteActionData.args.
+   executeActionArgs(gameId: string, playerId: string, actionId: string, args: {[k: string]: string}) {
+-    this.hubConnection.send("ExecuteAction", { gameId, playerId, itemId: '', actionId, args });
++    this.send("ExecuteAction", { gameId, playerId, itemId: '', actionId, args });
+   }
+ 
+   // ---- voice chat (WebRTC) signaling ----
+   joinVoice(gameId: string, userName: string) {
+-    this.hubConnection.send('JoinVoice', gameId, userName);
++    this.send('JoinVoice', gameId, userName);
+   }
+   leaveVoice(gameId: string) {
+-    this.hubConnection.send('LeaveVoice', gameId);
++    this.send('LeaveVoice', gameId);
+   }
+   voiceSignal(targetConnectionId: string, data: any) {
+-    this.hubConnection.send('VoiceSignal', targetConnectionId, data);
++    this.send('VoiceSignal', targetConnectionId, data);
+   }
+   sendTranscript(gameId: string, userName: string, text: string) {
+-    this.hubConnection.send('SendTranscript', gameId, userName, text);
++    this.send('SendTranscript', gameId, userName, text);
+   }
+ 
+ }
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/Client/src/app/view/game-play/game-play.component.html mgx/Client/src/app/view/game-play/game-play.component.html
+--- mgx-orig/Client/src/app/view/game-play/game-play.component.html	2026-08-19 06:34:23.259460205 +0000
++++ mgx/Client/src/app/view/game-play/game-play.component.html	2026-08-19 06:45:15.080876534 +0000
+@@ -59,9 +59,14 @@
+       }
+     </div>
+   }
+-  @if (!panelFull) {
+-    <p-button label="VR" (click)="onVrClick()" severity="secondary"></p-button>
+-  }
++</div>
++
++<!-- VR sits OUTSIDE the chrome bar on purpose: that bar is hidden when the server asks for a
++     content-heavy panel (panelMode=full), and a headset has to stay reachable in every game.
++     It used to be inside the bar AND separately gated on !panelFull, so in exactly the games
++     that most want VR — Resistance, One Night Werewolf — it disappeared. -->
++<div style="position:absolute;bottom:10px;right:10px;z-index:10;">
++  <p-button label="VR" (click)="onVrClick()" severity="secondary"></p-button>
+ </div>
+ 
+ @if (hud) {
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/Client/src/app/view/game-play/game-play.component.ts mgx/Client/src/app/view/game-play/game-play.component.ts
+--- mgx-orig/Client/src/app/view/game-play/game-play.component.ts	2026-08-19 06:34:23.259510162 +0000
++++ mgx/Client/src/app/view/game-play/game-play.component.ts	2026-08-19 06:45:15.081066670 +0000
+@@ -84,9 +84,18 @@
+   // Is the current user a seated player (vs a spectator)? mgGame.playerData is set on load.
+   get isPlayer(): boolean { return !!this.mgGame?.playerData; }
+ 
+-  // The Resistance is a pure 2D card/vote game — no 3D scene, so hide 3D-only controls (VR).
+-  // A full-screen server-driven panel (e.g. The Resistance) owns the whole view — hide the 3D
+-  // play chrome (VR button, bottom bar). Driven by the server's panelMode, not by game type.
++  /**
++   * The server's hint that this seat's panel is content-heavy and wants the view to itself
++   * (Resistance, One Night Werewolf, Small World's pick phase). Generic: an attribute, never a
++   * game name.
++   *
++   * NOTE this no longer means "the panel covers the screen" — since the panel became geometry
++   * docked to the edges of the view, nothing is covered. It now only trims the app's own bottom
++   * chrome so a bottom-docked panel is not fighting it for the same strip of screen. The VR
++   * button is deliberately NOT part of that: it lives outside this bar (see the template),
++   * because a headset has to stay reachable in every game — which the old markup broke by
++   * hiding the whole bar, VR button included, in exactly these games.
++   */
+   get panelFull(): boolean { return this.mgGame?.gameData?.attributes?.['panelMode'] === 'full'; }
+ 
+   // Only the game's creator may restart it ("Play again").
+@@ -116,8 +125,8 @@
+     this.gameId = this.activatedRoute.snapshot.paramMap.get('id');
+     console.log("ngOnInit", this.gameId);
+ 
+-    this.signalRService.hubConnection.off('GameDeleted');
+-    this.signalRService.hubConnection.on('GameDeleted', data => {
++    this.signalRService.hubConnection?.off('GameDeleted');
++    this.signalRService.hubConnection?.on('GameDeleted', data => {
+       console.log('GameDeleted', data);
+       // The game we're playing was deleted → return to the games list.
+       if (String(data) === String(this.gameId)) {
+@@ -125,8 +134,8 @@
+       }
+     });
+ 
+-    this.signalRService.hubConnection.off('GameUpdated');
+-    this.signalRService.hubConnection.on('GameUpdated', data => {
++    this.signalRService.hubConnection?.off('GameUpdated');
++    this.signalRService.hubConnection?.on('GameUpdated', data => {
+       console.log('GameUpdated', data);
+       if (String(data?.id) !== String(this.gameId)) return;   // broadcast is Clients.All — ignore other games
+       if (this.mgGame) this.mgGame.updateGame(data);
+@@ -170,8 +179,8 @@
+   }
+ 
+   ngOnDestroy(): void {
+-    this.signalRService.hubConnection.off('GameUpdated');
+-    this.signalRService.hubConnection.off('GameDeleted');
++    this.signalRService.hubConnection?.off('GameUpdated');
++    this.signalRService.hubConnection?.off('GameDeleted');
+     this.voice.leave();   // drop out of the voice call when leaving the game view
+     this.disposePanel3d();   // unregister the in-scene panel's clickables before the scene goes
+     this.mgThree?.dispose();
+@@ -303,7 +312,7 @@
+     // path any more and deliberately no fallback: one renderer means a panel bug shows up as a
+     // panel bug instead of silently reverting to a different UI.
+     const me = this.generalService.User?.id;
+-    const mine = (g.players || []).find((p: any) => p.user?.id === me && p.screen);
++    const mine = (g.players as PlayerData[] || []).find(p => p.user?.id === me && p.screen);
+     this.panelSeatId = mine?.id || '';
+     this.updatePanel3d(g, mine?.screen || null);
+   }
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/Client/src/app/view/game-setup/game-setup.component.ts mgx/Client/src/app/view/game-setup/game-setup.component.ts
+--- mgx-orig/Client/src/app/view/game-setup/game-setup.component.ts	2026-08-19 06:34:23.259782836 +0000
++++ mgx/Client/src/app/view/game-setup/game-setup.component.ts	2026-08-19 06:45:15.081229397 +0000
+@@ -127,8 +127,8 @@
+ 
+     this.updateGame();
+ 
+-    this.signalRService.hubConnection.off('GameUpdated');
+-    this.signalRService.hubConnection.on('GameUpdated', data => {
++    this.signalRService.hubConnection?.off('GameUpdated');
++    this.signalRService.hubConnection?.on('GameUpdated', data => {
+       console.log('GameUpdated', data);
+       if (String(data?.id) !== String(this.gameId)) return;   // broadcast is Clients.All — ignore other games
+       // SignalR fires OUTSIDE Angular's zone — run inside so every client's seat list refreshes
+@@ -147,13 +147,13 @@
+         }
+       });
+     });
+-    // this.signalRService.hubConnection.off('GamesUpdated');
+-    // this.signalRService.hubConnection.on('GamesUpdated', data => {
++    // this.signalRService.hubConnection?.off('GamesUpdated');
++    // this.signalRService.hubConnection?.on('GamesUpdated', data => {
+     //   console.log('GamesUpdated', data);
+     //   // TODO !!!
+     // });
+-    this.signalRService.hubConnection.off('GameDeleted');
+-    this.signalRService.hubConnection.on('GameDeleted', data => {
++    this.signalRService.hubConnection?.off('GameDeleted');
++    this.signalRService.hubConnection?.on('GameDeleted', data => {
+       console.log('GameDeleted', data);
+       // This game was deleted out from under us → send everyone back to the list.
+       if (String(data) === String(this.gameId)) {
+@@ -166,9 +166,9 @@
+   }
+ 
+   ngOnDestroy(): void {
+-    this.signalRService.hubConnection.off('GameUpdated');
+-    this.signalRService.hubConnection.off('GamesUpdated');
+-    this.signalRService.hubConnection.off('GameDeleted');
++    this.signalRService.hubConnection?.off('GameUpdated');
++    this.signalRService.hubConnection?.off('GamesUpdated');
++    this.signalRService.hubConnection?.off('GameDeleted');
+   }
+ 
+   updateGame(){
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/Client/src/app/view/games-list/games-list.component.ts mgx/Client/src/app/view/games-list/games-list.component.ts
+--- mgx-orig/Client/src/app/view/games-list/games-list.component.ts	2026-08-19 06:34:23.259858666 +0000
++++ mgx/Client/src/app/view/games-list/games-list.component.ts	2026-08-19 06:45:15.081359247 +0000
+@@ -38,12 +38,12 @@
+     // SignalR callbacks fire OUTSIDE Angular's zone, so re-run the refresh inside
+     // the zone — otherwise this.games updates but change detection never runs and
+     // the list only repaints on the next in-app click (e.g. Refresh).
+-    this.signalRService.hubConnection.on('GamesUpdated', data => {
++    this.signalRService.hubConnection?.on('GamesUpdated', data => {
+       console.log('GamesUpdated', data);
+       this.zone.run(() => this.updateGamesList());
+     });
+ 
+-    this.signalRService.hubConnection.on('GameDeleted', data => {
++    this.signalRService.hubConnection?.on('GameDeleted', data => {
+       console.log('GameDeleted', data);
+       this.zone.run(() => this.updateGamesList());
+     });
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/Entities/ItemData.cs mgx/Entities/ItemData.cs
+--- mgx-orig/Entities/ItemData.cs	2026-08-19 06:34:23.260863036 +0000
++++ mgx/Entities/ItemData.cs	2026-08-19 06:36:18.815476842 +0000
+@@ -59,27 +59,28 @@
+             HoverActions = new Dictionary<string, string>();
+         }
+ 
++        // Depth-first search for a descendant by id.
++        //
++        // FIXED (two bugs, both latent until a game nests items — D&D already parents label
++        // ItemData to its tokens, DnDGameFlow.cs:349/370/385):
++        //   1) a nested hit returned the PARENT of the match instead of the match itself, so
++        //      ExecuteAction handed the game flow the wrong ItemData;
++        //   2) `return` inside List.ForEach only ends THAT iteration, so the search never
++        //      short-circuited and a later sibling could overwrite an already-found match.
++        // A plain foreach with real returns fixes both.
+         public ItemData? FindItem(string itemId)
+         {
+-            ItemData found = null;
++            if (string.IsNullOrEmpty(itemId)) return null;
+ 
+-            Items.ForEach(item =>
++            foreach (var item in Items)
+             {
+-                if (item.Id == itemId)
+-                {
+-                    found = item;
+-                    return;
+-                }
+-                var f = item.FindItem(itemId);
+-                if (f != null)
+-                {
+-                    found = item;
+-                    return;
+-                }
++                if (item.Id == itemId) return item;
+ 
+-            });
++                var found = item.FindItem(itemId);
++                if (found != null) return found;
++            }
+ 
+-            return found;
++            return null;
+         }
+ 
+         public void RemoveItem(string itemId)
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/Entities/UiNode.cs mgx/Entities/UiNode.cs
+--- mgx-orig/Entities/UiNode.cs	2026-08-19 06:34:23.260909895 +0000
++++ mgx/Entities/UiNode.cs	2026-08-19 06:45:15.081548992 +0000
+@@ -13,19 +13,35 @@
+     // interactive nodes carry Action + Args (an [GameAction] name + a key/value bag). Containers
+     // ("row"/"col") hold Children so the SERVER controls layout and ordering.
+     //
+-    // Node types the generic renderer understands:
+-    //   "col"    - vertical container   (Children, Style, Size=gap)
+-    //   "row"    - horizontal container (Children, Style, Size=gap)
+-    //   "title"  - big heading          (Text)
+-    //   "text"   - a line of text       (Text, Color=hex, Size=px, Style)
+-    //   "note"   - muted/italic hint    (Text)
+-    //   "image"  - an <img>             (Url, Size=height px, Style)
+-    //   "button" - a button            (Text, Url=optional icon, Action, Args, Style: ok|no|big|primary)
++    // Node types the generic renderer understands (MgPanel3d.build, Client/src/app/bl/mg.panel3d.ts):
++    //   "panel"  - one docked panel      (Children, Style = right|left|top|bottom; see below)
++    //   "col"    - vertical container    (Children, Size=gap, Bg)
++    //   "row"    - horizontal container  (Children, Size=gap, Bg) — wraps
++    //   "title"  - big heading           (Text, Color, Size; a leading emoji becomes an icon)
++    //   "text"   - a line of text        (Text, Color, Size, Bg, Style: pill|chip)
++    //   "note"   - muted hint            (Text, Color, Size)
++    //   "image"  - a picture             (Url, Size=height px, Overlays)
++    //   "model"  - a 3D model shown as a picture (Url, Size=height px)
++    //   "button" - a button              (Text, Url=optional icon or model, Action, Args, Bg,
++    //                                     Confirm, Gather, Style: fill keyword + optional "big")
++    //   "check"  - one checkbox          (Text, Action, ArgKey, Checked) — sends "1"/"0"
++    //   "select" - a choice list         (Id, Options, Action, ArgKey, OnChange, Args).
++    //                                     Renders as radio buttons up to 5 options and as a
++    //                                     dropdown beyond that; Style "list"/"dropdown" forces one.
++    //                                     An Option with an EMPTY Value is the placeholder caption.
+     //   "checks" - checkbox group + submit (Options, Need, Action, ArgKey, Text=submit label)
+-    //   "banner" - big highlighted result (Text, Style: win|lose)
+-    //   "log"    - monospace multi-line block (Text)
+-    //   "space"  - vertical gap         (Size)
++    //   "input"  - a text field          (Id, Placeholder) — read by a button's Gather
++    //   "animpick" - pick an animation clip off a loaded model (Id = the item id, Action, ArgKey)
++    //   "banner" - big highlighted result (Text, Color, Size, Style: win|lose)
++    //   "log"    - multi-line block      (Text, Color, Size, Bg)
++    //   "space"  - vertical gap          (Size)
+     // Anything unknown renders as plain text, so adding a game can't crash the client.
++    //
++    // Style keywords that pick a FILL colour (button / banner / chip): ok, no, primary, team,
++    // win, lose, cur, ghost. Anything else falls through to a neutral fill, so the server can
++    // invent a keyword without breaking the client. ("s" and "f" were CSS classes on the old
++    // HTML panel and mean nothing now — they were removed from this list rather than resurrected,
++    // because no game uses them.)
+     // =====================================================================================
+     public class UiNode
+     {
+@@ -65,6 +81,10 @@
+         //
+         // Where a panel physically ends up is the CLIENT's business (it docks to the edges of the
+         // view on screen, and rides the player's hand in VR). The server only names the edge.
++        //
++        // A Panel node may sit anywhere in the tree, not just at the top level — the renderer
++        // hoists it out of whatever container holds it. (It used to inspect only the top level,
++        // so a nested Panel rendered as one empty line and its whole subtree vanished.)
+         public static UiNode Panel(string dock, params UiNode[] kids) =>
+             new UiNode { Type = "panel", Style = dock, Children = new(kids) };
+ 
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/GameFlows/BaseGameFlow.cs mgx/GameFlows/BaseGameFlow.cs
+--- mgx-orig/GameFlows/BaseGameFlow.cs	2026-08-19 06:34:23.261084903 +0000
++++ mgx/GameFlows/BaseGameFlow.cs	2026-08-19 07:03:58.365826038 +0000
+@@ -115,7 +115,10 @@
+                     game.GameFlow = new SmallWorldGameFlow(game);
+                     break;
+                 default:
+-                    break;
++                    // Was an empty default: an unknown gameType left GameFlow null and the
++                    // RunCreateFlow() call below NRE'd. Fail with something readable instead —
++                    // gameType comes straight off the wire.
++                    throw new ArgumentException($"Unknown game type '{gameType}'.", nameof(gameType));
+             }
+ 
+             game.GameStatus = GameStatusEnum.CREATED;
+@@ -174,6 +177,10 @@
+             {
+                 player.Hand = new ItemData("", null) { Name = "PLAYER TABLE" };
+                 player.Table = new ItemData("", null) { Name = "PLAYER TABLE" };
++                // Drop the finished game's control panel too. It used to survive a restart, so
++                // between Setup and Start the client kept rendering the PREVIOUS game's panel —
++                // live-looking, but its buttons now hit the "game is not in PLAY" gate.
++                player.Screen = null;
+             }
+ 
+             await Setup();
+@@ -258,17 +265,97 @@
+             _undo.Add(GameData.DeepCopy());
+         }
+ 
+-        public async Task ExecuteAction(ExecuteActionData data)
++        /// <summary>
++        /// Handle one client-originated action.
++        /// </summary>
++        /// <param name="data">The wire payload. Everything on it is client-controlled and untrusted.</param>
++        /// <param name="callerUserId">
++        /// The AUTHENTICATED user id, taken from the JWT by NotificationHub — never from the payload.
++        /// Required: an action that cannot be attributed to a signed-in user is refused.
++        /// </param>
++        public async Task ExecuteAction(ExecuteActionData data, string? callerUserId)
+         {
+             await _turnLock.WaitAsync();
+             try
+             {
++                if (!AuthorizeCaller(data, callerUserId)) return;
++
+                 await DispatchAction(data);
+                 await AfterAction();
+             }
+             finally { _turnLock.Release(); }
+         }
+ 
++        /// <summary>
++        /// Gate every action on three things the payload cannot be trusted to assert:
++        /// the game is actually in play, the named seat exists, and the AUTHENTICATED caller
++        /// is the user sitting in it.
++        ///
++        /// Before this, DispatchAction resolved the actor purely from the client-supplied
++        /// `playerId`, so any connected client could act as any seat in any game — and every
++        /// per-game "is it your turn" check was comparing a CLAIM, not an identity.
++        /// </summary>
++        private bool AuthorizeCaller(ExecuteActionData data, string? callerUserId)
++        {
++            if (data == null) return false;
++
++            // Actions only exist during play. Previously they were accepted in CREATED/SETUP
++            // (before StartGame had built the scene) and after ENDED (play continued past game
++            // over in any game whose actions lack their own "over" guard).
++            if (GameData.GameStatus != GameStatusEnum.PLAY)
++            {
++                Console.WriteLine($"Rejected action '{data.actionId}' — game is {GameData.GameStatus}, not {GameStatusEnum.PLAY}.");
++                return false;
++            }
++
++            if (string.IsNullOrEmpty(callerUserId))
++            {
++                Console.WriteLine($"Rejected action '{data.actionId}' — unauthenticated caller.");
++                return false;
++            }
++
++            var seat = GameData.FindPlayer(data.playerId);
++            if (seat == null)
++            {
++                Console.WriteLine($"Rejected action '{data.actionId}' — no seat '{data.playerId}' in this game.");
++                return false;
++            }
++
++            // The seat must be a human seat occupied by THIS user. This is what makes every
++            // downstream turn check meaningful; a spectator, an empty seat or somebody else's
++            // seat can no longer be driven from the wire.
++            if (seat.Type != PlayerTypeEnum.HUMAN || seat.User?.Id != callerUserId)
++            {
++                Console.WriteLine($"Rejected action '{data.actionId}' — user '{callerUserId}' does not occupy seat '{data.playerId}'.");
++                return false;
++            }
++
++            return true;
++        }
++
++        /// <summary>
++        /// True when whoever is acting is entitled to move for <paramref name="seatToMove"/>.
++        ///
++        /// Two ways to qualify:
++        ///  * the actor IS that seat — which is how an AI re-enters its own [GameAction]
++        ///    (TikTakToeGameFlow.PlayAI routes its move through HoverClick so the placement /
++        ///    turn / win logic all runs). This path never comes off the wire: AuthorizeCaller
++        ///    has already refused any payload naming a seat the caller doesn't occupy;
++        ///  * the actor is a seat held by the SAME USER as the seat to move — hotseat, one
++        ///    person holding several colours.
++        ///
++        /// A seat with no user (AI or empty) can therefore never be driven by somebody else,
++        /// which is the hole the old <c>current.User != null &amp;&amp; ...</c> form left open:
++        /// it skipped the check entirely whenever the seat to move was an AI, so in any
++        /// human-vs-AI game the human could play the AI's moves.
++        /// </summary>
++        protected static bool ControlsSeat(ExecuteActionData data, PlayerData? seatToMove)
++        {
++            if (seatToMove == null || data?.Player == null) return false;
++            if (data.Player.Id == seatToMove.Id) return true;
++            return seatToMove.User?.Id != null && data.Player.User?.Id == seatToMove.User.Id;
++        }
++
+         // Whose turn is it right now? Default uses CurrentTurnId; games that track turn via
+         // an attribute (chess/checkers/…) override this. Used by undo to rewind to a human.
+         protected virtual PlayerData? CurrentTurnPlayer()
+@@ -333,7 +420,33 @@
+                     return;
+                 }
+ 
+-                await (Task)theMethod.Invoke(this, new object[] { data })!;
++                // The action must actually be BOUND to the clicked item for this seat. The client
++                // only ever dispatches `clickActions[mySeatId] || clickActions['']` (mg.game.ts:1102),
++                // so this rejects nothing a real client sends — it just stops a crafted payload from
++                // invoking an action on an item that never offered it (e.g. calling MoveHere with an
++                // arbitrary item to teleport a piece). Panel buttons carry no item and are unaffected.
++                if (data.Item != null && !ItemOffersAction(data.Item, data.playerId, data.actionId))
++                {
++                    Console.WriteLine($"Rejected action '{data.actionId}' — item '{data.itemId}' does not offer it to seat '{data.playerId}'.");
++                    return;
++                }
++
++                // An action that throws used to propagate out of here and skip AfterAction()
++                // entirely, so mutations already applied were NEITHER broadcast NOR saved and the
++                // clients silently diverged from server memory. Contain it: log, then let
++                // AfterAction run so everyone re-syncs to whatever the real state now is.
++                // (Bad args are easy to reach — Carcassonne:191 int.Parse's a raw arg, and
++                // BaseData.GetNumberAttribute Convert.ToDouble's whatever string it finds.)
++                try
++                {
++                    await (Task)theMethod.Invoke(this, new object[] { data })!;
++                }
++                catch (Exception ex)
++                {
++                    var real = (ex as TargetInvocationException)?.InnerException ?? ex;
++                    Console.WriteLine($"Action '{data.actionId}' failed on game {GameData.Id} ({GameData.GameType}): {real}");
++                    return;
++                }
+ 
+                 // Remember who made the last HUMAN move — only that player may undo it (and only
+                 // their own move). Captured AFTER the move; the pre-move snapshot keeps the prior
+@@ -343,6 +456,20 @@
+             }
+         }
+ 
++        // Does this item expose this action to this seat? Games bind actions either to everyone
++        // (the "" key) or to one seat id — see ItemData.AddAction.
++        private static bool ItemOffersAction(ItemData item, string? playerId, string? actionId)
++        {
++            if (string.IsNullOrEmpty(actionId)) return false;
++            if (item.ClickActions == null) return false;
++
++            if (item.ClickActions.TryGetValue("", out var any) && any == actionId) return true;
++            if (!string.IsNullOrEmpty(playerId)
++                && item.ClickActions.TryGetValue(playerId!, out var mine) && mine == actionId) return true;
++
++            return false;
++        }
++
+         // Shared tail: end-game check, snapshot history, and broadcast the new state.
+         private async Task AfterAction()
+         {
+@@ -518,33 +645,32 @@
+         }
+ 
+         // ---------------------------------------------------------------------
+-        // Generic virtual-tabletop movement (used by Chess and D&D).
+-        // Interaction model: click a piece to select it, then click the move
+-        // surface (board/map) — the piece jumps to the clicked world point.
+-        // No rule enforcement; players self-enforce, like a tabletop simulator.
++        // Selection + free movement.
++        //
++        // The MECHANICS live here so any game can reuse them (Chess calls SelectPieceCore from
++        // its own rule-checked ChessSelect). The dispatchable [GameAction] WRAPPERS deliberately
++        // do NOT: they live on FreeMoveGameFlow, which only the sandbox games inherit.
++        //
++        // Why: [GameAction] is Inherited = true, so a `[GameAction] SelectPiece` / `MoveHere`
++        // declared here was dispatchable in ALL 14 games — and MoveHere writes piece.Position
++        // straight from the client-supplied point with no rules attached. Any client could
++        // select any item in Chess/Splendor/Catan and teleport it anywhere. Moving the wrappers
++        // to an opt-in subclass takes that away from the 12 games that never wanted it.
+         // ---------------------------------------------------------------------
+ 
+-        /// <summary>Make an item selectable so it can be picked up and moved.</summary>
+-        protected void makeMovable(ItemData piece)
+-        {
+-            piece.AddAction(SelectPiece);
+-        }
+-
+-        /// <summary>Make an item (board/map) a surface that moves the selected piece to the click point.</summary>
+-        protected void makeMoveSurface(ItemData surface)
+-        {
+-            surface.AddAction(MoveHere);
+-        }
+-
+-        // Height a picked-up piece is raised to, as a visible "selected" cue.
+-        private const double LiftHeight = 1.2;
+-
+         // Hooks so a specific game can show/hide move targets (Chess shows yellow markers).
+         protected virtual void OnPieceSelected(ItemData? piece) { }
+         protected virtual void OnMarkersClear() { }
+ 
+-        [GameAction]
+-        public async Task SelectPiece(ExecuteActionData data)
++        /// <summary>
++        /// Called after a free move has been applied, with where the piece came from.
++        /// Replaces the `if (GameData.GameType == "DND")` special case that used to sit inside
++        /// MoveHere — game-specific behaviour belongs in the game, not the base class.
++        /// </summary>
++        protected virtual void OnFreeMoved(ItemData piece, double fromX, double fromZ) { }
++
++        /// <summary>The select/toggle mechanic, with no [GameAction] on it. See the note above.</summary>
++        protected async Task SelectPieceCore(ExecuteActionData data)
+         {
+             // Toggle: clicking the piece that's already selected unselects it.
+             if (GameData.Attributes.TryGetValue("selectedItem", out var curSel)
+@@ -569,8 +695,8 @@
+             await Task.CompletedTask;
+         }
+ 
+-        [GameAction]
+-        public async Task MoveHere(ExecuteActionData data)
++        /// <summary>The free-placement mechanic, with no [GameAction] on it. See the note above.</summary>
++        protected async Task MoveHereCore(ExecuteActionData data)
+         {
+             if (GameData.Attributes.TryGetValue("selectedItem", out var selectedId)
+                 && !string.IsNullOrEmpty(selectedId))
+@@ -594,14 +720,9 @@
+                     }
+                     piece.Position.Y = 0; // drop it back down
+ 
+-                    // D&D: turn the figure to face the direction it just moved.
+-                    if (GameData.GameType == "DND")
+-                    {
+-                        var dx = piece.Position.X - oldX;
+-                        var dz = piece.Position.Z - oldZ;
+-                        if (dx * dx + dz * dz > 0.0001)
+-                            piece.Rotation.Y = Math.Atan2(dx, dz) * 180.0 / Math.PI;
+-                    }
++                    // Was: `if (GameData.GameType == "DND") { ...face the direction of travel... }`
++                    // — a game name hard-coded into the base class. Now a hook the game overrides.
++                    OnFreeMoved(piece, oldX, oldZ);
+                 }
+             }
+             // Keep the piece SELECTED so every subsequent board click moves it again. The user
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/GameFlows/BoardGameFlow.cs mgx/GameFlows/BoardGameFlow.cs
+--- mgx-orig/GameFlows/BoardGameFlow.cs	2026-08-19 06:34:23.261142817 +0000
++++ mgx/GameFlows/BoardGameFlow.cs	2026-08-19 06:45:15.081822540 +0000
+@@ -1,5 +1,6 @@
+ using System;
+ using System.Collections.Generic;
++using MG.Server.Controllers;
+ using MG.Server.Entities;
+ 
+ namespace MG.Server.GameFlows
+@@ -33,6 +34,17 @@
+             return new List<PlayerData>();
+         }
+ 
++        /// <summary>
++        /// True when the acting caller controls the seat that is to move.
++        ///
++        /// Replaces the `current.User != null && data.Player.User?.Id != current.User.Id` form
++        /// that was copy-pasted into each of these games. That version SKIPPED the check entirely
++        /// whenever the seat to move had no user — i.e. whenever it was an AI's turn — so in any
++        /// human-vs-AI game the human could play the AI's moves. ControlsSeat returns false for a
++        /// seat with no user, while still allowing hotseat (one user holding both colours).
++        /// </summary>
++        protected bool CallerToMove(ExecuteActionData data) => ControlsSeat(data, CurrentTurnPlayer());
++
+         protected static string Cap(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s.Substring(1);
+     }
+ }
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/GameFlows/CheckersGameFlow.cs mgx/GameFlows/CheckersGameFlow.cs
+--- mgx-orig/GameFlows/CheckersGameFlow.cs	2026-08-19 06:34:23.261668343 +0000
++++ mgx/GameFlows/CheckersGameFlow.cs	2026-08-19 06:45:15.082054536 +0000
+@@ -85,7 +85,7 @@
+             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "black";
+             var current = getPlayerByAttribute("type", turn);
+             if (clicked == null || current == null || data.Player == null) { await Task.CompletedTask; return; }
+-            if (current.User != null && data.Player.User?.Id != current.User.Id) { await Task.CompletedTask; return; }
++            if (!CallerToMove(data)) { await Task.CompletedTask; return; } // not your turn (AI turns included)
+             if (clicked.GetStringAttribute("color") != turn) { await Task.CompletedTask; return; } // only your pieces
+ 
+             // Toggle off if re-clicking the selected piece.
+@@ -117,6 +117,7 @@
+         public async Task CheckersMove(ExecuteActionData data)
+         {
+             if (GameData.Attributes.ContainsKey("over")) { await Task.CompletedTask; return; }
++            if (!CallerToMove(data)) { await Task.CompletedTask; return; } // completing the move needs the same right as starting it
+             if (!GameData.Attributes.TryGetValue("selectedItem", out var selId) || string.IsNullOrEmpty(selId))
+             { await Task.CompletedTask; return; }
+             var sel = GameData.FindItem(selId);
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/GameFlows/ChessGameFlow.cs mgx/GameFlows/ChessGameFlow.cs
+--- mgx-orig/GameFlows/ChessGameFlow.cs	2026-08-19 06:34:23.261753248 +0000
++++ mgx/GameFlows/ChessGameFlow.cs	2026-08-19 06:45:15.082304104 +0000
+@@ -288,6 +288,12 @@
+         [GameAction]
+         public async Task ChessSelect(ExecuteActionData data)
+         {
++            // Chess previously had NO caller check anywhere — OnPieceSelected only verified the
++            // PIECE's colour matched the turn, so the black player (or any other seat) could play
++            // White's move. Both entry points are gated now.
++            if (GameData.Attributes.ContainsKey("over")) { await Task.CompletedTask; return; }
++            if (!CallerToMove(data)) { await Task.CompletedTask; return; }
++
+             var clicked = data.Item;
+ 
+             // Clicking the already-selected piece deselects it (toggle off).
+@@ -324,12 +330,15 @@
+             }
+ 
+             // Not a capture of the selected piece → normal selection.
+-            await SelectPiece(data);
++            await SelectPieceCore(data);
+         }
+ 
+         [GameAction]
+         public async Task ChessMove(ExecuteActionData data)
+         {
++            if (GameData.Attributes.ContainsKey("over")) { await Task.CompletedTask; return; }
++            if (!CallerToMove(data)) { await Task.CompletedTask; return; }
++
+             var marker = data.Item;
+             if (marker == null || !marker.HaveAttribute("moveMarker")) { await Task.CompletedTask; return; }
+ 
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/GameFlows/DemoGameFlow.cs mgx/GameFlows/DemoGameFlow.cs
+--- mgx-orig/GameFlows/DemoGameFlow.cs	2026-08-19 06:34:23.261803128 +0000
++++ mgx/GameFlows/DemoGameFlow.cs	2026-08-19 06:45:15.082548885 +0000
+@@ -14,8 +14,8 @@
+     //        • the shared BOARD            -> addItem(asset)
+     //        • a player's HAND             -> addItemToPlayerHand(seat, asset)
+     //        • a player's personal TABLE   -> addItemToPlayerTable(seat, asset)
+-    //        • the on-screen CONTROL PANEL -> built as HTML on the client (see the demo console
+-    //                                          in game-play.component.ts, setupDemoConsole())
++    //        • the on-screen CONTROL PANEL -> seat.Screen = a UiNode tree (see BuildScreens below).
++    //                                          The client renders it verbatim; no client code.
+     //
+     //   2) HOW TO ADD INTERACTION to items:
+     //        • click a 3D item            -> item.AddAction(Method)  +  a [GameAction] method
+@@ -24,18 +24,21 @@
+     // ARCHITECTURE IN ONE PARAGRAPH: the server is authoritative.  A game is a subclass of
+     // BaseGameFlow that builds a tree of ItemData (the scene) and mutates GameData.Attributes
+     // (your state).  After every action the base broadcasts the whole GameData to all clients,
+-    // and the Angular client just RENDERS it with Three.js — there is no game-specific code on
+-    // the client except optional HTML panels.  Actions travel client -> server over SignalR and
++    // and the Angular client just RENDERS it with Three.js — there is NO game-specific code on
++    // the client at all, panels included.  Actions travel client -> server over SignalR and
+     // are dispatched by name, but ONLY to methods marked [GameAction] (a security allow-list).
+     //
+     // TO ADD A BRAND-NEW GAME you touch four places (grep for "DEMO" to see them all):
+     //    A) Entities/GameData.cs .......... add a const to GameTypeEnum
+-    //    B) GameFlows/BaseGameFlow.cs ...... add a case to CreateGame() and to PrettyName()
++    //    B) GameFlows/BaseGameFlow.cs ...... add a line to GameCatalog() (this is what puts the
++    //                                        button in the client's "Create a game" list) and a
++    //                                        case to CreateGame() and to PrettyName()
+     //    C) Database/DataRepository.cs ..... add a case to AttachGameFlow() (so saved games reload)
+-    //    D) Client .../games-list.component.html ... add a create button
+-    // ...then write a *GameFlow.cs like this one.
++    //    D) GameContent/games/<name>/ ...... drop the art in; flows emit RELATIVE paths
++    // ...then write a *GameFlow.cs like this one.  NO CLIENT FILE IS TOUCHED — the old step "add
++    // a create button to games-list.component.html" is long gone; the catalog drives that list.
+     // =====================================================================================
+-    public class DemoGameFlow : BaseGameFlow
++    public class DemoGameFlow : FreeMoveGameFlow
+     {
+         // ---------------------------------------------------------------------------------
+         // ASSETS.  An asset is a REUSABLE definition of "what a thing looks like" (a model, an
+@@ -304,9 +307,12 @@
+         }
+ 
+         // ============================================================================
+-        // 5) BUILT-IN SELECT-THEN-MOVE. The base class provides makeMovable() (click to select,
+-        //    highlights in place) and makeMoveSurface() (click the surface to move the selected
+-        //    piece to the click point). This is exactly how Chess and D&D move pieces.
++        // 5) BUILT-IN SELECT-THEN-MOVE. FreeMoveGameFlow (which this game inherits INSTEAD of
++        //    BaseGameFlow — that is the opt-in) provides makeMovable() (click to select, highlights
++        //    in place) and makeMoveSurface() (click the surface to move the selected piece to the
++        //    click point). D&D opts in the same way. A game that inherits BaseGameFlow directly
++        //    does NOT expose these actions at all, which is the point: MoveHere moves a piece with
++        //    no rules attached, and every game used to inherit it whether it wanted it or not.
+         // ============================================================================
+         private void BuildMoveDemo()
+         {
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/GameFlows/DnDGameFlow.cs mgx/GameFlows/DnDGameFlow.cs
+--- mgx-orig/GameFlows/DnDGameFlow.cs	2026-08-19 06:34:23.261835050 +0000
++++ mgx/GameFlows/DnDGameFlow.cs	2026-08-19 06:48:52.882517109 +0000
+@@ -11,7 +11,7 @@
+     // control panel (visible only to them) to: load a scene (a map shown to everyone), place
+     // each player's character, add monsters, and (Stage 2) ask a player to roll a die. The DM
+     // can select any character/monster and click the scene to reposition it.
+-    public class DnDGameFlow : BaseGameFlow
++    public class DnDGameFlow : FreeMoveGameFlow
+     {
+         internal class Assets
+         {
+@@ -281,13 +281,27 @@
+             text.Visible[dmId] = true;
+         }
+ 
++        // Turn the figure to face the direction it just moved. This used to be an
++        // `if (GameData.GameType == "DND")` branch inside BaseGameFlow.MoveHere — a game name
++        // hard-coded into the base class. It is a hook override now, so the base stays generic.
++        protected override void OnFreeMoved(ItemData piece, double fromX, double fromZ)
++        {
++            var dx = piece.Position.X - fromX;
++            var dz = piece.Position.Z - fromZ;
++            if (dx * dx + dz * dz > 0.0001)
++                piece.Rotation.Y = Math.Atan2(dx, dz) * 180.0 / Math.PI;
++        }
++
+         // ============================ DM actions ============================
+         [GameAction]
+         public async Task LoadScene(ExecuteActionData data)
+         {
+             if (!IsDm(data)) { await Task.CompletedTask; return; }
+             string url = Arg(data, "sceneUrl");
+-            if (string.IsNullOrEmpty(url)) { await Task.CompletedTask; return; }
++            // Allow-list: the url must be one this game actually offers. It arrives as a raw
++            // string from the wire and the client prepends GAMES_BASE to it, so without this a
++            // crafted arg could load attacker-chosen content into every player's scene.
++            if (!SCENES.Any(sc => sc.url == url)) { await Task.CompletedTask; return; }
+             GameData.Attributes["scene"] = url;
+ 
+             foreach (var s in getItemsByAttribute("scene")) removeItem(s.Id);
+@@ -692,7 +706,8 @@
+         {
+             if (!IsDm(data)) { await Task.CompletedTask; return; }
+             string url = Arg(data, "soundUrl");
+-            if (string.IsNullOrEmpty(url)) { await Task.CompletedTask; return; }
++            // Same allow-list rule as LoadScene: only tracks this game offers.
++            if (!SOUNDS.Any(sd => sd.url == url)) { await Task.CompletedTask; return; }
+             bool loop = Arg(data, "loop") == "1";
+             string kind = loop ? "music" : "sfx";
+ 
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/GameFlows/FreeMoveGameFlow.cs mgx/GameFlows/FreeMoveGameFlow.cs
+--- mgx-orig/GameFlows/FreeMoveGameFlow.cs	1970-01-01 00:00:00.000000000 +0000
++++ mgx/GameFlows/FreeMoveGameFlow.cs	2026-08-19 06:45:22.847228729 +0000
+@@ -0,0 +1,49 @@
++using MG.Server.Controllers;
++using MG.Server.Entities;
++
++namespace MG.Server.GameFlows
++{
++    /// <summary>
++    /// Base for games that want the virtual-tabletop interaction model: click a piece to select
++    /// it, then click the map/board to drop it at the clicked point. No rule enforcement — the
++    /// players self-enforce, exactly like a physical tabletop. Used by D&amp;D and Demo.
++    ///
++    /// WHY THIS CLASS EXISTS
++    /// ---------------------
++    /// <see cref="GameActionAttribute"/> is <c>Inherited = true</c>, so a <c>[GameAction]</c>
++    /// declared on <see cref="BaseGameFlow"/> is dispatchable in EVERY game. SelectPiece and
++    /// MoveHere used to live there, and MoveHere writes <c>piece.Position</c> straight from the
++    /// client-supplied point with no turn check, no ownership check and no rules. That handed
++    /// every one of the 14 games a "teleport any piece anywhere, at any time" action nobody
++    /// asked for.
++    ///
++    /// The mechanics still live on BaseGameFlow (as <c>SelectPieceCore</c> / <c>MoveHereCore</c>,
++    /// which Chess reuses inside its own rule-checked ChessSelect). Only the DISPATCHABLE
++    /// wrappers moved here, so a game opts in by inheriting this instead of BaseGameFlow.
++    ///
++    /// Note the actions are still only reachable on items the game actually bound them to:
++    /// BaseGameFlow.DispatchAction checks the clicked item offers the action to that seat.
++    /// </summary>
++    public abstract class FreeMoveGameFlow : BaseGameFlow
++    {
++        protected FreeMoveGameFlow(GameData gameData) : base(gameData) { }
++
++        /// <summary>Make an item selectable so it can be picked up and moved.</summary>
++        protected void makeMovable(ItemData piece)
++        {
++            piece.AddAction(SelectPiece);
++        }
++
++        /// <summary>Make an item (board/map) a surface that moves the selected piece to the click point.</summary>
++        protected void makeMoveSurface(ItemData surface)
++        {
++            surface.AddAction(MoveHere);
++        }
++
++        [GameAction]
++        public Task SelectPiece(ExecuteActionData data) => SelectPieceCore(data);
++
++        [GameAction]
++        public Task MoveHere(ExecuteActionData data) => MoveHereCore(data);
++    }
++}
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/GameFlows/GomokuGameFlow.cs mgx/GameFlows/GomokuGameFlow.cs
+--- mgx-orig/GameFlows/GomokuGameFlow.cs	2026-08-19 06:34:23.262013672 +0000
++++ mgx/GameFlows/GomokuGameFlow.cs	2026-08-19 06:45:15.083183532 +0000
+@@ -81,7 +81,7 @@
+             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "X";
+             var current = getPlayerByAttribute("type", turn);
+             if (current == null || data.Player == null) { await Task.CompletedTask; return; }
+-            if (current.User != null && data.Player.User?.Id != current.User.Id) { await Task.CompletedTask; return; } // not your turn
++            if (!CallerToMove(data)) { await Task.CompletedTask; return; } // not your turn (AI turns included)
+             if (data.Item == null || !data.Item.HaveAttribute("cell")) { await Task.CompletedTask; return; }
+ 
+             PlaceStoneAt(data.Item.GetIntAttribute("gx"), data.Item.GetIntAttribute("gy"), turn);
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/GameFlows/ReversiGameFlow.cs mgx/GameFlows/ReversiGameFlow.cs
+--- mgx-orig/GameFlows/ReversiGameFlow.cs	2026-08-19 06:34:23.262247680 +0000
++++ mgx/GameFlows/ReversiGameFlow.cs	2026-08-19 06:45:15.083389504 +0000
+@@ -76,7 +76,7 @@
+             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "black";
+             var current = getPlayerByAttribute("type", turn);
+             if (current == null || data.Player == null) { await Task.CompletedTask; return; }
+-            if (current.User != null && data.Player.User?.Id != current.User.Id) { await Task.CompletedTask; return; }
++            if (!CallerToMove(data)) { await Task.CompletedTask; return; } // not your turn (AI turns included)
+             if (data.Item == null || !data.Item.HaveAttribute("moveMarker")) { await Task.CompletedTask; return; }
+ 
+             PlaceDiscAt(data.Item.GetIntAttribute("gx"), data.Item.GetIntAttribute("gy"), turn);
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/GameFlows/TikTakToeGameFlow.cs mgx/GameFlows/TikTakToeGameFlow.cs
+--- mgx-orig/GameFlows/TikTakToeGameFlow.cs	2026-08-19 06:34:23.262333219 +0000
++++ mgx/GameFlows/TikTakToeGameFlow.cs	2026-08-19 06:45:15.083571830 +0000
+@@ -162,9 +162,10 @@
+             var current = GameData.Players.FirstOrDefault(p => p.Id == GameData.CurrentTurnId);
+             if (current == null || data.Player == null) return;
+ 
+-            // Server-authoritative turn check: the click must come from the user who
+-            // controls the current-turn seat (AI seats have no user, so allow those).
+-            if (current.User != null && data.Player.User?.Id != current.User.Id) return;
++            // Server-authoritative turn check: the click must come from the user who controls
++            // the current-turn seat. Hotseat (one user on both seats) still works; an AI's turn
++            // is NOT playable by a human, which the old `current.User != null &&` form allowed.
++            if (!ControlsSeat(data, current)) return;
+ 
+             string type = current.GetStringAttribute("type"); // whose turn it is: "x" or "o"
+ 
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-orig/Services/NotificationHub.cs mgx/Services/NotificationHub.cs
+--- mgx-orig/Services/NotificationHub.cs	2026-08-19 06:34:23.263143244 +0000
++++ mgx/Services/NotificationHub.cs	2026-08-19 06:45:15.083706924 +0000
+@@ -21,8 +21,21 @@
+     //    }
+     //}
+ 
++    // AUTHENTICATED. Every method here was reachable anonymously before, which is what made
++    // ExecuteAction's client-supplied `playerId` a free-for-all: any connected client could act
++    // as any seat in any game. The JWT already rides the SignalR handshake (Program.cs reads it
++    // from the access_token query string for this path), so this only rejects clients that were
++    // never signed in.
++    [Authorize]
+     public class NotificationHub : Hub
+     {
++        /// <summary>
++        /// The signed-in user id for this connection, from the JWT's NameIdentifier claim
++        /// (TokenService.CreateToken). This — never anything off the wire — is what identifies
++        /// the caller.
++        /// </summary>
++        private string? CallerUserId => Context.UserIdentifier;
++
+         readonly GameBL _gameBL;
+         private readonly ILogger<NotificationHub> _logger;
+         public NotificationHub(GameBL gameBL, DataRepository dataRepository, ILogger<NotificationHub> logger) :base()
+@@ -34,6 +47,11 @@
+         // (H1) async Task, not async void — exceptions are now observable instead of crashing the process.
+         public async Task SetConnectionIDUser(string? userId)
+         {
++            // Prefer the AUTHENTICATED id; the argument is now only a legacy fallback and is
++            // never trusted over the token. (The client re-sends this on reconnect, so the
++            // connection rejoins its user group instead of silently dropping out of it.)
++            userId = CallerUserId ?? userId;
++
+             // Guard: the client can connect before a user id is available; without this,
+             // userId.ToString() threw a NullReferenceException that SignalR logged as a
+             // failed hub invocation.
+@@ -52,7 +70,9 @@
+             _logger.LogInformation(
+                 "ExecuteAction action={Action} item={ItemId} player={PlayerId} game={GameId}",
+                 s?.actionId ?? "(none)", s?.itemId ?? "-", s?.playerId ?? "-", s?.gameId ?? "-");
+-            await _gameBL.ExecuteAction(s);
++            // Pass the AUTHENTICATED user id alongside the payload. BaseGameFlow refuses any
++            // action whose claimed seat isn't occupied by this user.
++            await _gameBL.ExecuteAction(s, CallerUserId);
+         }
+ 
+         // ============================================================

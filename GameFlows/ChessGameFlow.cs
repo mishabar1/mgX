@@ -288,6 +288,12 @@ namespace MG.Server.GameFlows
         [GameAction]
         public async Task ChessSelect(ExecuteActionData data)
         {
+            // Chess previously had NO caller check anywhere — OnPieceSelected only verified the
+            // PIECE's colour matched the turn, so the black player (or any other seat) could play
+            // White's move. Both entry points are gated now.
+            if (GameData.Attributes.ContainsKey("over")) { await Task.CompletedTask; return; }
+            if (!CallerToMove(data)) { await Task.CompletedTask; return; }
+
             var clicked = data.Item;
 
             // Clicking the already-selected piece deselects it (toggle off).
@@ -324,12 +330,15 @@ namespace MG.Server.GameFlows
             }
 
             // Not a capture of the selected piece → normal selection.
-            await SelectPiece(data);
+            await SelectPieceCore(data);
         }
 
         [GameAction]
         public async Task ChessMove(ExecuteActionData data)
         {
+            if (GameData.Attributes.ContainsKey("over")) { await Task.CompletedTask; return; }
+            if (!CallerToMove(data)) { await Task.CompletedTask; return; }
+
             var marker = data.Item;
             if (marker == null || !marker.HaveAttribute("moveMarker")) { await Task.CompletedTask; return; }
 

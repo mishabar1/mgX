@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using MG.Server.Controllers;
 using MG.Server.Entities;
 
 namespace MG.Server.GameFlows
@@ -32,6 +33,17 @@ namespace MG.Server.GameFlows
             }
             return new List<PlayerData>();
         }
+
+        /// <summary>
+        /// True when the acting caller controls the seat that is to move.
+        ///
+        /// Replaces the `current.User != null && data.Player.User?.Id != current.User.Id` form
+        /// that was copy-pasted into each of these games. That version SKIPPED the check entirely
+        /// whenever the seat to move had no user — i.e. whenever it was an AI's turn — so in any
+        /// human-vs-AI game the human could play the AI's moves. ControlsSeat returns false for a
+        /// seat with no user, while still allowing hotseat (one user holding both colours).
+        /// </summary>
+        protected bool CallerToMove(ExecuteActionData data) => ControlsSeat(data, CurrentTurnPlayer());
 
         protected static string Cap(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s.Substring(1);
     }

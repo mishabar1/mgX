@@ -76,7 +76,7 @@ namespace MG.Server.GameFlows
             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "black";
             var current = getPlayerByAttribute("type", turn);
             if (current == null || data.Player == null) { await Task.CompletedTask; return; }
-            if (current.User != null && data.Player.User?.Id != current.User.Id) { await Task.CompletedTask; return; }
+            if (!CallerToMove(data)) { await Task.CompletedTask; return; } // not your turn (AI turns included)
             if (data.Item == null || !data.Item.HaveAttribute("moveMarker")) { await Task.CompletedTask; return; }
 
             PlaceDiscAt(data.Item.GetIntAttribute("gx"), data.Item.GetIntAttribute("gy"), turn);

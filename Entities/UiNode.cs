@@ -13,19 +13,44 @@ namespace MG.Server.Entities
     // interactive nodes carry Action + Args (an [GameAction] name + a key/value bag). Containers
     // ("row"/"col") hold Children so the SERVER controls layout and ordering.
     //
-    // Node types the generic renderer understands:
-    //   "col"    - vertical container   (Children, Style, Size=gap)
-    //   "row"    - horizontal container (Children, Style, Size=gap)
-    //   "title"  - big heading          (Text)
-    //   "text"   - a line of text       (Text, Color=hex, Size=px, Style)
-    //   "note"   - muted/italic hint    (Text)
-    //   "image"  - an <img>             (Url, Size=height px, Style)
-    //   "button" - a button            (Text, Url=optional icon, Action, Args, Style: ok|no|big|primary)
+    // Node types the generic renderer understands (MgPanel3d.build, Client/src/app/bl/mg.panel3d.ts):
+    //   "panel"  - one docked panel      (Children, Style = right|left|top|bottom; see below)
+    //   "col"    - vertical container    (Children, Size=gap, Bg)
+    //   "row"    - horizontal container  (Children, Size=gap, Bg) — wraps
+    //   "title"  - big heading           (Text, Icon, Color, Size)
+    //   "text"   - a line of text        (Text, Color, Size, Bg, Style: pill|chip)
+    //   "note"   - muted hint            (Text, Color, Size)
+    //   "image"  - a picture             (Url, Size=height px, Overlays)
+    //   "model"  - a 3D model shown as a picture (Url, Size=height px)
+    //   "button" - a button              (Text, Icon=named icon, Color=label/icon ink,
+    //                                     Size=label px, Bg=fill, Url=optional picture or model
+    //                                     to use INSTEAD of a named icon, Action, Args, Confirm,
+    //                                     Gather, Style: fill keyword, "ghost" for outlined,
+    //                                     optional "big")
+    //   "check"  - one checkbox          (Text, Action, ArgKey, Checked) — sends "1"/"0"
+    //   "select" - a choice list         (Id, Options, Action, ArgKey, OnChange, Args).
+    //                                     Renders as radio buttons up to 5 options and as a
+    //                                     dropdown beyond that; Style "list"/"dropdown" forces one.
+    //                                     An Option with an EMPTY Value is the placeholder caption.
     //   "checks" - checkbox group + submit (Options, Need, Action, ArgKey, Text=submit label)
-    //   "banner" - big highlighted result (Text, Style: win|lose)
-    //   "log"    - monospace multi-line block (Text)
-    //   "space"  - vertical gap         (Size)
+    //   "animpick" - pick an animation clip off a loaded model (Id = the item id, Action, ArgKey)
+    //   "banner" - big highlighted result (Text, Color, Size, Style: win|lose)
+    //   "log"    - multi-line block      (Text, Color, Size, Bg)
+    //   "space"  - vertical gap          (Size)
     // Anything unknown renders as plain text, so adding a game can't crash the client.
+    //
+    // Style keywords that pick a FILL colour (button / banner / chip): ok, no, primary, team,
+    // win, lose, cur. Anything else falls through to a neutral fill, so the server can invent a
+    // keyword without breaking the client. ("s" and "f" were CSS classes on the old HTML panel
+    // and mean nothing now — removed rather than resurrected, because no game uses them.)
+    //
+    // BUTTON WEIGHT: a fill keyword = a solid call-to-action button; "ghost" = an outlined,
+    // secondary one; no keyword = a neutral solid. Reach for "ghost" on the safe/cancel option so
+    // a row of buttons has an obvious primary.
+    //
+    // ICONS: set Icon to a name ("play", "dice", "coins", ...). The older convention — an emoji at
+    // the START of a label, which the client swaps for a vector icon and strips from the text —
+    // still works, so existing games are unaffected.
     // =====================================================================================
     public class UiNode
     {
@@ -35,7 +60,19 @@ namespace MG.Server.Entities
         public string? Bg { get; set; }       // background colour, hex without '#' (col/row/text/button)
         public double? Size { get; set; }     // px (text/image) or gap (containers)
         public string? Style { get; set; }    // free-form keyword(s): ok|no|big|primary|pill|s|f|cur|win|lose|team
-        public string? Url { get; set; }       // image src / button icon
+        public string? Url { get; set; }       // image src / button icon PICTURE (or model to thumbnail)
+
+        /// <summary>
+        /// A named vector icon, e.g. "play", "dice", "coins" — see ICON_BY_NAME in
+        /// Client/src/app/bl/mg.panel3d.ts for the list. Prefer this over the older convention of
+        /// putting an emoji at the start of the label: it is explicit, it survives the label being
+        /// reworded, and an unknown name simply renders no icon.
+        ///
+        /// This names an INTENT, not a picture file — the client decides what "play" looks like,
+        /// exactly like the PrimeNG icon names in GameCatalog. Use Url instead for a game's own
+        /// artwork on a button.
+        /// </summary>
+        public string? Icon { get; set; }
         public string? Action { get; set; }    // [GameAction] name for interactive nodes
         public Dictionary<string, string>? Args { get; set; }
         public string? ArgKey { get; set; }     // for "checks"/"select"/"check": which arg key the value goes into
@@ -43,12 +80,11 @@ namespace MG.Server.Entities
         public List<UiOption>? Options { get; set; }
         public List<UiNode>? Children { get; set; }
 
-        public string? Id { get; set; }          // for "input"/"select": the field id a button can gather
-        public string? Placeholder { get; set; } // for "input"
+        public string? Id { get; set; }          // for "select": the field id a button can gather
         public bool OnChange { get; set; }        // for "select"/"check": dispatch Action immediately on change
         public bool Checked { get; set; }         // for "check"
         public string? Confirm { get; set; }      // for "button": window.confirm(text) before dispatching
-        public List<string>? Gather { get; set; } // for "button": input/select ids to read into args[id]
+        public List<string>? Gather { get; set; } // for "button": select ids to read into args[id]
 
         // for "image": small images layered ON TOP of the base image (markers/badges), positioned
         // in PERCENT of the base image so they stay glued to the right spot at any render size.
@@ -65,29 +101,33 @@ namespace MG.Server.Entities
         //
         // Where a panel physically ends up is the CLIENT's business (it docks to the edges of the
         // view on screen, and rides the player's hand in VR). The server only names the edge.
+        //
+        // A Panel node may sit anywhere in the tree, not just at the top level — the renderer
+        // hoists it out of whatever container holds it. (It used to inspect only the top level,
+        // so a nested Panel rendered as one empty line and its whole subtree vanished.)
         public static UiNode Panel(string dock, params UiNode[] kids) =>
             new UiNode { Type = "panel", Style = dock, Children = new(kids) };
 
         // ---- tiny fluent helpers so game flows read cleanly ----
         public static UiNode Col(params UiNode[] kids) => new UiNode { Type = "col", Children = new(kids) };
         public static UiNode Row(params UiNode[] kids) => new UiNode { Type = "row", Children = new(kids) };
-        public static UiNode Title(string t) => new UiNode { Type = "title", Text = t };
+        public static UiNode Title(string t, string? icon = null)
+            => new UiNode { Type = "title", Text = t, Icon = icon };
         public static UiNode Text_(string t, string? color = null, double? size = null, string? style = null)
             => new UiNode { Type = "text", Text = t, Color = color, Size = size, Style = style };
         public static UiNode Note(string t) => new UiNode { Type = "note", Text = t };
         public static UiNode Image(string url, double? h = null, string? style = null)
             => new UiNode { Type = "image", Url = url, Size = h, Style = style };
         public static UiNode Button(string text, string action, Dictionary<string, string>? args = null,
-                                    string? url = null, string? style = null, string? confirm = null, List<string>? gather = null)
-            => new UiNode { Type = "button", Text = text, Action = action, Args = args, Url = url, Style = style, Confirm = confirm, Gather = gather };
+                                    string? url = null, string? style = null, string? confirm = null,
+                                    List<string>? gather = null, string? icon = null)
+            => new UiNode { Type = "button", Text = text, Action = action, Args = args, Url = url, Style = style, Confirm = confirm, Gather = gather, Icon = icon };
         public static UiNode Banner(string text, string style) => new UiNode { Type = "banner", Text = text, Style = style };
         public static UiNode Log(string text) => new UiNode { Type = "log", Text = text };
         public static UiNode Space(double px = 8) => new UiNode { Type = "space", Size = px };
         // A model rendered as a picture tile (the client turns the model URL into a thumbnail).
         public static UiNode Model(string url, double? h = null, string? style = null)
             => new UiNode { Type = "model", Url = url, Size = h, Style = style };
-        public static UiNode Input(string id, string? placeholder = null)
-            => new UiNode { Type = "input", Id = id, Placeholder = placeholder };
         // A dropdown. If onChange, it dispatches Action with args[argKey]=selectedValue immediately;
         // otherwise a Button with Gather=[id] reads its value.
         public static UiNode Select(string id, List<UiOption> options, string? action = null, string? argKey = null,

@@ -127,8 +127,8 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
 
     this.updateGame();
 
-    this.signalRService.hubConnection.off('GameUpdated');
-    this.signalRService.hubConnection.on('GameUpdated', data => {
+    this.signalRService.hubConnection?.off('GameUpdated');
+    this.signalRService.hubConnection?.on('GameUpdated', data => {
       console.log('GameUpdated', data);
       if (String(data?.id) !== String(this.gameId)) return;   // broadcast is Clients.All — ignore other games
       // SignalR fires OUTSIDE Angular's zone — run inside so every client's seat list refreshes
@@ -147,13 +147,13 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
         }
       });
     });
-    // this.signalRService.hubConnection.off('GamesUpdated');
-    // this.signalRService.hubConnection.on('GamesUpdated', data => {
+    // this.signalRService.hubConnection?.off('GamesUpdated');
+    // this.signalRService.hubConnection?.on('GamesUpdated', data => {
     //   console.log('GamesUpdated', data);
     //   // TODO !!!
     // });
-    this.signalRService.hubConnection.off('GameDeleted');
-    this.signalRService.hubConnection.on('GameDeleted', data => {
+    this.signalRService.hubConnection?.off('GameDeleted');
+    this.signalRService.hubConnection?.on('GameDeleted', data => {
       console.log('GameDeleted', data);
       // This game was deleted out from under us → send everyone back to the list.
       if (String(data) === String(this.gameId)) {
@@ -166,9 +166,9 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
   }
 
   ngOnDestroy(): void {
-    this.signalRService.hubConnection.off('GameUpdated');
-    this.signalRService.hubConnection.off('GamesUpdated');
-    this.signalRService.hubConnection.off('GameDeleted');
+    this.signalRService.hubConnection?.off('GameUpdated');
+    this.signalRService.hubConnection?.off('GamesUpdated');
+    this.signalRService.hubConnection?.off('GameDeleted');
   }
 
   updateGame(){

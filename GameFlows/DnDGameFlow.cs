@@ -11,7 +11,7 @@ namespace MG.Server.GameFlows
     // control panel (visible only to them) to: load a scene (a map shown to everyone), place
     // each player's character, add monsters, and (Stage 2) ask a player to roll a die. The DM
     // can select any character/monster and click the scene to reposition it.
-    public class DnDGameFlow : BaseGameFlow
+    public class DnDGameFlow : FreeMoveGameFlow
     {
         internal class Assets
         {
@@ -281,13 +281,27 @@ namespace MG.Server.GameFlows
             text.Visible[dmId] = true;
         }
 
+        // Turn the figure to face the direction it just moved. This used to be an
+        // `if (GameData.GameType == "DND")` branch inside BaseGameFlow.MoveHere — a game name
+        // hard-coded into the base class. It is a hook override now, so the base stays generic.
+        protected override void OnFreeMoved(ItemData piece, double fromX, double fromZ)
+        {
+            var dx = piece.Position.X - fromX;
+            var dz = piece.Position.Z - fromZ;
+            if (dx * dx + dz * dz > 0.0001)
+                piece.Rotation.Y = Math.Atan2(dx, dz) * 180.0 / Math.PI;
+        }
+
         // ============================ DM actions ============================
         [GameAction]
         public async Task LoadScene(ExecuteActionData data)
         {
             if (!IsDm(data)) { await Task.CompletedTask; return; }
             string url = Arg(data, "sceneUrl");
-            if (string.IsNullOrEmpty(url)) { await Task.CompletedTask; return; }
+            // Allow-list: the url must be one this game actually offers. It arrives as a raw
+            // string from the wire and the client prepends GAMES_BASE to it, so without this a
+            // crafted arg could load attacker-chosen content into every player's scene.
+            if (!SCENES.Any(sc => sc.url == url)) { await Task.CompletedTask; return; }
             GameData.Attributes["scene"] = url;
 
             foreach (var s in getItemsByAttribute("scene")) removeItem(s.Id);
@@ -692,7 +706,8 @@ namespace MG.Server.GameFlows
         {
             if (!IsDm(data)) { await Task.CompletedTask; return; }
             string url = Arg(data, "soundUrl");
-            if (string.IsNullOrEmpty(url)) { await Task.CompletedTask; return; }
+            // Same allow-list rule as LoadScene: only tracks this game offers.
+            if (!SOUNDS.Any(sd => sd.url == url)) { await Task.CompletedTask; return; }
             bool loop = Arg(data, "loop") == "1";
             string kind = loop ? "music" : "sfx";
 

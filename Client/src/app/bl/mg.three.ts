@@ -67,6 +67,41 @@ export class MgThree{
   /** @pmndrs/pointer-events, forwarding canvas pointer events into the scene. See initThree. */
   pointerEvents?: { update: () => void, destroy: () => void };
 
+  /**
+   * In-scene UI that OCCLUDES the board: the control panels (mg.panel3d parents its group to the
+   * camera). Registered here so the InteractionManager can tell that a click landed on a panel
+   * and must not also reach whatever is behind it. Kept as a list because a seat can have
+   * several docked panels under one group.
+   */
+  uiBlockers: THREE.Object3D[] = [];
+
+  /**
+   * Supplies the in-scene UI's clickable objects to the VR controller ray.
+   *
+   * A recursive raycast CANNOT find them: uikit's Component.raycast always returns false, and
+   * three reads that as "do not descend", so the sweep stops at a panel's root Container. Without
+   * this the controller ray walked straight past every button and returned the board item BEHIND
+   * the panel — so VR panel buttons did nothing and the trigger poked the board through the UI.
+   */
+  uiHitTargets?: () => any[];
+
+  /**
+   * Distance along `ray` to the nearest UI panel, or Infinity if it misses. Wired into
+   * InteractionManager.blockerTest in initThree.
+   */
+  private uiBlockDistance(ray: THREE.Raycaster): number {
+    if (!this.uiBlockers.length) return Infinity;
+    let best = Infinity;
+    for (const b of this.uiBlockers) {
+      if (!b.visible) continue;
+      // `true` = recurse: the group holds one child group per docked panel, and the uikit
+      // Containers inside them override raycast(), so they intersect properly.
+      const hits = ray.intersectObject(b, true);
+      if (hits.length && hits[0].distance < best) best = hits[0].distance;
+    }
+    return best;
+  }
+
   private uiHover = false;
   /**
    * Called by the in-scene UI while the cursor is over one of its panels.
@@ -81,6 +116,9 @@ export class MgThree{
     this.uiHover = over;
     if (this.orbitControls) this.orbitControls.enabled = !over;
   }
+
+  /** True while the cursor is over an in-scene panel. */
+  get isUiHovered(): boolean { return this.uiHover; }
 
   // Cache textures by URL so re-created items (e.g. cards rebuilt every action) reuse the
   // same THREE.Texture instead of re-fetching/decoding the image each time.
@@ -449,6 +487,8 @@ export class MgThree{
     this.orbitControls.update();
 
     this.interactionManager = new InteractionManager(this.renderer, this.camera, this.renderer.domElement);
+    // Board items must not be clickable through a control panel — see uiBlockers above.
+    this.interactionManager.blockerTest = (ray: THREE.Raycaster) => this.uiBlockDistance(ray);
 
     // ---- @pmndrs/pointer-events: the input system @pmndrs/uikit needs (the 3D panel) ----------
     // It only ADDS listeners to the canvas (pointermove / pointerover / pointerdown / pointerup /
@@ -733,8 +773,17 @@ export class MgThree{
     ray.ray.origin.setFromMatrixPosition(controller.matrixWorld);
     ray.ray.direction.set(0, 0, -1).applyMatrix4(rot);
     if (controller.children[0]) (controller.children[0] as any).scale.z = 10;
+
+    // The UI first, and NON-recursively — each widget's own raycast still reports an
+    // intersection, it just refuses to pass the ray to its children.
+    const uiTargets = this.uiHitTargets?.() ?? [];
+    const uiHits = uiTargets.length ? ray.intersectObjects(uiTargets, false) : [];
+    const uiHit = uiHits.length ? uiHits[0] : null;
+
     const hits = ray.intersectObjects(this.scene.children, true);
     for (const h of hits) {
+      // Anything at or behind the panel is occluded by it — same rule as the mouse.
+      if (uiHit && uiHit.distance <= h.distance) break;
       let o: any = h.object;
       while (o && !(o.userData && o.userData['ItemData'] && o.userData['ItemData'].clickActions
                     && Object.keys(o.userData['ItemData'].clickActions).length)) o = o.parent;
@@ -742,6 +791,11 @@ export class MgThree{
         if (controller.children[0]) (controller.children[0] as any).scale.z = h.distance;
         return { mesh: o, point: h.point };
       }
+    }
+
+    if (uiHit) {
+      if (controller.children[0]) (controller.children[0] as any).scale.z = uiHit.distance;
+      return { mesh: uiHit.object, point: uiHit.point };
     }
     return null;
   }
@@ -751,7 +805,18 @@ export class MgThree{
     const prev = controller.userData["selectPressedPrev"];
     const hit = this.vrRaycastItem(controller);
     this.vrHoverHandler?.(hit ? hit.mesh : null);            // continuous hover glow
-    if (pressed && !prev && hit) this.vrClickHandler?.(hit.mesh, hit.point);  // trigger = click
+    if (pressed && !prev && hit) {
+      // A panel widget carries `uiArgs.fire` (mg.panel3d.makeInteractive). Run it directly.
+      //
+      // Without this, VR panel buttons were dead: vrRaycastItem finds them because they carry a
+      // synthetic ItemData whose clickActions value is the sentinel '__panel3d', so the click
+      // went to MgGame.MeshClickFunc, which dutifully sent "__panel3d" to the server as an
+      // action name — and the server rejected it as not a registered [GameAction]. `uiArgs` was
+      // written for exactly this and never read by anything.
+      const fire = hit.mesh?.userData?.['uiArgs']?.fire;
+      if (typeof fire === 'function') fire();
+      else this.vrClickHandler?.(hit.mesh, hit.point);       // trigger = click on a board item
+    }
     controller.userData["selectPressedPrev"] = pressed;
   }
 

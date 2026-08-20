@@ -21,8 +21,21 @@ namespace MG.Server.Services
     //    }
     //}
 
+    // AUTHENTICATED. Every method here was reachable anonymously before, which is what made
+    // ExecuteAction's client-supplied `playerId` a free-for-all: any connected client could act
+    // as any seat in any game. The JWT already rides the SignalR handshake (Program.cs reads it
+    // from the access_token query string for this path), so this only rejects clients that were
+    // never signed in.
+    [Authorize]
     public class NotificationHub : Hub
     {
+        /// <summary>
+        /// The signed-in user id for this connection, from the JWT's NameIdentifier claim
+        /// (TokenService.CreateToken). This — never anything off the wire — is what identifies
+        /// the caller.
+        /// </summary>
+        private string? CallerUserId => Context.UserIdentifier;
+
         readonly GameBL _gameBL;
         private readonly ILogger<NotificationHub> _logger;
         public NotificationHub(GameBL gameBL, DataRepository dataRepository, ILogger<NotificationHub> logger) :base()
@@ -34,6 +47,11 @@ namespace MG.Server.Services
         // (H1) async Task, not async void — exceptions are now observable instead of crashing the process.
         public async Task SetConnectionIDUser(string? userId)
         {
+            // Prefer the AUTHENTICATED id; the argument is now only a legacy fallback and is
+            // never trusted over the token. (The client re-sends this on reconnect, so the
+            // connection rejoins its user group instead of silently dropping out of it.)
+            userId = CallerUserId ?? userId;
+
             // Guard: the client can connect before a user id is available; without this,
             // userId.ToString() threw a NullReferenceException that SignalR logged as a
             // failed hub invocation.
@@ -52,7 +70,9 @@ namespace MG.Server.Services
             _logger.LogInformation(
                 "ExecuteAction action={Action} item={ItemId} player={PlayerId} game={GameId}",
                 s?.actionId ?? "(none)", s?.itemId ?? "-", s?.playerId ?? "-", s?.gameId ?? "-");
-            await _gameBL.ExecuteAction(s);
+            // Pass the AUTHENTICATED user id alongside the payload. BaseGameFlow refuses any
+            // action whose claimed seat isn't occupied by this user.
+            await _gameBL.ExecuteAction(s, CallerUserId);
         }
 
         // ============================================================

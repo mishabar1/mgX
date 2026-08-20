@@ -84,9 +84,18 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
   // Is the current user a seated player (vs a spectator)? mgGame.playerData is set on load.
   get isPlayer(): boolean { return !!this.mgGame?.playerData; }
 
-  // The Resistance is a pure 2D card/vote game — no 3D scene, so hide 3D-only controls (VR).
-  // A full-screen server-driven panel (e.g. The Resistance) owns the whole view — hide the 3D
-  // play chrome (VR button, bottom bar). Driven by the server's panelMode, not by game type.
+  /**
+   * The server's hint that this seat's panel is content-heavy and wants the view to itself
+   * (Resistance, One Night Werewolf, Small World's pick phase). Generic: an attribute, never a
+   * game name.
+   *
+   * NOTE this no longer means "the panel covers the screen" — since the panel became geometry
+   * docked to the edges of the view, nothing is covered. It now only trims the app's own bottom
+   * chrome so a bottom-docked panel is not fighting it for the same strip of screen. The VR
+   * button is deliberately NOT part of that: it lives outside this bar (see the template),
+   * because a headset has to stay reachable in every game — which the old markup broke by
+   * hiding the whole bar, VR button included, in exactly these games.
+   */
   get panelFull(): boolean { return this.mgGame?.gameData?.attributes?.['panelMode'] === 'full'; }
 
   // Only the game's creator may restart it ("Play again").
@@ -116,8 +125,8 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     this.gameId = this.activatedRoute.snapshot.paramMap.get('id');
     console.log("ngOnInit", this.gameId);
 
-    this.signalRService.hubConnection.off('GameDeleted');
-    this.signalRService.hubConnection.on('GameDeleted', data => {
+    this.signalRService.hubConnection?.off('GameDeleted');
+    this.signalRService.hubConnection?.on('GameDeleted', data => {
       console.log('GameDeleted', data);
       // The game we're playing was deleted → return to the games list.
       if (String(data) === String(this.gameId)) {
@@ -125,8 +134,8 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     });
 
-    this.signalRService.hubConnection.off('GameUpdated');
-    this.signalRService.hubConnection.on('GameUpdated', data => {
+    this.signalRService.hubConnection?.off('GameUpdated');
+    this.signalRService.hubConnection?.on('GameUpdated', data => {
       console.log('GameUpdated', data);
       if (String(data?.id) !== String(this.gameId)) return;   // broadcast is Clients.All — ignore other games
       if (this.mgGame) this.mgGame.updateGame(data);
@@ -170,8 +179,8 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnDestroy(): void {
-    this.signalRService.hubConnection.off('GameUpdated');
-    this.signalRService.hubConnection.off('GameDeleted');
+    this.signalRService.hubConnection?.off('GameUpdated');
+    this.signalRService.hubConnection?.off('GameDeleted');
     this.voice.leave();   // drop out of the voice call when leaving the game view
     this.disposePanel3d();   // unregister the in-scene panel's clickables before the scene goes
     this.mgThree?.dispose();
@@ -268,8 +277,15 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
         (action: string, args: any) => {
           if (this.panelSeatId && action) this.signalRService.executeActionArgs(this.gameId!, this.panelSeatId, action, args);
         });
-      // The panel parents ITSELF (camera for 'hud', scene for 'world', a controller in VR), so
-      // there is no scene.add() here on purpose.
+      // The panel parents ITSELF (the camera on screen, a controller in VR), so there is no
+      // scene.add() here on purpose.
+      //
+      // It does have to be declared as an OCCLUDER, though: the panel is solid geometry sitting
+      // between the eye and the board, and the InteractionManager (which owns board clicks) does
+      // not otherwise know it exists — so a click on a button also selected the piece behind it.
+      this.mgThree.uiBlockers = [this.panel3d.group];
+      // ...and hand the VR ray the widgets themselves, which it cannot discover by traversal.
+      this.mgThree.uiHitTargets = () => this.panel3d?.hitTargets() ?? [];
       // uikit computes layout and flushes transforms once per frame, so it needs a slot in the
       // render loop. mg.three isolates each frame hook so a throw can never skip the render.
       this.panel3d.frameHook = (deltaMs: number) => this.panel3d?.tick(deltaMs);
@@ -292,6 +308,10 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private disposePanel3d() {
     if (!this.panel3d) return;
+    if (this.mgThree) {
+      this.mgThree.uiBlockers = [];                  // stop occluding once the panel is gone
+      this.mgThree.uiHitTargets = undefined;
+    }
     this.panel3d.dispose();
     this.panel3d = undefined;
     if (this.mgThree) this.mgThree.onXrSessionChange = undefined;
@@ -303,7 +323,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     // path any more and deliberately no fallback: one renderer means a panel bug shows up as a
     // panel bug instead of silently reverting to a different UI.
     const me = this.generalService.User?.id;
-    const mine = (g.players || []).find((p: any) => p.user?.id === me && p.screen);
+    const mine = (g.players as PlayerData[] || []).find(p => p.user?.id === me && p.screen);
     this.panelSeatId = mine?.id || '';
     this.updatePanel3d(g, mine?.screen || null);
   }

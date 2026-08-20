@@ -38,12 +38,12 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
     // SignalR callbacks fire OUTSIDE Angular's zone, so re-run the refresh inside
     // the zone — otherwise this.games updates but change detection never runs and
     // the list only repaints on the next in-app click (e.g. Refresh).
-    this.signalRService.hubConnection.on('GamesUpdated', data => {
+    this.signalRService.hubConnection?.on('GamesUpdated', data => {
       console.log('GamesUpdated', data);
       this.zone.run(() => this.updateGamesList());
     });
 
-    this.signalRService.hubConnection.on('GameDeleted', data => {
+    this.signalRService.hubConnection?.on('GameDeleted', data => {
       console.log('GameDeleted', data);
       this.zone.run(() => this.updateGamesList());
     });
@@ -59,6 +59,18 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
 
   ngOnDestroy(): void {
   }
+  /**
+   * Sign out: drop the token + cached user, close the hub socket, and go back to the login
+   * screen. There was no logout path in the app at all before this — GeneralService.clearAuth()
+   * existed but nothing ever called it — so the only way to "log out" was to clear localStorage
+   * by hand, which is also why the same name coming back as a different user was easy to miss.
+   */
+  logout() {
+    this.signalRService.stopConnection();
+    this.generalService.clearAuth();
+    this.router.navigate([RouteNames.Home]);
+  }
+
   updateGamesList(){
     this.dalService.getGamesList().subscribe(list=>{
       this.games=list;

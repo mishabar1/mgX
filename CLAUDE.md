@@ -17,8 +17,13 @@ generic renderer would be rewritten — no game would change.
   (asset + position/scale/rotation/attributes). The client renders whatever items it's given.
 - **The 2D panel / control UI** → the server builds `PlayerData.Screen` (a `UiNode` tree:
   title/text/image/model/button/select/input/check/checks/banner/log/animpick/row/col). The client
-  has ONE generic renderer (`renderNode` in `game-play.component.ts`) that draws it and dispatches
-  button actions via `executeActionArgs`. `panelMode` attribute = `full` (covers screen) or `side` (docked).
+  has ONE generic renderer (`MgPanel3d.build()` in `bl/mg.panel3d.ts`) that draws it and dispatches
+  button actions via `executeActionArgs`. The panel is real geometry in the scene, not HTML — a DOM
+  overlay is invisible to a headset, so this is what makes every game's UI work in VR unchanged.
+  Where each panel sits is the CLIENT's business; the server only names an edge, per panel, with
+  `UiNode.Panel(dock, …)` where dock = `right` (default) | `left` | `top` | `bottom`. The optional
+  `panelMode` attribute (`full` | `side`) is only a hint to trim the app's own bottom chrome for a
+  content-heavy panel — it no longer changes the panel's layout.
   Rebuilt every action via the `BaseGameFlow.RefreshScreens()` hook (override it per game).
 - **The "Create a game" list** → from the server catalog `BaseGameFlow.GameCatalog()` via
   `GET /api/Game/GameTypes`. The client renders the buttons dynamically.

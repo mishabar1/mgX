@@ -1,0 +1,288 @@
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-base2/BL/GameBL.cs mgx/BL/GameBL.cs
+--- mgx-base2/BL/GameBL.cs	2026-08-19 08:11:04.312528397 +0000
++++ mgx/BL/GameBL.cs	2026-08-19 08:18:09.527405005 +0000
+@@ -187,7 +187,28 @@
+                 var player = game.Players.Find(x => x.Id == data.playerId);
+                 if (player != null)
+                 {
+-                    player.User = data.user;
++                    // Seat the STORED user, matched by id — not the object the client posted.
++                    //
++                    // Two reasons. (1) `data.user` is model-bound, so BaseData's constructor has
++                    // already stamped it with a random Id and a random Name; a payload missing
++                    // `id` used to seat a user nobody can ever be, and the hub's caller check
++                    // would then reject that seat forever. (2) user ids are now DERIVED FROM THE
++                    // NAME, so anyone who knows a display name can compute that user's id — this
++                    // at least stops a forged `name` riding along with it.
++                    //
++                    // This endpoint is still unauthenticated, so it does NOT stop someone seating
++                    // a real user they aren't. Closing that needs [Authorize] on GameController.
++                    var user = data.user?.Id != null
++                        ? _dataRepository.Users.Find(u => u.Id == data.user.Id)
++                        : null;
++
++                    if (data.type == PlayerTypeEnum.HUMAN && user == null)
++                    {
++                        // Unknown user: refuse rather than seating a ghost.
++                        return new { error = "unknown user", playerId = data.playerId };
++                    }
++
++                    player.User = user;
+                     player.Type = data.type;
+ 
+                     // Give each AI a unique, friendly name (animal) — EXCEPT in D&D, where each
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-base2/BL/UserBL.cs mgx/BL/UserBL.cs
+--- mgx-base2/BL/UserBL.cs	2026-08-19 08:11:04.312678414 +0000
++++ mgx/BL/UserBL.cs	2026-08-19 08:18:09.526993091 +0000
+@@ -30,12 +30,39 @@
+             _tokenService = tokenService;
+         }
+ 
+-        internal async Task<LoginResult> Login(LoginData data)
++        internal async Task<LoginResult?> Login(LoginData data)
+         {
++            // A blank name would create an anonymous, unaddressable account (and every later
++            // blank login would collide with it). Refuse it here; the controller turns null
++            // into a 400.
++            if (string.IsNullOrWhiteSpace(data?.name)) return null;
++
++            // Exact match — "A" and "a" are different users on purpose.
+             var user = _dataRepository.Users.FindLast(x => x.Name == data.name);
++
++            var derivedId = UserData.IdForName(data.name);
++
++            if (user != null && user.Id != derivedId)
++            {
++                // An account created before ids were derived from the name. Adopt the derived id
++                // so the invariant "id == f(name)" holds for EVERY account, not just new ones —
++                // otherwise behaviour would depend on when you first signed up.
++                //
++                // This orphans that user's references in already-saved games (CreatorId,
++                // seat.User.Id). Accepted deliberately: this is POC data, the store already lives
++                // in the OS temp folder, and a one-off break now beats an id scheme with two
++                // permanent classes of user in it.
++                Console.WriteLine($"Login: re-issuing id for '{data.name}': {user.Id} -> {derivedId}");
++                user.Id = derivedId;
++            }
++
+             if (user == null)
+             {
+-                user = new UserData() { Name = data.name };
++                // The id is DERIVED FROM THE NAME (UserData.IdForName), not random. That is what
++                // makes logging back in as "A" land on the same account: it no longer depends on
++                // the users list having survived, so a wiped SQLite file, a restart, or a
++                // redeploy can't quietly turn you into a stranger who doesn't own their own games.
++                user = new UserData { Name = data.name, Id = derivedId };
+                 _dataRepository.Users.Add(user);
+             }
+ 
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-base2/Client/src/app/services/SignalrService.ts mgx/Client/src/app/services/SignalrService.ts
+--- mgx-base2/Client/src/app/services/SignalrService.ts	2026-08-19 08:11:04.320848843 +0000
++++ mgx/Client/src/app/services/SignalrService.ts	2026-08-19 08:12:02.943037791 +0000
+@@ -49,6 +49,17 @@
+   }
+ 
+   /**
++   * Close the hub connection and forget it. Signing out has to drop the socket: it was opened
++   * with the previous user's token and is still in that user's group, so leaving it up would
++   * keep delivering their updates to whoever logs in next.
++   */
++  stopConnection() {
++    const conn = this.hubConnection;
++    this.hubConnection = undefined as any;
++    conn?.stop().catch(() => { });
++  }
++
++  /**
+    * Fire-and-forget send that survives a closed / reconnecting connection.
+    * `HubConnection.send` REJECTS when the connection isn't in the Connected state, and no call
+    * site here ever attached a catch — so a click during a reconnect produced an unhandled
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-base2/Client/src/app/view/games-list/games-list.component.html mgx/Client/src/app/view/games-list/games-list.component.html
+--- mgx-base2/Client/src/app/view/games-list/games-list.component.html	2026-08-19 08:11:04.322386238 +0000
++++ mgx/Client/src/app/view/games-list/games-list.component.html	2026-08-19 08:12:02.943215575 +0000
+@@ -3,6 +3,8 @@
+   <div class="mg-header">
+     <p-button (onClick)="backClick()" icon="fa-solid fa-chevron-left" severity="secondary"></p-button>
+     <div class="mg-title">Hello, {{user.name}}</div>
++    <div class="mg-spacer"></div>
++    <p-button (onClick)="logout()" label="Sign out" icon="pi pi-sign-out" severity="secondary"></p-button>
+   </div>
+ 
+   <div class="mg-section">Your games</div>
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-base2/Client/src/app/view/games-list/games-list.component.ts mgx/Client/src/app/view/games-list/games-list.component.ts
+--- mgx-base2/Client/src/app/view/games-list/games-list.component.ts	2026-08-19 08:11:04.322602197 +0000
++++ mgx/Client/src/app/view/games-list/games-list.component.ts	2026-08-19 08:12:02.943325937 +0000
+@@ -59,6 +59,18 @@
+ 
+   ngOnDestroy(): void {
+   }
++  /**
++   * Sign out: drop the token + cached user, close the hub socket, and go back to the login
++   * screen. There was no logout path in the app at all before this — GeneralService.clearAuth()
++   * existed but nothing ever called it — so the only way to "log out" was to clear localStorage
++   * by hand, which is also why the same name coming back as a different user was easy to miss.
++   */
++  logout() {
++    this.signalRService.stopConnection();
++    this.generalService.clearAuth();
++    this.router.navigate([RouteNames.Home]);
++  }
++
+   updateGamesList(){
+     this.dalService.getGamesList().subscribe(list=>{
+       this.games=list;
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-base2/Client/src/app/view/home-view/home-view.component.html mgx/Client/src/app/view/home-view/home-view.component.html
+--- mgx-base2/Client/src/app/view/home-view/home-view.component.html	2026-08-19 08:11:04.322701084 +0000
++++ mgx/Client/src/app/view/home-view/home-view.component.html	2026-08-19 08:12:13.845128208 +0000
+@@ -7,6 +7,11 @@
+          autofocus
+          (keyup.enter)="login()">
+ 
+-  <p-button (onClick)="login()"  styleClass="p-button-lg" icon="pi pi-user" label="LOGIN"></p-button>
++  <p-button (onClick)="login()" [disabled]="!usernameModel.trim()"
++            styleClass="p-button-lg" icon="pi pi-user" label="LOGIN"></p-button>
++
++  @if (error) {
++    <div style="margin-top:12px;color:#b91c1c;font:600 14px sans-serif;">{{ error }}</div>
++  }
+ 
+ </div>
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-base2/Client/src/app/view/home-view/home-view.component.ts mgx/Client/src/app/view/home-view/home-view.component.ts
+--- mgx-base2/Client/src/app/view/home-view/home-view.component.ts	2026-08-19 08:11:04.322890872 +0000
++++ mgx/Client/src/app/view/home-view/home-view.component.ts	2026-08-19 08:12:13.844938374 +0000
+@@ -15,6 +15,7 @@
+ export class HomeViewComponent implements  OnInit, OnDestroy, AfterViewInit, OnChanges{
+ 
+   usernameModel = "";
++  error = "";
+ constructor(private router: Router,
+             private generalService:GeneralService,
+             private signalRService: SignalrService,
+@@ -39,14 +40,22 @@
+   }
+ 
+   login() {
+-    this.dalService.login(this.usernameModel).subscribe(res=>{
++    if (!this.usernameModel.trim()) return;   // the server rejects a blank name with a 400
++    this.error = "";
+ 
+-      //store token + user (also persists to localStorage for next time)
+-      this.generalService.setAuth(res.token, res.user);
+-      this.signalRService.startConnection(res.user.id);
+-
+-      // navigate
+-      this.router.navigate([RouteNames.GamesList]);
++    this.dalService.login(this.usernameModel).subscribe({
++      next: res => {
++        //store token + user (also persists to localStorage for next time)
++        this.generalService.setAuth(res.token, res.user);
++        this.signalRService.startConnection(res.user.id);
++
++        // navigate
++        this.router.navigate([RouteNames.GamesList]);
++      },
++      // Without this the request just failed silently and the screen sat there doing nothing.
++      error: err => {
++        this.error = err?.error?.error || 'Could not sign in. Is the server running?';
++      }
+     })
+ 
+ 
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-base2/Controllers/UserController.cs mgx/Controllers/UserController.cs
+--- mgx-base2/Controllers/UserController.cs	2026-08-19 08:11:04.325264581 +0000
++++ mgx/Controllers/UserController.cs	2026-08-19 08:11:40.545678718 +0000
+@@ -21,8 +21,11 @@
+         public async Task<IActionResult> Login(LoginData data)
+         {
+             _logger.LogTrace("Login");
+-            //await _dataRepository.GetGameByID(gameId)
+-            return Ok(await _userBL.Login(data) );
++
++            var result = await _userBL.Login(data);
++            if (result == null) return BadRequest(new { error = "A name is required." });
++
++            return Ok(result);
+         }
+ 
+         [HttpGet("TensofFlowTest")]
+diff -ruN -x node_modules -x package-lock.json -x .angular mgx-base2/Entities/UserData.cs mgx/Entities/UserData.cs
+--- mgx-base2/Entities/UserData.cs	2026-08-19 08:11:04.326522231 +0000
++++ mgx/Entities/UserData.cs	2026-08-19 08:18:09.527234359 +0000
+@@ -1,4 +1,7 @@
+-﻿namespace MG.Server.Entities
++﻿using System.Security.Cryptography;
++using System.Text;
++
++namespace MG.Server.Entities
+ {
+     public class UserData : BaseData<UserData>
+     {
+@@ -7,5 +10,67 @@
+         {
+            
+         }
++
++        // ------------------------------------------------------------------------------
++        // STABLE IDENTITY.
++        //
++        // Login is by name only, and a user's id is what everything else hangs off: a game's
++        // CreatorId, each seat's User.Id, the hub's caller check, "lastHumanActor". BaseData's
++        // constructor hands out a fresh random Guid, so a user created on Monday and the "same"
++        // user created again on Tuesday were two different people to the server — you'd log back
++        // in as "A" and no longer be the creator of your own game.
++        //
++        // Deriving the id from the name FROM THE NAME ITSELF removes the dependency on the store
++        // surviving: "A" is the same id on every machine, after every restart, and after the
++        // SQLite file in the OS temp folder is cleaned up or the container is redeployed. Same
++        // reasoning as the deterministic asset keys in AssetData — a random key regenerated on
++        // restart left persisted games pointing at something that no longer existed.
++        //
++        // Matching is EXACT: "A" and "a" are deliberately different users.
++        // ------------------------------------------------------------------------------
++
++        // Fixed namespace for MGx user ids. Changing this re-issues every id, so don't.
++        private static readonly Guid UserNamespace = new("7c9e6f1a-2d3b-4c5e-8a71-9f0b3d6e2a44");
++
++        /// <summary>
++        /// The id a user with this exact name always gets. RFC 4122 name-based (v5) UUID.
++        /// <para>
++        /// PINNED REFERENCE VALUES — if these ever change, every persisted CreatorId and
++        /// seat.User.Id in every saved game is orphaned, so treat a change here as a migration:
++        ///   IdForName("A")     == "d505b1d0-129f-5032-8897-fbebb8676e9b"
++        ///   IdForName("a")     == "782733a0-8f7e-5dc5-95b3-ce167bccddf1"
++        ///   IdForName("Misha") == "0bd36499-cc38-5072-af98-6896aa4d5afa"
++        /// </para>
++        /// </summary>
++        public static string IdForName(string name)
++        {
++            var ns = UserNamespace.ToByteArray();
++            // Guid.ToByteArray() gives the first three fields little-endian; RFC 4122 hashes the
++            // big-endian form, so flip them before hashing (and back again after).
++            SwapEndianness(ns);
++
++            var nameBytes = Encoding.UTF8.GetBytes(name ?? string.Empty);
++            var input = new byte[ns.Length + nameBytes.Length];
++            Buffer.BlockCopy(ns, 0, input, 0, ns.Length);
++            Buffer.BlockCopy(nameBytes, 0, input, ns.Length, nameBytes.Length);
++
++            var hash = SHA1.HashData(input);
++
++            var bytes = new byte[16];
++            Array.Copy(hash, 0, bytes, 0, 16);
++            bytes[6] = (byte)((bytes[6] & 0x0F) | 0x50); // version 5
++            bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80); // RFC 4122 variant
++
++            SwapEndianness(bytes);
++            return new Guid(bytes).ToString();
++        }
++
++        private static void SwapEndianness(byte[] g)
++        {
++            (g[0], g[3]) = (g[3], g[0]);
++            (g[1], g[2]) = (g[2], g[1]);
++            (g[4], g[5]) = (g[5], g[4]);
++            (g[6], g[7]) = (g[7], g[6]);
++        }
+     }
+ }
+\ No newline at end of file

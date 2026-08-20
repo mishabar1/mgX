@@ -115,7 +115,10 @@ namespace MG.Server.GameFlows
                     game.GameFlow = new SmallWorldGameFlow(game);
                     break;
                 default:
-                    break;
+                    // Was an empty default: an unknown gameType left GameFlow null and the
+                    // RunCreateFlow() call below NRE'd. Fail with something readable instead —
+                    // gameType comes straight off the wire.
+                    throw new ArgumentException($"Unknown game type '{gameType}'.", nameof(gameType));
             }
 
             game.GameStatus = GameStatusEnum.CREATED;
@@ -174,6 +177,10 @@ namespace MG.Server.GameFlows
             {
                 player.Hand = new ItemData("", null) { Name = "PLAYER TABLE" };
                 player.Table = new ItemData("", null) { Name = "PLAYER TABLE" };
+                // Drop the finished game's control panel too. It used to survive a restart, so
+                // between Setup and Start the client kept rendering the PREVIOUS game's panel —
+                // live-looking, but its buttons now hit the "game is not in PLAY" gate.
+                player.Screen = null;
             }
 
             await Setup();
@@ -258,15 +265,95 @@ namespace MG.Server.GameFlows
             _undo.Add(GameData.DeepCopy());
         }
 
-        public async Task ExecuteAction(ExecuteActionData data)
+        /// <summary>
+        /// Handle one client-originated action.
+        /// </summary>
+        /// <param name="data">The wire payload. Everything on it is client-controlled and untrusted.</param>
+        /// <param name="callerUserId">
+        /// The AUTHENTICATED user id, taken from the JWT by NotificationHub — never from the payload.
+        /// Required: an action that cannot be attributed to a signed-in user is refused.
+        /// </param>
+        public async Task ExecuteAction(ExecuteActionData data, string? callerUserId)
         {
             await _turnLock.WaitAsync();
             try
             {
+                if (!AuthorizeCaller(data, callerUserId)) return;
+
                 await DispatchAction(data);
                 await AfterAction();
             }
             finally { _turnLock.Release(); }
+        }
+
+        /// <summary>
+        /// Gate every action on three things the payload cannot be trusted to assert:
+        /// the game is actually in play, the named seat exists, and the AUTHENTICATED caller
+        /// is the user sitting in it.
+        ///
+        /// Before this, DispatchAction resolved the actor purely from the client-supplied
+        /// `playerId`, so any connected client could act as any seat in any game — and every
+        /// per-game "is it your turn" check was comparing a CLAIM, not an identity.
+        /// </summary>
+        private bool AuthorizeCaller(ExecuteActionData data, string? callerUserId)
+        {
+            if (data == null) return false;
+
+            // Actions only exist during play. Previously they were accepted in CREATED/SETUP
+            // (before StartGame had built the scene) and after ENDED (play continued past game
+            // over in any game whose actions lack their own "over" guard).
+            if (GameData.GameStatus != GameStatusEnum.PLAY)
+            {
+                Console.WriteLine($"Rejected action '{data.actionId}' — game is {GameData.GameStatus}, not {GameStatusEnum.PLAY}.");
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(callerUserId))
+            {
+                Console.WriteLine($"Rejected action '{data.actionId}' — unauthenticated caller.");
+                return false;
+            }
+
+            var seat = GameData.FindPlayer(data.playerId);
+            if (seat == null)
+            {
+                Console.WriteLine($"Rejected action '{data.actionId}' — no seat '{data.playerId}' in this game.");
+                return false;
+            }
+
+            // The seat must be a human seat occupied by THIS user. This is what makes every
+            // downstream turn check meaningful; a spectator, an empty seat or somebody else's
+            // seat can no longer be driven from the wire.
+            if (seat.Type != PlayerTypeEnum.HUMAN || seat.User?.Id != callerUserId)
+            {
+                Console.WriteLine($"Rejected action '{data.actionId}' — user '{callerUserId}' does not occupy seat '{data.playerId}'.");
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// True when whoever is acting is entitled to move for <paramref name="seatToMove"/>.
+        ///
+        /// Two ways to qualify:
+        ///  * the actor IS that seat — which is how an AI re-enters its own [GameAction]
+        ///    (TikTakToeGameFlow.PlayAI routes its move through HoverClick so the placement /
+        ///    turn / win logic all runs). This path never comes off the wire: AuthorizeCaller
+        ///    has already refused any payload naming a seat the caller doesn't occupy;
+        ///  * the actor is a seat held by the SAME USER as the seat to move — hotseat, one
+        ///    person holding several colours.
+        ///
+        /// A seat with no user (AI or empty) can therefore never be driven by somebody else,
+        /// which is the hole the old <c>current.User != null &amp;&amp; ...</c> form left open:
+        /// it skipped the check entirely whenever the seat to move was an AI, so in any
+        /// human-vs-AI game the human could play the AI's moves.
+        /// </summary>
+        protected static bool ControlsSeat(ExecuteActionData data, PlayerData? seatToMove)
+        {
+            if (seatToMove == null || data?.Player == null) return false;
+            if (data.Player.Id == seatToMove.Id) return true;
+            return seatToMove.User?.Id != null && data.Player.User?.Id == seatToMove.User.Id;
         }
 
         // Whose turn is it right now? Default uses CurrentTurnId; games that track turn via
@@ -333,7 +420,33 @@ namespace MG.Server.GameFlows
                     return;
                 }
 
-                await (Task)theMethod.Invoke(this, new object[] { data })!;
+                // The action must actually be BOUND to the clicked item for this seat. The client
+                // only ever dispatches `clickActions[mySeatId] || clickActions['']` (mg.game.ts:1102),
+                // so this rejects nothing a real client sends — it just stops a crafted payload from
+                // invoking an action on an item that never offered it (e.g. calling MoveHere with an
+                // arbitrary item to teleport a piece). Panel buttons carry no item and are unaffected.
+                if (data.Item != null && !ItemOffersAction(data.Item, data.playerId, data.actionId))
+                {
+                    Console.WriteLine($"Rejected action '{data.actionId}' — item '{data.itemId}' does not offer it to seat '{data.playerId}'.");
+                    return;
+                }
+
+                // An action that throws used to propagate out of here and skip AfterAction()
+                // entirely, so mutations already applied were NEITHER broadcast NOR saved and the
+                // clients silently diverged from server memory. Contain it: log, then let
+                // AfterAction run so everyone re-syncs to whatever the real state now is.
+                // (Bad args are easy to reach — Carcassonne:191 int.Parse's a raw arg, and
+                // BaseData.GetNumberAttribute Convert.ToDouble's whatever string it finds.)
+                try
+                {
+                    await (Task)theMethod.Invoke(this, new object[] { data })!;
+                }
+                catch (Exception ex)
+                {
+                    var real = (ex as TargetInvocationException)?.InnerException ?? ex;
+                    Console.WriteLine($"Action '{data.actionId}' failed on game {GameData.Id} ({GameData.GameType}): {real}");
+                    return;
+                }
 
                 // Remember who made the last HUMAN move — only that player may undo it (and only
                 // their own move). Captured AFTER the move; the pre-move snapshot keeps the prior
@@ -341,6 +454,20 @@ namespace MG.Server.GameFlows
                 if (data.Player.Type == PlayerTypeEnum.HUMAN)
                     GameData.Attributes["lastHumanActor"] = data.Player.Id;
             }
+        }
+
+        // Does this item expose this action to this seat? Games bind actions either to everyone
+        // (the "" key) or to one seat id — see ItemData.AddAction.
+        private static bool ItemOffersAction(ItemData item, string? playerId, string? actionId)
+        {
+            if (string.IsNullOrEmpty(actionId)) return false;
+            if (item.ClickActions == null) return false;
+
+            if (item.ClickActions.TryGetValue("", out var any) && any == actionId) return true;
+            if (!string.IsNullOrEmpty(playerId)
+                && item.ClickActions.TryGetValue(playerId!, out var mine) && mine == actionId) return true;
+
+            return false;
         }
 
         // Shared tail: end-game check, snapshot history, and broadcast the new state.
@@ -518,33 +645,32 @@ namespace MG.Server.GameFlows
         }
 
         // ---------------------------------------------------------------------
-        // Generic virtual-tabletop movement (used by Chess and D&D).
-        // Interaction model: click a piece to select it, then click the move
-        // surface (board/map) — the piece jumps to the clicked world point.
-        // No rule enforcement; players self-enforce, like a tabletop simulator.
+        // Selection + free movement.
+        //
+        // The MECHANICS live here so any game can reuse them (Chess calls SelectPieceCore from
+        // its own rule-checked ChessSelect). The dispatchable [GameAction] WRAPPERS deliberately
+        // do NOT: they live on FreeMoveGameFlow, which only the sandbox games inherit.
+        //
+        // Why: [GameAction] is Inherited = true, so a `[GameAction] SelectPiece` / `MoveHere`
+        // declared here was dispatchable in ALL 14 games — and MoveHere writes piece.Position
+        // straight from the client-supplied point with no rules attached. Any client could
+        // select any item in Chess/Splendor/Catan and teleport it anywhere. Moving the wrappers
+        // to an opt-in subclass takes that away from the 12 games that never wanted it.
         // ---------------------------------------------------------------------
-
-        /// <summary>Make an item selectable so it can be picked up and moved.</summary>
-        protected void makeMovable(ItemData piece)
-        {
-            piece.AddAction(SelectPiece);
-        }
-
-        /// <summary>Make an item (board/map) a surface that moves the selected piece to the click point.</summary>
-        protected void makeMoveSurface(ItemData surface)
-        {
-            surface.AddAction(MoveHere);
-        }
-
-        // Height a picked-up piece is raised to, as a visible "selected" cue.
-        private const double LiftHeight = 1.2;
 
         // Hooks so a specific game can show/hide move targets (Chess shows yellow markers).
         protected virtual void OnPieceSelected(ItemData? piece) { }
         protected virtual void OnMarkersClear() { }
 
-        [GameAction]
-        public async Task SelectPiece(ExecuteActionData data)
+        /// <summary>
+        /// Called after a free move has been applied, with where the piece came from.
+        /// Replaces the `if (GameData.GameType == "DND")` special case that used to sit inside
+        /// MoveHere — game-specific behaviour belongs in the game, not the base class.
+        /// </summary>
+        protected virtual void OnFreeMoved(ItemData piece, double fromX, double fromZ) { }
+
+        /// <summary>The select/toggle mechanic, with no [GameAction] on it. See the note above.</summary>
+        protected async Task SelectPieceCore(ExecuteActionData data)
         {
             // Toggle: clicking the piece that's already selected unselects it.
             if (GameData.Attributes.TryGetValue("selectedItem", out var curSel)
@@ -569,8 +695,8 @@ namespace MG.Server.GameFlows
             await Task.CompletedTask;
         }
 
-        [GameAction]
-        public async Task MoveHere(ExecuteActionData data)
+        /// <summary>The free-placement mechanic, with no [GameAction] on it. See the note above.</summary>
+        protected async Task MoveHereCore(ExecuteActionData data)
         {
             if (GameData.Attributes.TryGetValue("selectedItem", out var selectedId)
                 && !string.IsNullOrEmpty(selectedId))
@@ -594,14 +720,9 @@ namespace MG.Server.GameFlows
                     }
                     piece.Position.Y = 0; // drop it back down
 
-                    // D&D: turn the figure to face the direction it just moved.
-                    if (GameData.GameType == "DND")
-                    {
-                        var dx = piece.Position.X - oldX;
-                        var dz = piece.Position.Z - oldZ;
-                        if (dx * dx + dz * dz > 0.0001)
-                            piece.Rotation.Y = Math.Atan2(dx, dz) * 180.0 / Math.PI;
-                    }
+                    // Was: `if (GameData.GameType == "DND") { ...face the direction of travel... }`
+                    // — a game name hard-coded into the base class. Now a hook the game overrides.
+                    OnFreeMoved(piece, oldX, oldZ);
                 }
             }
             // Keep the piece SELECTED so every subsequent board click moves it again. The user

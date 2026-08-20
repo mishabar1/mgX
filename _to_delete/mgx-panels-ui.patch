@@ -1,0 +1,1036 @@
+diff -ruN -x node_modules -x package-lock.json -x .angular -x .git applytest3/Client/src/app/bl/mg.game.ts mgx/Client/src/app/bl/mg.game.ts
+--- applytest3/Client/src/app/bl/mg.game.ts	2026-08-19 18:44:26.165713115 +0000
++++ mgx/Client/src/app/bl/mg.game.ts	2026-08-19 19:48:38.659845772 +0000
+@@ -1120,7 +1120,11 @@
+   }
+ 
+   MeshMouseOutFunc(event: any) {
+-    document.body.style.cursor = 'default';
++    // Don't steal the cursor back from the UI. uikit sets 'pointer' once, on pointerenter, and
++    // never re-applies it; the InteractionManager runs afterwards in the same frame and used to
++    // stamp 'default' over it the moment the pointer crossed off a board item onto a panel — so
++    // panel buttons showed an arrow.
++    if (!this.mgThree?.isUiHovered) document.body.style.cursor = 'default';
+     this.mgThree.setHovered([]);
+   }
+ 
+diff -ruN -x node_modules -x package-lock.json -x .angular -x .git applytest3/Client/src/app/bl/mg.panel3d.ts mgx/Client/src/app/bl/mg.panel3d.ts
+--- applytest3/Client/src/app/bl/mg.panel3d.ts	2026-08-19 18:44:26.182295325 +0000
++++ mgx/Client/src/app/bl/mg.panel3d.ts	2026-08-19 19:50:41.748468468 +0000
+@@ -1,6 +1,6 @@
+ import * as THREE from 'three';
+ import {
+-  Container, Text, Image as UiImage, Input as UiInput,
++  Container, Text, Image as UiImage,
+   reversePainterSortStable, setPreferredColorScheme,
+ } from '@pmndrs/uikit';
+ // Real controls, from uikit's own widget set (the VANILLA @pmndrs build, not the React one).
+@@ -11,7 +11,14 @@
+ // Named imports ONLY — the package exports ~1600 icons and pulling the barrel in wholesale would
+ // drag every one of them into the bundle.
+ import {
+-  Dice6, Music, Volume2, Eye, Ban, Trash2, X, RotateCcw, RotateCw, Square, Play,
++  Dice6, Music, Volume2, Volume, Eye, Ban, Trash2, X, RotateCcw, RotateCw, Square, Play, Pause,
++  Plus, Minus, Check, CheckCheck, ArrowRight, ArrowLeft, ChevronRight, ChevronLeft,
++  ChevronUp, ChevronDown, SkipForward, SkipBack, Flag, Moon, Sun, Scale, FlaskConical,
++  MessageSquare, Swords, Shield, Coins, Gem, Crown, Users, User, Hammer, Map, MapPin,
++  Clock, Timer, Zap, Star, Heart, Flame, Anchor, Ship, Sparkles, Hand, Search, Settings,
++  Info, CircleHelp, TriangleAlert, Lock, Trophy, Target, Layers, CirclePlus, CircleMinus,
++  CircleCheck, CircleX, Send, Repeat, Shuffle, Undo2, Redo2, Wheat, Trees, Mountain,
++  Pickaxe, Book, Scroll, Wand,
+ } from '@pmndrs/uikit-lucide';
+ import { GAMES_BASE } from './mg.three';
+ 
+@@ -42,9 +49,10 @@
+ 
+ export type UiNode = {
+   type?: string; text?: string; color?: string; bg?: string; size?: number; style?: string;
++  icon?: string;                       // named icon, resolved through ICON_BY_NAME
+   url?: string; action?: string; args?: { [k: string]: string }; argKey?: string; need?: number;
+   options?: { label: string, value: string, checked?: boolean, selected?: boolean }[];
+-  children?: UiNode[]; id?: string; placeholder?: string; onChange?: boolean; checked?: boolean;
++  children?: UiNode[]; id?: string; onChange?: boolean; checked?: boolean;
+   confirm?: string; gather?: string[]; overlays?: { url: string, x: number, y: number, w: number }[];
+ };
+ 
+@@ -76,15 +84,69 @@
+ const PANEL_PX_EDGE = 1100;
+ const widthFor = (dock: Dock) => (dock === 'top' || dock === 'bottom') ? PANEL_PX_EDGE : PANEL_PX_SIDE;
+ 
++// =====================================================================================
++// DESIGN TOKENS.
++//
++// Every size, colour and radius in this file comes from here. That is the whole difference
++// between a panel that looks designed and one that looks assembled: before this the file had
++// 18px padding next to 12px next to 10px, five different greys for secondary text, and a 2px
++// border in a UI where nothing else had one. One scale, used everywhere, reads as deliberate.
++// =====================================================================================
++
++/** 4px rhythm. Every gap, pad and margin is one of these. */
++const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
++
++/** Corner radii, by element size. Small controls get small corners. */
++const RADIUS = { sm: 6, md: 10, lg: 16, pill: 999 };
++
++/** Type ramp. Ratios, not arbitrary numbers. */
++const TYPE = { title: 26, body: 19, label: 17, small: 15, button: 20, chip: 17 };
++
++/** Text colours, high to low emphasis. */
++const INK = {
++  hi: '#f1f5f9',      // titles, button labels
++  base: '#dbe3ec',    // body copy
++  mute: '#93a4b8',    // secondary / notes
++  faint: '#6b7c91',   // captions, disabled
++  accent: '#fbbf24',  // the one warm accent — icons and highlights
++};
++
++/** Surfaces, back to front. */
++const SURFACE = {
++  panel: '#0d1117',   // the panel itself
++  raised: '#182029',  // controls sitting on the panel
++  sunken: '#080b10',  // wells (log blocks, dropdown lists)
++  line: '#242e3c',    // hairline borders
++  lineSoft: '#1a222d',// dividers inside a panel
++};
++
+ // `style` arrives as the same free-form keyword string the CSS classes used. Unknown keywords
+ // fall through to a neutral look, so the server can invent a style without breaking the client.
+ const FILL: { [k: string]: string } = {
+   ok: '#15803d', no: '#b91c1c', primary: '#b45309', team: '#1d4ed8',
+   win: '#15803d', lose: '#b91c1c', cur: '#b45309', ghost: '#1f2937',
+ };
+-const NEUTRAL = '#334155';
++const NEUTRAL = '#2a3546';
+ const has = (style: string | undefined, k: string) => (style || '').split(/[\s,]+/).includes(k);
+ 
++/**
++ * Lighten (+) or darken (-) a hex colour. Used for hover / pressed states and for the hairline
++ * a solid control gets along its edge, so every variant is derived from ONE base colour instead
++ * of being hand-picked per style keyword — add a keyword to FILL and its states come for free.
++ */
++function shade(hex: string, amount: number): string {
++  if (!hex) return hex;
++  const h = hex.replace('#', '');
++  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
++  const n = parseInt(full, 16);
++  if (isNaN(n)) return hex;
++  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
++  const r = clamp(((n >> 16) & 255) + 255 * amount);
++  const g = clamp(((n >> 8) & 255) + 255 * amount);
++  const b = clamp((n & 255) + 255 * amount);
++  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
++}
++
+ // The MSDF atlas uikit ships (Inter, via @pmndrs/msdfonts) contains exactly 104 glyphs: all 95
+ // printable ASCII plus Ö Ü Ä § ä ö ü ß ° — verified by reading the font's own char table, not
+ // guessed. Anything else draws as a hollow box, so text is mapped onto that set here. This is why
+@@ -134,14 +196,57 @@
+ /**
+  * The games decorate labels with emoji, and the MSDF atlas has no glyph for any of them (see
+  * GLYPHS) — so they used to render as hollow boxes, and then as nothing once txt() started
+- * dropping them. Real vector icons put the meaning back: an emoji at the START of a label is
+- * replaced by the matching lucide icon, drawn as geometry beside the text.
++ * dropping them. Real vector icons put the meaning back.
++ *
++ * There are TWO ways to ask for one, and the server should prefer the first:
+  *
+- * A label whose emoji is not mapped simply loses it, exactly as before — never a box.
++ *   1. BY NAME — UiNode.Icon, e.g. UiNode.Button("Play", ..., icon: "play"). Explicit, greppable,
++ *      and it survives the label being reworded or translated.
++ *   2. BY LEADING EMOJI — an emoji at the START of a label is replaced by the matching icon and
++ *      stripped from the text. This is how every existing game asks for one, so it keeps working.
++ *
++ * An unrecognised name or emoji simply yields no icon — never a box, never a crash.
+  */
++const ICON_BY_NAME: { [name: string]: any } = {
++  // actions
++  play: Play, pause: Pause, stop: Square, skip: SkipForward, back: SkipBack,
++  add: Plus, plus: Plus, remove: Minus, minus: Minus,
++  'add-circle': CirclePlus, 'remove-circle': CircleMinus,
++  ok: Check, check: Check, 'check-all': CheckCheck, 'check-circle': CircleCheck,
++  cancel: X, close: X, no: CircleX, ban: Ban, delete: Trash2, trash: Trash2,
++  undo: Undo2, redo: Redo2, rotate: RotateCw, 'rotate-ccw': RotateCcw, 'rotate-cw': RotateCw,
++  repeat: Repeat, shuffle: Shuffle, send: Send, search: Search, settings: Settings,
++  // navigation
++  next: ChevronRight, prev: ChevronLeft, up: ChevronUp, down: ChevronDown,
++  right: ArrowRight, left: ArrowLeft,
++  // game concepts
++  dice: Dice6, die: Dice6, roll: Dice6,
++  music: Music, sound: Volume2, volume: Volume, mute: Ban,
++  eye: Eye, look: Eye, hidden: Ban,
++  day: Sun, night: Moon, vote: Scale, judge: Scale,
++  flag: Flag, finish: Flag, trophy: Trophy, star: Star, target: Target,
++  sword: Swords, attack: Swords, shield: Shield, defend: Shield,
++  coin: Coins, coins: Coins, gem: Gem, crown: Crown,
++  player: User, players: Users, hand: Hand, card: Layers,
++  build: Hammer, hammer: Hammer, mine: Pickaxe, wheat: Wheat, wood: Trees,
++  mountain: Mountain, map: Map, pin: MapPin, ship: Ship, anchor: Anchor,
++  time: Clock, timer: Timer, energy: Zap, heart: Heart, fire: Flame,
++  magic: Wand, sparkle: Sparkles, book: Book, scroll: Scroll, lock: Lock,
++  // status
++  info: Info, help: CircleHelp, warning: TriangleAlert, chat: MessageSquare, lab: FlaskConical,
++};
++
++/** Leading-emoji shorthand for the same set. */
+ const ICONS: { [ch: string]: any } = {
+   '🎲': Dice6, '🎵': Music, '🔊': Volume2, '👁': Eye, '🚫': Ban, '🗑': Trash2,
+   '✖': X, '✕': X, '⟲': RotateCcw, '⟳': RotateCw, '⏹': Square, '▶': Play,
++  // These were all being silently dropped: the emoji is not in the MSDF atlas, so the button
++  // just lost its symbol.
++  '➕': Plus, '➖': Minus, '✓': Check, '✔': Check, '→': ArrowRight, '←': ArrowLeft,
++  '⏭': SkipForward, '⏮': SkipBack, '🏁': Flag, '🌙': Moon, '☀': Sun, '⚖': Scale,
++  '🧪': FlaskConical, '💬': MessageSquare, '⚔': Swords, '🛡': Shield, '👑': Crown,
++  '💰': Coins, '💎': Gem, '⏸': Pause, '🔇': Ban, '⭐': Star, '❤': Heart, '🔥': Flame,
++  '⏱': Timer, '⚡': Zap, '🏆': Trophy, '📖': Book, '📜': Scroll, '🔒': Lock, '✨': Sparkles,
+ };
+ 
+ /** Split a leading icon off a label: the icon class (if recognised) and the remaining text. */
+@@ -153,6 +258,13 @@
+   return { rest: label };
+ }
+ 
++/** An explicit icon name wins over a leading emoji; either may be absent. */
++function resolveIcon(name: string | undefined, label: string): { Icon?: any, rest: string } {
++  const named = name ? ICON_BY_NAME[name.trim().toLowerCase()] : undefined;
++  if (named) return { Icon: named, rest: (label || '').trim() };
++  return splitIcon(label);
++}
++
+ function fill(style: string | undefined): string {
+   for (const k of Object.keys(FILL)) if (has(style, k)) return FILL[k];
+   return NEUTRAL;
+@@ -252,6 +364,18 @@
+   return out;
+ }
+ 
++/**
++ * Is this object actually on screen? Walks up the parents checking three's `visible`.
++ *
++ * Needed because three's raycaster does NOT skip invisible objects, and a CLOSED dropdown's
++ * option rows are still registered click targets sitting behind the closed head — without this
++ * a VR controller ray could hit and fire a hidden option.
++ */
++function visibleInTree(o: any): boolean {
++  for (let x = o; x != null; x = x.parent) if (x.visible === false) return false;
++  return true;
++}
++
+ /** Only push a new pixelSize when it actually changed — it invalidates uikit's layout. */
+ function setPixelSize(p: Pane, v: number) {
+   if (!isFinite(v) || v <= 0 || Math.abs(v - p.px) < 1e-9) return;
+@@ -292,7 +416,7 @@
+ 
+   /** Local widget state that must survive a rebuild. The SERVER still decides what it means. */
+   private picks: { [argKey: string]: string[] } = {};      // "checks" groups, mid-selection
+-  private fields: { [id: string]: string } = {};           // "input" values, for `gather`
++  private fields: { [id: string]: string } = {};           // "select" values, for `gather`
+   private open: { [id: string]: boolean } = {};            // which dropdowns are expanded
+ 
+   /** Panes the cursor is currently inside. A set, because docks can sit edge to edge. */
+@@ -399,12 +523,14 @@
+       width: wPx,
+       flexDirection: 'column',
+       alignItems: 'stretch',
+-      padding: 18,
+-      backgroundColor: '#0b0f14',
+-      opacity: 0.92,
+-      borderRadius: 18,
+-      borderWidth: 2,
+-      borderColor: '#1f2937',
++      padding: SPACE.lg,
++      backgroundColor: SURFACE.panel,
++      opacity: 0.94,
++      borderRadius: RADIUS.lg,
++      // 1px, not 2px. A 2px border on a floating panel reads as a debug outline; a hairline
++      // reads as an edge.
++      borderWidth: 1,
++      borderColor: SURFACE.line,
+       // mg.three sets scene.pointerEvents = 'none' so board items belong to the InteractionManager
+       // alone. That 'none' is INHERITED, so the panel has to opt its own subtree back in here or
+       // @pmndrs/pointer-events would never see a single widget. 'auto' is what uikit itself uses
+@@ -416,8 +542,8 @@
+       // only possible because @pmndrs/pointer-events feeds uikit the wheel and drag events it
+       // needs; the InteractionManager has neither, and would clip the overflow unreachably.
+       overflow: 'scroll',
+-      scrollbarWidth: 6,
+-      scrollbarColor: '#475569',
++      scrollbarWidth: SPACE.xs + 2,
++      scrollbarColor: SURFACE.line,
+       scrollbarBorderTopLeftRadius: 3,
+       scrollbarBorderTopRightRadius: 3,
+       scrollbarBorderBottomLeftRadius: 3,
+@@ -642,10 +768,20 @@
+         const box = new Container({
+           flexDirection: isRow ? 'row' : 'column',
+           flexWrap: isRow ? 'wrap' : 'no-wrap',
+-          alignItems: 'center',
+-          justifyContent: isRow ? 'flex-start' : 'flex-start',
+-          gap: nd.size ?? 8,                       // `size` is the GAP on a container, as in CSS
+-          ...(nd.bg ? { backgroundColor: col(nd.bg, '#111827'), borderRadius: 10, padding: 8 } : {}),
++          // A row of buttons should sit on one baseline; a column should fill the panel width so
++          // its children line up on a single left edge instead of each centring itself.
++          alignItems: isRow ? 'center' : 'stretch',
++          justifyContent: 'flex-start',
++          // `size` is the GAP on a container, as in CSS. Rows are tighter than columns: side by
++          // side needs less separation than stacked.
++          gap: nd.size ?? (isRow ? SPACE.sm : SPACE.md),
++          ...(nd.bg ? {
++            backgroundColor: col(nd.bg, SURFACE.raised),
++            borderRadius: RADIUS.md,
++            borderWidth: 1,
++            borderColor: SURFACE.lineSoft,
++            padding: SPACE.md,
++          } : {}),
+         });
+         parent.add(box);
+         for (const k of nd.children || []) this.build(k, box);
+@@ -653,48 +789,62 @@
+       }
+ 
+       case 'title': {
+-        const { Icon, rest } = splitIcon(nd.text || '');
+-        const colour = col(nd.color, '#ffd166');
+-        // Size/Color are honoured here now; both were hardcoded, so a server that set them on a
+-        // title was ignored (UiNode.cs documents them as valid on any node).
+-        const size = nd.size ?? 30;
+-        if (!Icon) {
+-          parent.add(new Text({ text: txt(rest), fontSize: size, fontWeight: 'bold', color: colour }));
+-          return;
+-        }
+-        const row = new Container({ flexDirection: 'row', alignItems: 'center', gap: 10 });
+-        parent.add(row);
+-        row.add(new Icon({ width: size * 0.94, height: size * 0.94, color: colour, flexShrink: 0 }));
+-        row.add(new Text({ text: txt(rest), fontSize: size, fontWeight: 'bold', color: colour }));
++        // The icon carries the accent colour and the words stay near-white. An all-amber heading
++        // shouts; an amber mark next to calm type reads as a brand. Size/Color are honoured (both
++        // used to be hardcoded, so a server that set them on a title was ignored).
++        const { Icon, rest } = resolveIcon(nd.icon, nd.text || '');
++        const size = nd.size ?? TYPE.title;
++        const colour = col(nd.color, INK.hi);
++
++        const head = new Container({
++          flexDirection: 'row', alignItems: 'center', gap: SPACE.sm,
++          paddingBottom: SPACE.sm,
++          // A hairline under the heading is the cheapest possible "this is a designed thing"
++          // signal, and it gives the panel an obvious top section.
++          borderBottomWidth: 1, borderColor: SURFACE.lineSoft,
++          marginBottom: SPACE.xs,
++        });
++        parent.add(head);
++        if (Icon) head.add(new Icon({ width: size * 0.9, height: size * 0.9, color: col(nd.color, INK.accent), flexShrink: 0 }));
++        head.add(new Text({ text: txt(rest), fontSize: size, fontWeight: 'bold', color: colour }));
+         return;
+       }
+ 
+       case 'note':
+-        parent.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? 17, color: col(nd.color, '#94a3b8') }));
++        parent.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? TYPE.label, color: col(nd.color, INK.mute) }));
+         return;
+ 
+       case 'banner': {
++        const base = fill(nd.style);
+         const box = new Container({
+-          backgroundColor: fill(nd.style), borderRadius: 12, padding: 12, marginY: 4,
++          backgroundColor: base,
++          // A lighter hairline along the edge of a saturated block stops it looking like a flat
++          // sticker — it is the same trick the buttons use below.
++          borderWidth: 1, borderColor: shade(base, 0.12),
++          borderRadius: RADIUS.md, padding: SPACE.md, marginY: SPACE.xs,
+           alignItems: 'center', justifyContent: 'center',
+         });
+         parent.add(box);
+-        box.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? 26, fontWeight: 'bold', color: col(nd.color, '#ffffff') }));
++        box.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? TYPE.title, fontWeight: 'bold', color: col(nd.color, '#ffffff') }));
+         return;
+       }
+ 
+       case 'log': {
++        // A well: darker than the panel, with a hairline, so a running log reads as a distinct
++        // region rather than as more body text.
+         const box = new Container({
+-          backgroundColor: col(nd.bg, '#030712'), opacity: 0.9, borderRadius: 8, padding: 10,
++          backgroundColor: col(nd.bg, SURFACE.sunken),
++          borderWidth: 1, borderColor: SURFACE.lineSoft,
++          borderRadius: RADIUS.sm, padding: SPACE.md,
+           flexDirection: 'column', alignItems: 'flex-start',
+         });
+         parent.add(box);
+-        box.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? 15, color: col(nd.color, '#9ca3af') }));
++        box.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? TYPE.small, color: col(nd.color, INK.mute) }));
+         return;
+       }
+ 
+       case 'space':
+-        parent.add(new Container({ height: nd.size ?? 8, flexShrink: 0 }));
++        parent.add(new Container({ height: nd.size ?? SPACE.sm, flexShrink: 0 }));
+         return;
+ 
+       case 'image': {
+@@ -704,7 +854,7 @@
+         const holder = nd.overlays?.length
+           ? new Container({ height: h, flexShrink: 0, positionType: 'relative' })
+           : null;
+-        const img = new UiImage({ height: h, borderRadius: 8, flexShrink: 0, src: gamesUrl(nd.url || '') });
++        const img = new UiImage({ height: h, borderRadius: RADIUS.sm, flexShrink: 0, src: gamesUrl(nd.url || '') });
+         if (holder) { parent.add(holder); holder.add(img); } else { parent.add(img); }
+         if (holder) {
+           for (const o of nd.overlays || []) {
+@@ -724,7 +874,7 @@
+ 
+       case 'model': {
+         const h = nd.size ?? 84;
+-        const box = new UiImage({ height: h, width: h, borderRadius: 8, flexShrink: 0 });
++        const box = new UiImage({ height: h, width: h, borderRadius: RADIUS.sm, flexShrink: 0 });
+         parent.add(box);
+         this.thumbnail(nd.url, box);
+         return;
+@@ -732,7 +882,7 @@
+ 
+       case 'button':
+         this.addButton(parent, nd.text || '', nd.style, nd.url, () => this.fire(nd, nd.args || {}),
+-                       nd.bg, nd.color, nd.size);
++                       nd.bg, nd.color, nd.size, nd.icon);
+         return;
+ 
+       case 'check': {
+@@ -811,7 +961,7 @@
+         const it: any = this.items?.()?.[nd.id || ''];
+         const clips: any[] = it?.mesh?.userData?.['clips'] || [];
+         if (!clips.length) {
+-          parent.add(new Text({ text: '(model still loading)', fontSize: 15, color: '#64748b' }));
++          parent.add(new Text({ text: '(model still loading)', fontSize: TYPE.small, color: INK.faint }));
+           return;
+         }
+         const akey = nd.argKey || 'idx';
+@@ -837,40 +987,24 @@
+         return;
+       }
+ 
+-      case 'input': {
+-        // uikit ships a real text field with a caret, so this keeps working on desktop/mobile.
+-        // The value is remembered locally so a `gather` button can collect it, exactly as the
+-        // DOM panel read it out of the <input>.
+-        const id = nd.id || '';
+-        const box = new Container({
+-          backgroundColor: '#111827', borderRadius: 8, borderWidth: 1, borderColor: '#334155',
+-          paddingX: 10, paddingY: 8,
+-        });
+-        parent.add(box);
+-        box.add(new UiInput({
+-          value: this.fields[id] ?? '',
+-          placeholder: nd.placeholder || '',
+-          fontSize: 19,
+-          color: '#e5e7eb',
+-          onValueChange: (v: string) => { this.fields[id] = v; },
+-        }));
+-        return;
+-      }
+-
+       case 'text':
+       default: {
+         // A chip/pill, or plain text. Unknown node types land here and show their text rather
+         // than breaking, so the server can add a node type without breaking an old client.
+         if (has(nd.style, 'pill') || has(nd.style, 'chip') || nd.bg) {
++          const base = col(nd.bg, fill(nd.style));
+           const chip = new Container({
+-            backgroundColor: col(nd.bg, fill(nd.style)), borderRadius: 999,
+-            paddingX: 12, paddingY: 5, flexShrink: 0,
++            backgroundColor: base,
++            borderWidth: 1, borderColor: shade(base, 0.1),
++            borderRadius: RADIUS.pill,
++            paddingX: SPACE.md, paddingY: SPACE.xs, flexShrink: 0,
++            alignItems: 'center', justifyContent: 'center',
+           });
+           parent.add(chip);
+-          chip.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? 19, color: col(nd.color, '#ffffff') }));
++          chip.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? TYPE.chip, fontWeight: 'bold', color: col(nd.color, '#ffffff') }));
+           return;
+         }
+-        parent.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? 21, color: col(nd.color, '#e5e7eb') }));
++        parent.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? TYPE.body, color: col(nd.color, INK.base) }));
+         return;
+       }
+     }
+@@ -918,17 +1052,20 @@
+     let toggle = () => { };
+     const head = new Container({
+       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+-      backgroundColor: '#111827', borderWidth: 1, borderColor: isOpen ? '#3b82f6' : '#334155',
+-      borderRadius: 8, paddingX: 12, paddingY: 9,
+-    });
++      backgroundColor: SURFACE.raised, borderWidth: 1,
++      borderColor: isOpen ? '#3b82f6' : SURFACE.line,
++      borderRadius: RADIUS.md, paddingX: SPACE.md, paddingY: SPACE.sm + 2,
++      cursor: 'pointer',
++      hover: { borderColor: isOpen ? '#3b82f6' : shade(SURFACE.line, 0.16) },
++    } as any);
+     box.add(head);
+     const caption = new Text({
+       text: txt(chosen ? chosen.label : (placeholder || 'Choose...')),
+-      fontSize: 19, color: chosen ? '#e5e7eb' : '#94a3b8',
++      fontSize: TYPE.label, color: chosen ? INK.base : INK.faint,
+     });
+     head.add(caption);
+     // 'v' / '^' rather than a caret glyph: the atlas has no arrows at all (see GLYPHS).
+-    const caret = new Text({ text: isOpen ? '^' : 'v', fontSize: 17, color: '#94a3b8' });
++    const caret = new Text({ text: isOpen ? '^' : 'v', fontSize: TYPE.small, color: INK.mute });
+     head.add(caret);
+ 
+     // The open list:
+@@ -942,6 +1079,8 @@
+     const list = new Container({
+       positionType: 'absolute', positionTop: '100%', positionLeft: 0, width: '100%',
+       display: isOpen ? 'flex' : 'none',
++      // NOTE `visible` is set alongside this below — `display:'none'` removes the list from
++      // LAYOUT, but three's raycaster still happily intersects it.
+       // pointerEvents must follow the open state. pointerEventsOrder below makes this list beat
+       // its siblings in the hit-test, and 'display: none' does NOT take an element out of
+       // hit-testing — so a CLOSED list left at 'auto' silently swallowed every click in the whole
+@@ -949,12 +1088,13 @@
+       pointerEvents: isOpen ? 'auto' : 'none',
+       zIndexOffset: 100, renderOrder: 1000, depthTest: false, pointerEventsOrder: 100,
+       flexDirection: 'column', gap: 2, alignItems: 'stretch',
+-      backgroundColor: '#0b1220', borderRadius: 8, padding: 4,
+-      borderWidth: 1, borderColor: '#3b4a63',
++      backgroundColor: SURFACE.sunken, borderRadius: RADIUS.md, padding: SPACE.xs,
++      borderWidth: 1, borderColor: SURFACE.line,
+       // opacity is INHERITED, and the panel root sets 0.92 — without overriding it here the
+       // options list stays see-through and the controls behind it read straight through the menu.
+       opacity: 1,
+     });
++    list.visible = isOpen;
+     box.add(list);
+ 
+     // Open/closed is pure LOCAL view state, so it is driven in place. Rebuilding the panel for it
+@@ -962,8 +1102,9 @@
+     const setOpen = (v: boolean) => {
+       isOpen = v;
+       this.open[id] = v;                // remembered, so a later server-driven rebuild agrees
++      list.visible = v;                 // keeps the closed list out of every raycast (see hitTargets)
+       list.setProperties({ display: v ? 'flex' : 'none', pointerEvents: v ? 'auto' : 'none' });
+-      head.setProperties({ borderColor: v ? '#3b82f6' : '#334155' });
++      head.setProperties({ borderColor: v ? '#3b82f6' : SURFACE.line });
+       caret.setProperties({ text: v ? '^' : 'v' });
+     };
+     toggle = () => setOpen(!isOpen);
+@@ -976,15 +1117,17 @@
+       // not part of the panel's fingerprint, so relying on a rebuild left the menu hanging open.
+       const activate = () => {
+         setOpen(false);
+-        caption.setProperties({ text: txt(o.label), color: '#e5e7eb' });
++        caption.setProperties({ text: txt(o.label), color: INK.base });
+         choose(o.value);
+       };
+       const row = new Container({
+-        paddingX: 12, paddingY: 8, borderRadius: 6,
+-        backgroundColor: selected ? '#1d4ed8' : '#0b0f14',
+-      });
++        paddingX: SPACE.md, paddingY: SPACE.sm, borderRadius: RADIUS.sm,
++        backgroundColor: selected ? FILL['team'] : 'transparent',
++        cursor: 'pointer',
++        hover: { backgroundColor: selected ? shade(FILL['team'], 0.09) : SURFACE.raised },
++      } as any);
+       list.add(row);
+-      row.add(new Text({ text: txt(o.label), fontSize: 19, color: '#e5e7eb' }));
++      row.add(new Text({ text: txt(o.label), fontSize: TYPE.label, color: INK.base }));
+       this.makeInteractive(row, activate);
+     }
+   }
+@@ -1011,45 +1154,92 @@
+    * since a controller ray cannot rely on the widget's own click handling.
+    */
+   private labelled(control: any, caption: string | undefined, activate?: () => void): Container {
+-    const row = new Container({ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 });
++    // The row highlights as one thing and is padded to a comfortable hit height — a 16px checkbox
++    // is a poor target for a mouse and a hopeless one for a VR laser.
++    const row = new Container({
++      flexDirection: 'row', alignItems: 'center', gap: SPACE.md, flexShrink: 0,
++      paddingX: SPACE.sm, paddingY: SPACE.xs + 2,
++      borderRadius: RADIUS.sm,
++      // 'transparent' is a real uikit colour (writeColor zeroes RGBA for it) — NOT a three colour
++      // name, and NOT backgroundOpacity, which uikit has no such property for and silently drops.
++      backgroundColor: 'transparent',
++      cursor: 'pointer',
++      hover: { backgroundColor: SURFACE.raised },
++    } as any);
+     row.add(control);
+-    if (caption) row.add(new Text({ text: txt(caption), fontSize: 19, color: '#e5e7eb' }));
++
++    // The listener goes on the CONTROL and on the CAPTION — deliberately not on the row.
++    //
++    // pointer-events dispatches to the deepest hit object and then BUBBLES to the parents, and
++    // nothing calls stopPropagation. A listener on the row therefore also fires for a click on
++    // the control, which already runs its own handler — so every checkbox toggled twice, i.e.
++    // "checks" groups could not be ticked at all (splice then push = no change). One listener per
++    // reachable target, no overlap: the caption is a plain Text with no handler of its own.
+     this.makeInteractive(control, activate, true);
++    if (caption) {
++      const label = new Text({ text: txt(caption), fontSize: TYPE.label, color: INK.base });
++      row.add(label);
++      if (activate) this.makeInteractive(label, activate);
++    }
+     return row;
+   }
+ 
+   /**
+-   * Make one object clickable by BOTH input paths, with no change to either:
+-   *  * desktop — the InteractionManager raycasts registered objects and dispatches DOM-ish events
+-   *    ('click', 'mouseover', 'mouseout'); uikit Components override raycast(), so they intersect
+-   *    correctly and their own onClick/onCheckedChange fires from that dispatched 'click';
+-   *  * VR — mg.three's controller raycast walks up parents looking for exactly this userData shape
+-   *    (ItemData.clickActions with at least one key), so it finds the control for free. `uiArgs`
+-   *    marks it as a UI activation rather than a clicked board item.
++   * A button.
++   *
++   * Three visual weights, chosen by the style keyword so the server keeps expressing INTENT and
++   * the client keeps deciding what that looks like:
++   *   solid    — a FILL keyword (ok / no / primary / team / cur / win / lose). The call to action.
++   *   outlined — the "ghost" keyword: transparent with a hairline. Secondary, recedes.
++   *   neutral  — no keyword. The default, a muted solid.
++   *
++   * Plus hover and pressed states. uikit supports conditional `hover` / `active` property blocks,
++   * and every state is derived from the ONE base colour via shade() — so adding a keyword to FILL
++   * gets its whole state set for free, and nothing drifts out of step.
+    */
+   private addButton(parent: Container, rawLabel: string, style: string | undefined,
+                     iconUrl: string | undefined, onClick: () => void,
+-                    bg?: string, color?: string, size?: number) {
++                    bg?: string, color?: string, size?: number, iconName?: string) {
+     const big = has(style, 'big');
++    const outlined = has(style, 'ghost');
+     // Bg / Color / Size were all dropped here, so a button could only be styled through the FILL
+     // style keywords — the one node type that ignored the common fields every other type honours.
+     // An explicit value now wins over the keyword default.
+     const base = col(bg, fill(style));
+-    const ink = col(color, '#ffffff');
+-    const fontSize = size ?? (big ? 26 : 21);
+-    const { Icon, rest: label } = splitIcon(rawLabel);
++    const solid = !outlined;
++    const ink = col(color, outlined ? INK.base : '#ffffff');
++    const fontSize = size ?? (big ? TYPE.title : TYPE.button);
++    const { Icon, rest: label } = resolveIcon(iconName, rawLabel);
+ 
+     const btn = new Container({
+       flexDirection: 'row',
+       alignItems: 'center',
+       justifyContent: 'center',
+-      gap: 8,
+-      backgroundColor: base,
+-      borderRadius: 10,
+-      paddingX: big ? 20 : 14,
+-      paddingY: big ? 12 : 9,
++      gap: SPACE.sm,
++      // 'transparent' is handled by uikit's own colour writer (writeColor zeroes RGBA), so it is
++      // safe here even though THREE.Color would parse it as white. `backgroundOpacity` is NOT a
++      // uikit property — passing it looks right and does nothing, which is how the outlined
++      // variant ended up rendering as a solid block.
++      backgroundColor: solid ? base : 'transparent',
++      // A hairline slightly lighter than the fill gives a flat rectangle an edge; on an outlined
++      // button it IS the button.
++      borderWidth: 1,
++      borderColor: solid ? shade(base, 0.14) : SURFACE.line,
++      borderRadius: RADIUS.md,
++      paddingX: big ? SPACE.xl : SPACE.lg,
++      paddingY: big ? SPACE.md : SPACE.sm + 2,
+       flexShrink: 0,
+-    });
++      cursor: 'pointer',
++      hover: {
++        backgroundColor: solid ? shade(base, 0.09) : SURFACE.raised,
++        borderColor: solid ? shade(base, 0.22) : shade(SURFACE.line, 0.16),
++      },
++      active: {
++        // Pressed goes DARKER and loses its edge highlight — the button reads as pushed in.
++        backgroundColor: solid ? shade(base, -0.07) : shade(SURFACE.raised, -0.04),
++        borderColor: solid ? shade(base, 0.04) : SURFACE.line,
++      },
++    } as any);
+     parent.add(btn);
+ 
+     if (Icon) {
+@@ -1058,14 +1248,14 @@
+     }
+     if (iconUrl) {
+       const isModel = /\.(gltf|glb|obj|stl)$/i.test(iconUrl);
+-      const icon = new UiImage({ height: big ? 30 : 24, width: big ? 30 : 24, flexShrink: 0 });
++      const px = fontSize * 1.35;
++      const icon = new UiImage({ height: px, width: px, borderRadius: RADIUS.sm, flexShrink: 0 });
+       btn.add(icon);
+       if (isModel) this.thumbnail(iconUrl, icon);
+       else icon.setProperties({ src: gamesUrl(iconUrl) });
+     }
+     if (label) btn.add(new Text({ text: txt(label), fontSize, fontWeight: 'bold', color: ink }));
+ 
+-    // Hover and cursor are uikit's own now that it receives pointerover / pointerout.
+     this.makeInteractive(btn, onClick);
+   }
+ 
+@@ -1115,4 +1305,21 @@
+ 
+   /** Set by the host: the game's loaded items, so an `animpick` can read a model's clips. */
+   items?: () => { [id: string]: any };
++
++  /**
++   * Every object currently carrying a panel action, for the VR controller ray.
++   *
++   * It cannot find them by walking the scene: uikit's Component.raycast always returns FALSE,
++   * and three treats that as "do not descend", so an ordinary recursive raycast stops at a
++   * pane's root Container and never sees a single widget. uikit's own input path gets around
++   * this by consulting root.interactableDescendants explicitly — this is the equivalent, using
++   * the list makeInteractive already keeps.
++   */
++  hitTargets(): any[] {
++    const out: any[] = [];
++    for (const p of this.panes) {
++      for (const c of p.clickables) if (visibleInTree(c)) out.push(c);
++    }
++    return out;
++  }
+ }
+diff -ruN -x node_modules -x package-lock.json -x .angular -x .git applytest3/Client/src/app/bl/mg.three.ts mgx/Client/src/app/bl/mg.three.ts
+--- applytest3/Client/src/app/bl/mg.three.ts	2026-08-19 18:44:26.165818785 +0000
++++ mgx/Client/src/app/bl/mg.three.ts	2026-08-19 19:48:18.092606400 +0000
+@@ -67,6 +67,41 @@
+   /** @pmndrs/pointer-events, forwarding canvas pointer events into the scene. See initThree. */
+   pointerEvents?: { update: () => void, destroy: () => void };
+ 
++  /**
++   * In-scene UI that OCCLUDES the board: the control panels (mg.panel3d parents its group to the
++   * camera). Registered here so the InteractionManager can tell that a click landed on a panel
++   * and must not also reach whatever is behind it. Kept as a list because a seat can have
++   * several docked panels under one group.
++   */
++  uiBlockers: THREE.Object3D[] = [];
++
++  /**
++   * Supplies the in-scene UI's clickable objects to the VR controller ray.
++   *
++   * A recursive raycast CANNOT find them: uikit's Component.raycast always returns false, and
++   * three reads that as "do not descend", so the sweep stops at a panel's root Container. Without
++   * this the controller ray walked straight past every button and returned the board item BEHIND
++   * the panel — so VR panel buttons did nothing and the trigger poked the board through the UI.
++   */
++  uiHitTargets?: () => any[];
++
++  /**
++   * Distance along `ray` to the nearest UI panel, or Infinity if it misses. Wired into
++   * InteractionManager.blockerTest in initThree.
++   */
++  private uiBlockDistance(ray: THREE.Raycaster): number {
++    if (!this.uiBlockers.length) return Infinity;
++    let best = Infinity;
++    for (const b of this.uiBlockers) {
++      if (!b.visible) continue;
++      // `true` = recurse: the group holds one child group per docked panel, and the uikit
++      // Containers inside them override raycast(), so they intersect properly.
++      const hits = ray.intersectObject(b, true);
++      if (hits.length && hits[0].distance < best) best = hits[0].distance;
++    }
++    return best;
++  }
++
+   private uiHover = false;
+   /**
+    * Called by the in-scene UI while the cursor is over one of its panels.
+@@ -82,6 +117,9 @@
+     if (this.orbitControls) this.orbitControls.enabled = !over;
+   }
+ 
++  /** True while the cursor is over an in-scene panel. */
++  get isUiHovered(): boolean { return this.uiHover; }
++
+   // Cache textures by URL so re-created items (e.g. cards rebuilt every action) reuse the
+   // same THREE.Texture instead of re-fetching/decoding the image each time.
+   private texCache: { [url: string]: { tex: any, ready: boolean, waiters: ((t: any) => void)[] } } = {};
+@@ -449,6 +487,8 @@
+     this.orbitControls.update();
+ 
+     this.interactionManager = new InteractionManager(this.renderer, this.camera, this.renderer.domElement);
++    // Board items must not be clickable through a control panel — see uiBlockers above.
++    this.interactionManager.blockerTest = (ray: THREE.Raycaster) => this.uiBlockDistance(ray);
+ 
+     // ---- @pmndrs/pointer-events: the input system @pmndrs/uikit needs (the 3D panel) ----------
+     // It only ADDS listeners to the canvas (pointermove / pointerover / pointerdown / pointerup /
+@@ -733,8 +773,17 @@
+     ray.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+     ray.ray.direction.set(0, 0, -1).applyMatrix4(rot);
+     if (controller.children[0]) (controller.children[0] as any).scale.z = 10;
++
++    // The UI first, and NON-recursively — each widget's own raycast still reports an
++    // intersection, it just refuses to pass the ray to its children.
++    const uiTargets = this.uiHitTargets?.() ?? [];
++    const uiHits = uiTargets.length ? ray.intersectObjects(uiTargets, false) : [];
++    const uiHit = uiHits.length ? uiHits[0] : null;
++
+     const hits = ray.intersectObjects(this.scene.children, true);
+     for (const h of hits) {
++      // Anything at or behind the panel is occluded by it — same rule as the mouse.
++      if (uiHit && uiHit.distance <= h.distance) break;
+       let o: any = h.object;
+       while (o && !(o.userData && o.userData['ItemData'] && o.userData['ItemData'].clickActions
+                     && Object.keys(o.userData['ItemData'].clickActions).length)) o = o.parent;
+@@ -743,6 +792,11 @@
+         return { mesh: o, point: h.point };
+       }
+     }
++
++    if (uiHit) {
++      if (controller.children[0]) (controller.children[0] as any).scale.z = uiHit.distance;
++      return { mesh: uiHit.object, point: uiHit.point };
++    }
+     return null;
+   }
+ 
+@@ -751,7 +805,18 @@
+     const prev = controller.userData["selectPressedPrev"];
+     const hit = this.vrRaycastItem(controller);
+     this.vrHoverHandler?.(hit ? hit.mesh : null);            // continuous hover glow
+-    if (pressed && !prev && hit) this.vrClickHandler?.(hit.mesh, hit.point);  // trigger = click
++    if (pressed && !prev && hit) {
++      // A panel widget carries `uiArgs.fire` (mg.panel3d.makeInteractive). Run it directly.
++      //
++      // Without this, VR panel buttons were dead: vrRaycastItem finds them because they carry a
++      // synthetic ItemData whose clickActions value is the sentinel '__panel3d', so the click
++      // went to MgGame.MeshClickFunc, which dutifully sent "__panel3d" to the server as an
++      // action name — and the server rejected it as not a registered [GameAction]. `uiArgs` was
++      // written for exactly this and never read by anything.
++      const fire = hit.mesh?.userData?.['uiArgs']?.fire;
++      if (typeof fire === 'function') fire();
++      else this.vrClickHandler?.(hit.mesh, hit.point);       // trigger = click on a board item
++    }
+     controller.userData["selectPressedPrev"] = pressed;
+   }
+ 
+diff -ruN -x node_modules -x package-lock.json -x .angular -x .git applytest3/Client/src/app/services/mg.interaction.manager.ts mgx/Client/src/app/services/mg.interaction.manager.ts
+--- applytest3/Client/src/app/services/mg.interaction.manager.ts	2026-08-19 18:44:26.166516314 +0000
++++ mgx/Client/src/app/services/mg.interaction.manager.ts	2026-08-19 19:20:41.669572919 +0000
+@@ -76,6 +76,21 @@
+   raycaster: THREE.Raycaster;
+   treatTouchEventsAsMouseEvents: boolean;
+ 
++  /**
++   * OCCLUSION HOOK. Returns how far along the current ray the nearest UI panel sits, or Infinity
++   * when the ray misses the UI entirely. mg.three wires this to the in-scene control panels.
++   *
++   * Why it has to exist: the panels are uikit geometry parented to the CAMERA, and they are
++   * deliberately NOT registered here (they are driven by @pmndrs/pointer-events instead — see
++   * mg.panel3d). This manager therefore knew nothing about them and happily raycast straight
++   * THROUGH a panel to the board behind it, so clicking a panel button also selected whatever
++   * piece happened to line up behind it. Solid geometry in front of a thing should hide it.
++   */
++  blockerTest?: (raycaster: THREE.Raycaster) => number;
++
++  /** Distance to the nearest UI panel on this ray; anything further away is occluded. */
++  private blockDistance = Infinity;
++
+   constructor(
+     renderer: THREE.WebGLRenderer,
+     camera: THREE.Camera,
+@@ -241,6 +256,12 @@
+   update = () => {
+     this.raycaster.setFromCamera(this.mouse, this.camera);
+ 
++    // Measure the UI once per pass, not once per object. Every event entry point (click,
++    // mousedown, pointerdown, touchstart) calls update() before dispatching, so computing it
++    // here covers hover AND activation, and covers touch — where a tap arrives with no
++    // preceding move, so a hover-flag approach would let the first tap through.
++    this.blockDistance = this.blockerTest ? this.blockerTest(this.raycaster) : Infinity;
++
+     this.interactiveObjects.forEach((object) => {
+       if (object.target) this.checkIntersection(object);
+     });
+@@ -297,7 +318,9 @@
+       });
+       // object.intersectedObject = intersects[0];
+       object.point = intersects[0].point;
+-      object.intersected = true;
++      // Behind a panel = not under the cursor. Reported as a plain miss so hover, mouseleave
++      // and click all agree; a piece that slides under a panel correctly un-highlights.
++      object.intersected = distance <= this.blockDistance;
+       object.distance = distance;
+     } else {
+       object.intersected = false;
+diff -ruN -x node_modules -x package-lock.json -x .angular -x .git applytest3/Client/src/app/view/game-play/game-play.component.ts mgx/Client/src/app/view/game-play/game-play.component.ts
+--- applytest3/Client/src/app/view/game-play/game-play.component.ts	2026-08-19 18:44:26.166783727 +0000
++++ mgx/Client/src/app/view/game-play/game-play.component.ts	2026-08-19 19:48:18.092901709 +0000
+@@ -277,8 +277,15 @@
+         (action: string, args: any) => {
+           if (this.panelSeatId && action) this.signalRService.executeActionArgs(this.gameId!, this.panelSeatId, action, args);
+         });
+-      // The panel parents ITSELF (camera for 'hud', scene for 'world', a controller in VR), so
+-      // there is no scene.add() here on purpose.
++      // The panel parents ITSELF (the camera on screen, a controller in VR), so there is no
++      // scene.add() here on purpose.
++      //
++      // It does have to be declared as an OCCLUDER, though: the panel is solid geometry sitting
++      // between the eye and the board, and the InteractionManager (which owns board clicks) does
++      // not otherwise know it exists — so a click on a button also selected the piece behind it.
++      this.mgThree.uiBlockers = [this.panel3d.group];
++      // ...and hand the VR ray the widgets themselves, which it cannot discover by traversal.
++      this.mgThree.uiHitTargets = () => this.panel3d?.hitTargets() ?? [];
+       // uikit computes layout and flushes transforms once per frame, so it needs a slot in the
+       // render loop. mg.three isolates each frame hook so a throw can never skip the render.
+       this.panel3d.frameHook = (deltaMs: number) => this.panel3d?.tick(deltaMs);
+@@ -301,6 +308,10 @@
+ 
+   private disposePanel3d() {
+     if (!this.panel3d) return;
++    if (this.mgThree) {
++      this.mgThree.uiBlockers = [];                  // stop occluding once the panel is gone
++      this.mgThree.uiHitTargets = undefined;
++    }
+     this.panel3d.dispose();
+     this.panel3d = undefined;
+     if (this.mgThree) this.mgThree.onXrSessionChange = undefined;
+diff -ruN -x node_modules -x package-lock.json -x .angular -x .git applytest3/Entities/UiNode.cs mgx/Entities/UiNode.cs
+--- applytest3/Entities/UiNode.cs	2026-08-19 18:44:26.182295325 +0000
++++ mgx/Entities/UiNode.cs	2026-08-19 19:27:58.934361394 +0000
+@@ -17,21 +17,22 @@
+     //   "panel"  - one docked panel      (Children, Style = right|left|top|bottom; see below)
+     //   "col"    - vertical container    (Children, Size=gap, Bg)
+     //   "row"    - horizontal container  (Children, Size=gap, Bg) — wraps
+-    //   "title"  - big heading           (Text, Color, Size; a leading emoji becomes an icon)
++    //   "title"  - big heading           (Text, Icon, Color, Size)
+     //   "text"   - a line of text        (Text, Color, Size, Bg, Style: pill|chip)
+     //   "note"   - muted hint            (Text, Color, Size)
+     //   "image"  - a picture             (Url, Size=height px, Overlays)
+     //   "model"  - a 3D model shown as a picture (Url, Size=height px)
+-    //   "button" - a button              (Text, Color=label/icon ink, Size=label px, Bg=fill,
+-    //                                     Url=optional icon or model, Action, Args, Confirm,
+-    //                                     Gather, Style: fill keyword + optional "big")
++    //   "button" - a button              (Text, Icon=named icon, Color=label/icon ink,
++    //                                     Size=label px, Bg=fill, Url=optional picture or model
++    //                                     to use INSTEAD of a named icon, Action, Args, Confirm,
++    //                                     Gather, Style: fill keyword, "ghost" for outlined,
++    //                                     optional "big")
+     //   "check"  - one checkbox          (Text, Action, ArgKey, Checked) — sends "1"/"0"
+     //   "select" - a choice list         (Id, Options, Action, ArgKey, OnChange, Args).
+     //                                     Renders as radio buttons up to 5 options and as a
+     //                                     dropdown beyond that; Style "list"/"dropdown" forces one.
+     //                                     An Option with an EMPTY Value is the placeholder caption.
+     //   "checks" - checkbox group + submit (Options, Need, Action, ArgKey, Text=submit label)
+-    //   "input"  - a text field          (Id, Placeholder) — read by a button's Gather
+     //   "animpick" - pick an animation clip off a loaded model (Id = the item id, Action, ArgKey)
+     //   "banner" - big highlighted result (Text, Color, Size, Style: win|lose)
+     //   "log"    - multi-line block      (Text, Color, Size, Bg)
+@@ -39,10 +40,17 @@
+     // Anything unknown renders as plain text, so adding a game can't crash the client.
+     //
+     // Style keywords that pick a FILL colour (button / banner / chip): ok, no, primary, team,
+-    // win, lose, cur, ghost. Anything else falls through to a neutral fill, so the server can
+-    // invent a keyword without breaking the client. ("s" and "f" were CSS classes on the old
+-    // HTML panel and mean nothing now — they were removed from this list rather than resurrected,
+-    // because no game uses them.)
++    // win, lose, cur. Anything else falls through to a neutral fill, so the server can invent a
++    // keyword without breaking the client. ("s" and "f" were CSS classes on the old HTML panel
++    // and mean nothing now — removed rather than resurrected, because no game uses them.)
++    //
++    // BUTTON WEIGHT: a fill keyword = a solid call-to-action button; "ghost" = an outlined,
++    // secondary one; no keyword = a neutral solid. Reach for "ghost" on the safe/cancel option so
++    // a row of buttons has an obvious primary.
++    //
++    // ICONS: set Icon to a name ("play", "dice", "coins", ...). The older convention — an emoji at
++    // the START of a label, which the client swaps for a vector icon and strips from the text —
++    // still works, so existing games are unaffected.
+     // =====================================================================================
+     public class UiNode
+     {
+@@ -52,7 +60,19 @@
+         public string? Bg { get; set; }       // background colour, hex without '#' (col/row/text/button)
+         public double? Size { get; set; }     // px (text/image) or gap (containers)
+         public string? Style { get; set; }    // free-form keyword(s): ok|no|big|primary|pill|s|f|cur|win|lose|team
+-        public string? Url { get; set; }       // image src / button icon
++        public string? Url { get; set; }       // image src / button icon PICTURE (or model to thumbnail)
++
++        /// <summary>
++        /// A named vector icon, e.g. "play", "dice", "coins" — see ICON_BY_NAME in
++        /// Client/src/app/bl/mg.panel3d.ts for the list. Prefer this over the older convention of
++        /// putting an emoji at the start of the label: it is explicit, it survives the label being
++        /// reworded, and an unknown name simply renders no icon.
++        ///
++        /// This names an INTENT, not a picture file — the client decides what "play" looks like,
++        /// exactly like the PrimeNG icon names in GameCatalog. Use Url instead for a game's own
++        /// artwork on a button.
++        /// </summary>
++        public string? Icon { get; set; }
+         public string? Action { get; set; }    // [GameAction] name for interactive nodes
+         public Dictionary<string, string>? Args { get; set; }
+         public string? ArgKey { get; set; }     // for "checks"/"select"/"check": which arg key the value goes into
+@@ -60,12 +80,11 @@
+         public List<UiOption>? Options { get; set; }
+         public List<UiNode>? Children { get; set; }
+ 
+-        public string? Id { get; set; }          // for "input"/"select": the field id a button can gather
+-        public string? Placeholder { get; set; } // for "input"
++        public string? Id { get; set; }          // for "select": the field id a button can gather
+         public bool OnChange { get; set; }        // for "select"/"check": dispatch Action immediately on change
+         public bool Checked { get; set; }         // for "check"
+         public string? Confirm { get; set; }      // for "button": window.confirm(text) before dispatching
+-        public List<string>? Gather { get; set; } // for "button": input/select ids to read into args[id]
++        public List<string>? Gather { get; set; } // for "button": select ids to read into args[id]
+ 
+         // for "image": small images layered ON TOP of the base image (markers/badges), positioned
+         // in PERCENT of the base image so they stay glued to the right spot at any render size.
+@@ -92,23 +111,23 @@
+         // ---- tiny fluent helpers so game flows read cleanly ----
+         public static UiNode Col(params UiNode[] kids) => new UiNode { Type = "col", Children = new(kids) };
+         public static UiNode Row(params UiNode[] kids) => new UiNode { Type = "row", Children = new(kids) };
+-        public static UiNode Title(string t) => new UiNode { Type = "title", Text = t };
++        public static UiNode Title(string t, string? icon = null)
++            => new UiNode { Type = "title", Text = t, Icon = icon };
+         public static UiNode Text_(string t, string? color = null, double? size = null, string? style = null)
+             => new UiNode { Type = "text", Text = t, Color = color, Size = size, Style = style };
+         public static UiNode Note(string t) => new UiNode { Type = "note", Text = t };
+         public static UiNode Image(string url, double? h = null, string? style = null)
+             => new UiNode { Type = "image", Url = url, Size = h, Style = style };
+         public static UiNode Button(string text, string action, Dictionary<string, string>? args = null,
+-                                    string? url = null, string? style = null, string? confirm = null, List<string>? gather = null)
+-            => new UiNode { Type = "button", Text = text, Action = action, Args = args, Url = url, Style = style, Confirm = confirm, Gather = gather };
++                                    string? url = null, string? style = null, string? confirm = null,
++                                    List<string>? gather = null, string? icon = null)
++            => new UiNode { Type = "button", Text = text, Action = action, Args = args, Url = url, Style = style, Confirm = confirm, Gather = gather, Icon = icon };
+         public static UiNode Banner(string text, string style) => new UiNode { Type = "banner", Text = text, Style = style };
+         public static UiNode Log(string text) => new UiNode { Type = "log", Text = text };
+         public static UiNode Space(double px = 8) => new UiNode { Type = "space", Size = px };
+         // A model rendered as a picture tile (the client turns the model URL into a thumbnail).
+         public static UiNode Model(string url, double? h = null, string? style = null)
+             => new UiNode { Type = "model", Url = url, Size = h, Style = style };
+-        public static UiNode Input(string id, string? placeholder = null)
+-            => new UiNode { Type = "input", Id = id, Placeholder = placeholder };
+         // A dropdown. If onChange, it dispatches Action with args[argKey]=selectedValue immediately;
+         // otherwise a Button with Gather=[id] reads its value.
+         public static UiNode Select(string id, List<UiOption> options, string? action = null, string? argKey = null,
+diff -ruN -x node_modules -x package-lock.json -x .angular -x .git applytest3/GameFlows/DemoGameFlow.cs mgx/GameFlows/DemoGameFlow.cs
+--- applytest3/GameFlows/DemoGameFlow.cs	2026-08-19 18:44:26.168589545 +0000
++++ mgx/GameFlows/DemoGameFlow.cs	2026-08-19 19:22:00.081293675 +0000
+@@ -158,9 +158,6 @@
+                     UiNode.Row(
+                         UiNode.Button("➕ Spawn disc", nameof(PanelSpawn), gather: new() { "color" }),
+                         UiNode.Button("🗑 Clear spawned", nameof(PanelClear))),
+-                    UiNode.Text_("Drop a floating label", "8aa0c0", 13),
+-                    UiNode.Input("text", "type text…"),
+-                    UiNode.Button("💬 Add label", nameof(PanelSay), gather: new() { "text" }),
+                     UiNode.Text_("Music (looping sound)", "8aa0c0", 13),
+                     UiNode.Row(UiNode.Button("🎵 Play", nameof(PlayMusic)), UiNode.Button("⏹ Stop", nameof(StopMusic))),
+                     UiNode.Text_("Turn / end", "8aa0c0", 13),
+@@ -524,20 +521,6 @@
+             await Task.CompletedTask;
+         }
+ 
+-        // Add a floating text label using text typed into the panel.
+-        [GameAction]
+-        public async Task PanelSay(ExecuteActionData data)
+-        {
+-            string text = Arg(data, "text");
+-            if (string.IsNullOrWhiteSpace(text)) return;
+-            var rnd = new Random();
+-            addTextItem(Assets.TEXT).SetText(text)
+-                .SetPosition(Math.Round(rnd.NextDouble() * 6 - 3, 2), 2.2, 0).SetScale(0.5)
+-                .AddAttribute("textColor", "ffd166")
+-                .AddAttribute("spawned", "1");
+-            await Task.CompletedTask;
+-        }
+-
+         // 6) Start looping music (a SOUND item with PlayType "LOOP"). Drop any prior copy first.
+         [GameAction]
+         public async Task PlayMusic(ExecuteActionData data)

@@ -85,7 +85,7 @@ namespace MG.Server.GameFlows
             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "black";
             var current = getPlayerByAttribute("type", turn);
             if (clicked == null || current == null || data.Player == null) { await Task.CompletedTask; return; }
-            if (current.User != null && data.Player.User?.Id != current.User.Id) { await Task.CompletedTask; return; }
+            if (!CallerToMove(data)) { await Task.CompletedTask; return; } // not your turn (AI turns included)
             if (clicked.GetStringAttribute("color") != turn) { await Task.CompletedTask; return; } // only your pieces
 
             // Toggle off if re-clicking the selected piece.
@@ -117,6 +117,7 @@ namespace MG.Server.GameFlows
         public async Task CheckersMove(ExecuteActionData data)
         {
             if (GameData.Attributes.ContainsKey("over")) { await Task.CompletedTask; return; }
+            if (!CallerToMove(data)) { await Task.CompletedTask; return; } // completing the move needs the same right as starting it
             if (!GameData.Attributes.TryGetValue("selectedItem", out var selId) || string.IsNullOrEmpty(selId))
             { await Task.CompletedTask; return; }
             var sel = GameData.FindItem(selId);

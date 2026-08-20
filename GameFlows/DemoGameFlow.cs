@@ -14,8 +14,8 @@ namespace MG.Server.GameFlows
     //        • the shared BOARD            -> addItem(asset)
     //        • a player's HAND             -> addItemToPlayerHand(seat, asset)
     //        • a player's personal TABLE   -> addItemToPlayerTable(seat, asset)
-    //        • the on-screen CONTROL PANEL -> built as HTML on the client (see the demo console
-    //                                          in game-play.component.ts, setupDemoConsole())
+    //        • the on-screen CONTROL PANEL -> seat.Screen = a UiNode tree (see BuildScreens below).
+    //                                          The client renders it verbatim; no client code.
     //
     //   2) HOW TO ADD INTERACTION to items:
     //        • click a 3D item            -> item.AddAction(Method)  +  a [GameAction] method
@@ -24,18 +24,21 @@ namespace MG.Server.GameFlows
     // ARCHITECTURE IN ONE PARAGRAPH: the server is authoritative.  A game is a subclass of
     // BaseGameFlow that builds a tree of ItemData (the scene) and mutates GameData.Attributes
     // (your state).  After every action the base broadcasts the whole GameData to all clients,
-    // and the Angular client just RENDERS it with Three.js — there is no game-specific code on
-    // the client except optional HTML panels.  Actions travel client -> server over SignalR and
+    // and the Angular client just RENDERS it with Three.js — there is NO game-specific code on
+    // the client at all, panels included.  Actions travel client -> server over SignalR and
     // are dispatched by name, but ONLY to methods marked [GameAction] (a security allow-list).
     //
     // TO ADD A BRAND-NEW GAME you touch four places (grep for "DEMO" to see them all):
     //    A) Entities/GameData.cs .......... add a const to GameTypeEnum
-    //    B) GameFlows/BaseGameFlow.cs ...... add a case to CreateGame() and to PrettyName()
+    //    B) GameFlows/BaseGameFlow.cs ...... add a line to GameCatalog() (this is what puts the
+    //                                        button in the client's "Create a game" list) and a
+    //                                        case to CreateGame() and to PrettyName()
     //    C) Database/DataRepository.cs ..... add a case to AttachGameFlow() (so saved games reload)
-    //    D) Client .../games-list.component.html ... add a create button
-    // ...then write a *GameFlow.cs like this one.
+    //    D) GameContent/games/<name>/ ...... drop the art in; flows emit RELATIVE paths
+    // ...then write a *GameFlow.cs like this one.  NO CLIENT FILE IS TOUCHED — the old step "add
+    // a create button to games-list.component.html" is long gone; the catalog drives that list.
     // =====================================================================================
-    public class DemoGameFlow : BaseGameFlow
+    public class DemoGameFlow : FreeMoveGameFlow
     {
         // ---------------------------------------------------------------------------------
         // ASSETS.  An asset is a REUSABLE definition of "what a thing looks like" (a model, an
@@ -155,9 +158,6 @@ namespace MG.Server.GameFlows
                     UiNode.Row(
                         UiNode.Button("➕ Spawn disc", nameof(PanelSpawn), gather: new() { "color" }),
                         UiNode.Button("🗑 Clear spawned", nameof(PanelClear))),
-                    UiNode.Text_("Drop a floating label", "8aa0c0", 13),
-                    UiNode.Input("text", "type text…"),
-                    UiNode.Button("💬 Add label", nameof(PanelSay), gather: new() { "text" }),
                     UiNode.Text_("Music (looping sound)", "8aa0c0", 13),
                     UiNode.Row(UiNode.Button("🎵 Play", nameof(PlayMusic)), UiNode.Button("⏹ Stop", nameof(StopMusic))),
                     UiNode.Text_("Turn / end", "8aa0c0", 13),
@@ -304,9 +304,12 @@ namespace MG.Server.GameFlows
         }
 
         // ============================================================================
-        // 5) BUILT-IN SELECT-THEN-MOVE. The base class provides makeMovable() (click to select,
-        //    highlights in place) and makeMoveSurface() (click the surface to move the selected
-        //    piece to the click point). This is exactly how Chess and D&D move pieces.
+        // 5) BUILT-IN SELECT-THEN-MOVE. FreeMoveGameFlow (which this game inherits INSTEAD of
+        //    BaseGameFlow — that is the opt-in) provides makeMovable() (click to select, highlights
+        //    in place) and makeMoveSurface() (click the surface to move the selected piece to the
+        //    click point). D&D opts in the same way. A game that inherits BaseGameFlow directly
+        //    does NOT expose these actions at all, which is the point: MoveHere moves a piece with
+        //    no rules attached, and every game used to inherit it whether it wanted it or not.
         // ============================================================================
         private void BuildMoveDemo()
         {
@@ -515,20 +518,6 @@ namespace MG.Server.GameFlows
         public async Task PanelClear(ExecuteActionData data)
         {
             getItemsByAttribute("spawned").ForEach(it => removeItem(it.Id));
-            await Task.CompletedTask;
-        }
-
-        // Add a floating text label using text typed into the panel.
-        [GameAction]
-        public async Task PanelSay(ExecuteActionData data)
-        {
-            string text = Arg(data, "text");
-            if (string.IsNullOrWhiteSpace(text)) return;
-            var rnd = new Random();
-            addTextItem(Assets.TEXT).SetText(text)
-                .SetPosition(Math.Round(rnd.NextDouble() * 6 - 3, 2), 2.2, 0).SetScale(0.5)
-                .AddAttribute("textColor", "ffd166")
-                .AddAttribute("spawned", "1");
             await Task.CompletedTask;
         }
 

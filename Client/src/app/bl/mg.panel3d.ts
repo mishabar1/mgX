@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  Container, Text, Image as UiImage, Input as UiInput,
+  Container, Text, Image as UiImage,
   reversePainterSortStable, setPreferredColorScheme,
 } from '@pmndrs/uikit';
 // Real controls, from uikit's own widget set (the VANILLA @pmndrs build, not the React one).
@@ -11,7 +11,14 @@ import { Checkbox, RadioGroup, RadioGroupItem } from '@pmndrs/uikit-default';
 // Named imports ONLY — the package exports ~1600 icons and pulling the barrel in wholesale would
 // drag every one of them into the bundle.
 import {
-  Dice6, Music, Volume2, Eye, Ban, Trash2, X, RotateCcw, RotateCw, Square, Play,
+  Dice6, Music, Volume2, Volume, Eye, Ban, Trash2, X, RotateCcw, RotateCw, Square, Play, Pause,
+  Plus, Minus, Check, CheckCheck, ArrowRight, ArrowLeft, ChevronRight, ChevronLeft,
+  ChevronUp, ChevronDown, SkipForward, SkipBack, Flag, Moon, Sun, Scale, FlaskConical,
+  MessageSquare, Swords, Shield, Coins, Gem, Crown, Users, User, Hammer, Map, MapPin,
+  Clock, Timer, Zap, Star, Heart, Flame, Anchor, Ship, Sparkles, Hand, Search, Settings,
+  Info, CircleHelp, TriangleAlert, Lock, Trophy, Target, Layers, CirclePlus, CircleMinus,
+  CircleCheck, CircleX, Send, Repeat, Shuffle, Undo2, Redo2, Wheat, Trees, Mountain,
+  Pickaxe, Book, Scroll, Wand,
 } from '@pmndrs/uikit-lucide';
 import { GAMES_BASE } from './mg.three';
 
@@ -30,59 +37,42 @@ import { GAMES_BASE } from './mg.three';
 // widths, no explicit heights. Sizes below are in PIXELS, exactly the units the server already
 // sends in `UiNode.Size`, and the whole panel is scaled once at the end.
 //
-// PLACEMENT: default is 'hud' — the panel is parented to the CAMERA and sized from the camera's
-// own frustum, so it sits in view at a sensible size in every game with zero per-game setup
-// (the closest like-for-like replacement for the old overlay). A game can opt into 'world'
-// placement via the panel3dAnchor / panel3dRot / panel3dWidth attributes when we get to
-// per-game positioning.
+// PLACEMENT is entirely the CLIENT's business. On screen the panels are parented to the CAMERA
+// and sized from its frustum, then docked to the edges of the view; in VR they ride the player's
+// hand, where screen edges mean nothing. The SERVER only names an edge, per panel, via
+// UiNode.Panel(dock, ...) — 'right' (the default) | 'left' | 'top' | 'bottom'.
+//
+// There is deliberately no world-anchored placement: nothing has asked for a panel pinned to the
+// table rather than the view, and an unused second placement mode is a second thing to keep
+// working. Add it here (with the per-game attributes to drive it) the day a game needs it.
 // =====================================================================================
 
 export type UiNode = {
   type?: string; text?: string; color?: string; bg?: string; size?: number; style?: string;
+  icon?: string;                       // named icon, resolved through ICON_BY_NAME
   url?: string; action?: string; args?: { [k: string]: string }; argKey?: string; need?: number;
   options?: { label: string, value: string, checked?: boolean, selected?: boolean }[];
-  children?: UiNode[]; id?: string; placeholder?: string; onChange?: boolean; checked?: boolean;
+  children?: UiNode[]; id?: string; onChange?: boolean; checked?: boolean;
   confirm?: string; gather?: string[]; overlays?: { url: string, x: number, y: number, w: number }[];
 };
 
 /**
- * Which system delivers DESKTOP clicks to the panel. VR is unaffected either way — a headset goes
- * through mg.three's controller raycast, which reads the `userData` that makeInteractive() writes.
+ * DESKTOP clicks reach the panel through @pmndrs/pointer-events, the layer uikit's own vanilla
+ * docs prescribe ("since three.js ships no event system, no event system is available out of the
+ * box"). It brings wheel, drag, capture and proper pointerover/out — the panel SCROLLS rather
+ * than shrinking to fit, and that needs wheel and drag events the app's own three.interactive
+ * wrapper does not have. It is also the package the R3F/XR stack uses, so a VR ray pointer can be
+ * fed through the same pipeline later.
  *
- *  'interaction-manager' — the app's own three.interactive wrapper. Known to work; it is what
- *        shipped. It only knows about clicks: no wheel, no drag. Switching back to it therefore
- *        also disables SCROLLING, and a panel taller than its slice will be clipped with no way to
- *        reach the rest — so it is a fallback for proving a regression, not a place to live.
- *  'pointer-events'      — @pmndrs/pointer-events, the layer uikit's own vanilla docs prescribe:
- *        "since three.js ships no event system, no event system is available out of the box". It
- *        brings wheel, drag, capture and proper pointerover/out, and it is the same package the
- *        R3F/XR stack uses, so a VR ray pointer can later be fed through the same pipeline.
+ * Exactly one system may own the panel. Both were live at once briefly and that is a trap: they
+ * each dispatch 'click' on the same object, so every action ran twice — which reads as "nothing
+ * happened" on anything idempotent, and as a double spend on anything that is not. The
+ * three.interactive path stays wired for board items (mg.three registers those); it is simply not
+ * attached to panel widgets.
  *
- * Exactly ONE of them owns the panel. Both were live at once briefly and that is a trap: they each
- * dispatch 'click' on the same object, so every action ran twice (which reads as "nothing happened"
- * on anything idempotent, and as a double spend on anything that is not). Flipping this constant is
- * the whole revert — the other path stays fully wired underneath.
- *
- * A previous attempt at 'pointer-events' was abandoned on a false diagnosis: an HP "+5" that did
- * nothing was read as a dead click path, when in fact HP was already at max and the server was
- * correctly ignoring it. Hence panelClickStats below — the verdict is counted, not eyeballed.
+ * VR is unaffected either way — a headset goes through mg.three's controller raycast, which reads
+ * the `userData` that makeInteractive() writes.
  */
-const PANEL_INPUT: 'interaction-manager' | 'pointer-events' = 'pointer-events';
-
-/**
- * Tally of what actually arrived, per input system, exposed as `window.__panel3dClicks`. Cheap,
- * and it settles "is the new path delivering?" with a number instead of an impression.
- */
-const panelClickStats: { [source: string]: number } = {};
-function notePanelClick(source: string) {
-  panelClickStats[source] = (panelClickStats[source] || 0) + 1;
-  (window as any).__panel3dClicks = panelClickStats;
-  // Also on the DOM. `window` is not readable from a browser extension's isolated world and the
-  // console buffer resets on every dev-server reload, so a page attribute is the only channel that
-  // survives both — and it is what let this be measured instead of guessed.
-  try { document.body.dataset['panel3dClicks'] = JSON.stringify(panelClickStats); } catch { }
-  console.log('[panel3d] click delivered via %s', source, panelClickStats);
-}
 
 /**
  * Authored width in px per dock. A side dock is a narrow column; a top/bottom dock is a wide
@@ -94,14 +84,68 @@ const PANEL_PX_SIDE = 520;
 const PANEL_PX_EDGE = 1100;
 const widthFor = (dock: Dock) => (dock === 'top' || dock === 'bottom') ? PANEL_PX_EDGE : PANEL_PX_SIDE;
 
+// =====================================================================================
+// DESIGN TOKENS.
+//
+// Every size, colour and radius in this file comes from here. That is the whole difference
+// between a panel that looks designed and one that looks assembled: before this the file had
+// 18px padding next to 12px next to 10px, five different greys for secondary text, and a 2px
+// border in a UI where nothing else had one. One scale, used everywhere, reads as deliberate.
+// =====================================================================================
+
+/** 4px rhythm. Every gap, pad and margin is one of these. */
+const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
+
+/** Corner radii, by element size. Small controls get small corners. */
+const RADIUS = { sm: 6, md: 10, lg: 16, pill: 999 };
+
+/** Type ramp. Ratios, not arbitrary numbers. */
+const TYPE = { title: 26, body: 19, label: 17, small: 15, button: 20, chip: 17 };
+
+/** Text colours, high to low emphasis. */
+const INK = {
+  hi: '#f1f5f9',      // titles, button labels
+  base: '#dbe3ec',    // body copy
+  mute: '#93a4b8',    // secondary / notes
+  faint: '#6b7c91',   // captions, disabled
+  accent: '#fbbf24',  // the one warm accent — icons and highlights
+};
+
+/** Surfaces, back to front. */
+const SURFACE = {
+  panel: '#0d1117',   // the panel itself
+  raised: '#182029',  // controls sitting on the panel
+  sunken: '#080b10',  // wells (log blocks, dropdown lists)
+  line: '#242e3c',    // hairline borders
+  lineSoft: '#1a222d',// dividers inside a panel
+};
+
 // `style` arrives as the same free-form keyword string the CSS classes used. Unknown keywords
 // fall through to a neutral look, so the server can invent a style without breaking the client.
 const FILL: { [k: string]: string } = {
   ok: '#15803d', no: '#b91c1c', primary: '#b45309', team: '#1d4ed8',
   win: '#15803d', lose: '#b91c1c', cur: '#b45309', ghost: '#1f2937',
 };
-const NEUTRAL = '#334155';
+const NEUTRAL = '#2a3546';
 const has = (style: string | undefined, k: string) => (style || '').split(/[\s,]+/).includes(k);
+
+/**
+ * Lighten (+) or darken (-) a hex colour. Used for hover / pressed states and for the hairline
+ * a solid control gets along its edge, so every variant is derived from ONE base colour instead
+ * of being hand-picked per style keyword — add a keyword to FILL and its states come for free.
+ */
+function shade(hex: string, amount: number): string {
+  if (!hex) return hex;
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  if (isNaN(n)) return hex;
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  const r = clamp(((n >> 16) & 255) + 255 * amount);
+  const g = clamp(((n >> 8) & 255) + 255 * amount);
+  const b = clamp((n & 255) + 255 * amount);
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+}
 
 // The MSDF atlas uikit ships (Inter, via @pmndrs/msdfonts) contains exactly 104 glyphs: all 95
 // printable ASCII plus Ö Ü Ä § ä ö ü ß ° — verified by reading the font's own char table, not
@@ -152,14 +196,57 @@ function txt(s: string | undefined): string {
 /**
  * The games decorate labels with emoji, and the MSDF atlas has no glyph for any of them (see
  * GLYPHS) — so they used to render as hollow boxes, and then as nothing once txt() started
- * dropping them. Real vector icons put the meaning back: an emoji at the START of a label is
- * replaced by the matching lucide icon, drawn as geometry beside the text.
+ * dropping them. Real vector icons put the meaning back.
  *
- * A label whose emoji is not mapped simply loses it, exactly as before — never a box.
+ * There are TWO ways to ask for one, and the server should prefer the first:
+ *
+ *   1. BY NAME — UiNode.Icon, e.g. UiNode.Button("Play", ..., icon: "play"). Explicit, greppable,
+ *      and it survives the label being reworded or translated.
+ *   2. BY LEADING EMOJI — an emoji at the START of a label is replaced by the matching icon and
+ *      stripped from the text. This is how every existing game asks for one, so it keeps working.
+ *
+ * An unrecognised name or emoji simply yields no icon — never a box, never a crash.
  */
+const ICON_BY_NAME: { [name: string]: any } = {
+  // actions
+  play: Play, pause: Pause, stop: Square, skip: SkipForward, back: SkipBack,
+  add: Plus, plus: Plus, remove: Minus, minus: Minus,
+  'add-circle': CirclePlus, 'remove-circle': CircleMinus,
+  ok: Check, check: Check, 'check-all': CheckCheck, 'check-circle': CircleCheck,
+  cancel: X, close: X, no: CircleX, ban: Ban, delete: Trash2, trash: Trash2,
+  undo: Undo2, redo: Redo2, rotate: RotateCw, 'rotate-ccw': RotateCcw, 'rotate-cw': RotateCw,
+  repeat: Repeat, shuffle: Shuffle, send: Send, search: Search, settings: Settings,
+  // navigation
+  next: ChevronRight, prev: ChevronLeft, up: ChevronUp, down: ChevronDown,
+  right: ArrowRight, left: ArrowLeft,
+  // game concepts
+  dice: Dice6, die: Dice6, roll: Dice6,
+  music: Music, sound: Volume2, volume: Volume, mute: Ban,
+  eye: Eye, look: Eye, hidden: Ban,
+  day: Sun, night: Moon, vote: Scale, judge: Scale,
+  flag: Flag, finish: Flag, trophy: Trophy, star: Star, target: Target,
+  sword: Swords, attack: Swords, shield: Shield, defend: Shield,
+  coin: Coins, coins: Coins, gem: Gem, crown: Crown,
+  player: User, players: Users, hand: Hand, card: Layers,
+  build: Hammer, hammer: Hammer, mine: Pickaxe, wheat: Wheat, wood: Trees,
+  mountain: Mountain, map: Map, pin: MapPin, ship: Ship, anchor: Anchor,
+  time: Clock, timer: Timer, energy: Zap, heart: Heart, fire: Flame,
+  magic: Wand, sparkle: Sparkles, book: Book, scroll: Scroll, lock: Lock,
+  // status
+  info: Info, help: CircleHelp, warning: TriangleAlert, chat: MessageSquare, lab: FlaskConical,
+};
+
+/** Leading-emoji shorthand for the same set. */
 const ICONS: { [ch: string]: any } = {
   '🎲': Dice6, '🎵': Music, '🔊': Volume2, '👁': Eye, '🚫': Ban, '🗑': Trash2,
   '✖': X, '✕': X, '⟲': RotateCcw, '⟳': RotateCw, '⏹': Square, '▶': Play,
+  // These were all being silently dropped: the emoji is not in the MSDF atlas, so the button
+  // just lost its symbol.
+  '➕': Plus, '➖': Minus, '✓': Check, '✔': Check, '→': ArrowRight, '←': ArrowLeft,
+  '⏭': SkipForward, '⏮': SkipBack, '🏁': Flag, '🌙': Moon, '☀': Sun, '⚖': Scale,
+  '🧪': FlaskConical, '💬': MessageSquare, '⚔': Swords, '🛡': Shield, '👑': Crown,
+  '💰': Coins, '💎': Gem, '⏸': Pause, '🔇': Ban, '⭐': Star, '❤': Heart, '🔥': Flame,
+  '⏱': Timer, '⚡': Zap, '🏆': Trophy, '📖': Book, '📜': Scroll, '🔒': Lock, '✨': Sparkles,
 };
 
 /** Split a leading icon off a label: the icon class (if recognised) and the remaining text. */
@@ -169,6 +256,13 @@ function splitIcon(label: string): { Icon?: any, rest: string } {
     if (trimmed.startsWith(ch)) return { Icon: ICONS[ch], rest: trimmed.slice(ch.length).trim() };
   }
   return { rest: label };
+}
+
+/** An explicit icon name wins over a leading emoji; either may be absent. */
+function resolveIcon(name: string | undefined, label: string): { Icon?: any, rest: string } {
+  const named = name ? ICON_BY_NAME[name.trim().toLowerCase()] : undefined;
+  if (named) return { Icon: named, rest: (label || '').trim() };
+  return splitIcon(label);
 }
 
 function fill(style: string | undefined): string {
@@ -225,23 +319,61 @@ function dockOf(style: string | undefined): Dock {
 /**
  * Split a seat's Screen into panels.
  *
- * A `panel` node becomes one panel, pinned to the edge named in its Style. Anything at the top
- * level that is NOT a panel node is collected into one implicit panel docked right — which is
- * exactly what every game that never mentions panels already gets, so this is backward
- * compatible by construction.
+ * A `panel` node becomes one panel, pinned to the edge named in its Style. Anything that is NOT
+ * a panel node is collected into one implicit panel docked right — which is exactly what every
+ * game that never mentions panels already gets, so this is backward compatible by construction.
+ *
+ * Panels are HOISTED from anywhere in the tree, not just the top level. UiNode.Panel() is an
+ * ordinary node server-side, so a game can legally build one inside a col/row; when only the top
+ * level was inspected such a node fell through to the `default` branch of build() and rendered as
+ * one empty Text — silently discarding its whole subtree. A panel is a placement instruction, so
+ * hoisting it out of its container is the only reading that makes sense.
  */
 function splitPanels(screen: UiNode[]): { dock: Dock, nodes: UiNode[] }[] {
   const out: { dock: Dock, nodes: UiNode[] }[] = [];
   let loose: UiNode[] | null = null;
+
+  /** Strip panel descendants out of a subtree, pushing each onto `out`; return what's left. */
+  const hoist = (nodes: UiNode[]): UiNode[] => {
+    const kept: UiNode[] = [];
+    for (const nd of nodes) {
+      if ((nd.type || '').toLowerCase() === 'panel') {
+        out.push({ dock: dockOf(nd.style), nodes: hoist(nd.children || []) });
+      } else if (nd.children?.length) {
+        // Copy rather than mutate: `screen` is the server's payload and the pane fingerprint is
+        // taken from it, so rewriting it in place would make the cache key disagree with itself.
+        kept.push({ ...nd, children: hoist(nd.children) });
+      } else {
+        kept.push(nd);
+      }
+    }
+    return kept;
+  };
+
   for (const nd of screen) {
     if ((nd.type || '').toLowerCase() === 'panel') {
-      out.push({ dock: dockOf(nd.style), nodes: nd.children || [] });
+      out.push({ dock: dockOf(nd.style), nodes: hoist(nd.children || []) });
     } else {
-      if (!loose) { loose = []; out.push({ dock: 'right', nodes: loose }); }
-      loose.push(nd);
+      const [rest] = hoist([nd]);
+      if (rest) {
+        if (!loose) { loose = []; out.push({ dock: 'right', nodes: loose }); }
+        loose.push(rest);
+      }
     }
   }
   return out;
+}
+
+/**
+ * Is this object actually on screen? Walks up the parents checking three's `visible`.
+ *
+ * Needed because three's raycaster does NOT skip invisible objects, and a CLOSED dropdown's
+ * option rows are still registered click targets sitting behind the closed head — without this
+ * a VR controller ray could hit and fire a hidden option.
+ */
+function visibleInTree(o: any): boolean {
+  for (let x = o; x != null; x = x.parent) if (x.visible === false) return false;
+  return true;
 }
 
 /** Only push a new pixelSize when it actually changed — it invalidates uikit's layout. */
@@ -284,7 +416,7 @@ export class MgPanel3d {
 
   /** Local widget state that must survive a rebuild. The SERVER still decides what it means. */
   private picks: { [argKey: string]: string[] } = {};      // "checks" groups, mid-selection
-  private fields: { [id: string]: string } = {};           // "input" values, for `gather`
+  private fields: { [id: string]: string } = {};           // "select" values, for `gather`
   private open: { [id: string]: boolean } = {};            // which dropdowns are expanded
 
   /** Panes the cursor is currently inside. A set, because docks can sit edge to edge. */
@@ -391,26 +523,27 @@ export class MgPanel3d {
       width: wPx,
       flexDirection: 'column',
       alignItems: 'stretch',
-      padding: 18,
-      backgroundColor: '#0b0f14',
-      opacity: 0.92,
-      borderRadius: 18,
-      borderWidth: 2,
-      borderColor: '#1f2937',
+      padding: SPACE.lg,
+      backgroundColor: SURFACE.panel,
+      opacity: 0.94,
+      borderRadius: RADIUS.lg,
+      // 1px, not 2px. A 2px border on a floating panel reads as a debug outline; a hairline
+      // reads as an edge.
+      borderWidth: 1,
+      borderColor: SURFACE.line,
       // mg.three sets scene.pointerEvents = 'none' so board items belong to the InteractionManager
       // alone. That 'none' is INHERITED, so the panel has to opt its own subtree back in here or
       // @pmndrs/pointer-events would never see a single widget. 'auto' is what uikit itself uses
       // (defaultPointerEvents = 'auto' on every component), so this restores uikit's own default
       // rather than inventing a policy; individual nodes still override it — the dropdown list
       // toggles between 'auto' and 'none' to stop a closed list swallowing clicks.
-      pointerEvents: PANEL_INPUT === 'pointer-events' ? 'auto' : 'none',
+      pointerEvents: 'auto',
       // A panel is no longer shrunk until it fits — it keeps a readable size and SCROLLS. That is
-      // only possible because a pointer system now feeds uikit the wheel and drag events it needs
-      // (see PANEL_INPUT); under the InteractionManager, which has neither, this would clip the
-      // overflow with no way to reach it.
+      // only possible because @pmndrs/pointer-events feeds uikit the wheel and drag events it
+      // needs; the InteractionManager has neither, and would clip the overflow unreachably.
       overflow: 'scroll',
-      scrollbarWidth: 6,
-      scrollbarColor: '#475569',
+      scrollbarWidth: SPACE.xs + 2,
+      scrollbarColor: SURFACE.line,
       scrollbarBorderTopLeftRadius: 3,
       scrollbarBorderTopRightRadius: 3,
       scrollbarBorderBottomLeftRadius: 3,
@@ -616,7 +749,6 @@ export class MgPanel3d {
     for (const b of p.clickables) {
       try {
         b.removeEventListener('click', b.userData['__onClick']);
-        this.mgThree.interactionManager?.remove(b);
       } catch { /* already gone */ }
     }
     p.clickables = [];
@@ -636,10 +768,20 @@ export class MgPanel3d {
         const box = new Container({
           flexDirection: isRow ? 'row' : 'column',
           flexWrap: isRow ? 'wrap' : 'no-wrap',
-          alignItems: 'center',
-          justifyContent: isRow ? 'flex-start' : 'flex-start',
-          gap: nd.size ?? 8,                       // `size` is the GAP on a container, as in CSS
-          ...(nd.bg ? { backgroundColor: col(nd.bg, '#111827'), borderRadius: 10, padding: 8 } : {}),
+          // A row of buttons should sit on one baseline; a column should fill the panel width so
+          // its children line up on a single left edge instead of each centring itself.
+          alignItems: isRow ? 'center' : 'stretch',
+          justifyContent: 'flex-start',
+          // `size` is the GAP on a container, as in CSS. Rows are tighter than columns: side by
+          // side needs less separation than stacked.
+          gap: nd.size ?? (isRow ? SPACE.sm : SPACE.md),
+          ...(nd.bg ? {
+            backgroundColor: col(nd.bg, SURFACE.raised),
+            borderRadius: RADIUS.md,
+            borderWidth: 1,
+            borderColor: SURFACE.lineSoft,
+            padding: SPACE.md,
+          } : {}),
         });
         parent.add(box);
         for (const k of nd.children || []) this.build(k, box);
@@ -647,45 +789,62 @@ export class MgPanel3d {
       }
 
       case 'title': {
-        const { Icon, rest } = splitIcon(nd.text || '');
-        const colour = col(nd.color, '#ffd166');
-        if (!Icon) {
-          parent.add(new Text({ text: txt(rest), fontSize: 30, fontWeight: 'bold', color: colour }));
-          return;
-        }
-        const row = new Container({ flexDirection: 'row', alignItems: 'center', gap: 10 });
-        parent.add(row);
-        row.add(new Icon({ width: 28, height: 28, color: colour, flexShrink: 0 }));
-        row.add(new Text({ text: txt(rest), fontSize: 30, fontWeight: 'bold', color: colour }));
+        // The icon carries the accent colour and the words stay near-white. An all-amber heading
+        // shouts; an amber mark next to calm type reads as a brand. Size/Color are honoured (both
+        // used to be hardcoded, so a server that set them on a title was ignored).
+        const { Icon, rest } = resolveIcon(nd.icon, nd.text || '');
+        const size = nd.size ?? TYPE.title;
+        const colour = col(nd.color, INK.hi);
+
+        const head = new Container({
+          flexDirection: 'row', alignItems: 'center', gap: SPACE.sm,
+          paddingBottom: SPACE.sm,
+          // A hairline under the heading is the cheapest possible "this is a designed thing"
+          // signal, and it gives the panel an obvious top section.
+          borderBottomWidth: 1, borderColor: SURFACE.lineSoft,
+          marginBottom: SPACE.xs,
+        });
+        parent.add(head);
+        if (Icon) head.add(new Icon({ width: size * 0.9, height: size * 0.9, color: col(nd.color, INK.accent), flexShrink: 0 }));
+        head.add(new Text({ text: txt(rest), fontSize: size, fontWeight: 'bold', color: colour }));
         return;
       }
 
       case 'note':
-        parent.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? 17, color: col(nd.color, '#94a3b8') }));
+        parent.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? TYPE.label, color: col(nd.color, INK.mute) }));
         return;
 
       case 'banner': {
+        const base = fill(nd.style);
         const box = new Container({
-          backgroundColor: fill(nd.style), borderRadius: 12, padding: 12, marginY: 4,
+          backgroundColor: base,
+          // A lighter hairline along the edge of a saturated block stops it looking like a flat
+          // sticker — it is the same trick the buttons use below.
+          borderWidth: 1, borderColor: shade(base, 0.12),
+          borderRadius: RADIUS.md, padding: SPACE.md, marginY: SPACE.xs,
           alignItems: 'center', justifyContent: 'center',
         });
         parent.add(box);
-        box.add(new Text({ text: txt(nd.text), fontSize: 26, fontWeight: 'bold', color: '#ffffff' }));
+        box.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? TYPE.title, fontWeight: 'bold', color: col(nd.color, '#ffffff') }));
         return;
       }
 
       case 'log': {
+        // A well: darker than the panel, with a hairline, so a running log reads as a distinct
+        // region rather than as more body text.
         const box = new Container({
-          backgroundColor: '#030712', opacity: 0.9, borderRadius: 8, padding: 10,
+          backgroundColor: col(nd.bg, SURFACE.sunken),
+          borderWidth: 1, borderColor: SURFACE.lineSoft,
+          borderRadius: RADIUS.sm, padding: SPACE.md,
           flexDirection: 'column', alignItems: 'flex-start',
         });
         parent.add(box);
-        box.add(new Text({ text: txt(nd.text), fontSize: 15, color: '#9ca3af' }));
+        box.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? TYPE.small, color: col(nd.color, INK.mute) }));
         return;
       }
 
       case 'space':
-        parent.add(new Container({ height: nd.size ?? 8, flexShrink: 0 }));
+        parent.add(new Container({ height: nd.size ?? SPACE.sm, flexShrink: 0 }));
         return;
 
       case 'image': {
@@ -695,7 +854,7 @@ export class MgPanel3d {
         const holder = nd.overlays?.length
           ? new Container({ height: h, flexShrink: 0, positionType: 'relative' })
           : null;
-        const img = new UiImage({ height: h, borderRadius: 8, flexShrink: 0, src: gamesUrl(nd.url || '') });
+        const img = new UiImage({ height: h, borderRadius: RADIUS.sm, flexShrink: 0, src: gamesUrl(nd.url || '') });
         if (holder) { parent.add(holder); holder.add(img); } else { parent.add(img); }
         if (holder) {
           for (const o of nd.overlays || []) {
@@ -715,14 +874,15 @@ export class MgPanel3d {
 
       case 'model': {
         const h = nd.size ?? 84;
-        const box = new UiImage({ height: h, width: h, borderRadius: 8, flexShrink: 0 });
+        const box = new UiImage({ height: h, width: h, borderRadius: RADIUS.sm, flexShrink: 0 });
         parent.add(box);
         this.thumbnail(nd.url, box);
         return;
       }
 
       case 'button':
-        this.addButton(parent, nd.text || '', nd.style, nd.url, () => this.fire(nd, nd.args || {}));
+        this.addButton(parent, nd.text || '', nd.style, nd.url, () => this.fire(nd, nd.args || {}),
+                       nd.bg, nd.color, nd.size, nd.icon);
         return;
 
       case 'check': {
@@ -740,7 +900,10 @@ export class MgPanel3d {
         const all = nd.options || [];
         const opts = all.filter(o => o.value !== '');
         const placeholder = all.find(o => o.value === '')?.label || '';
-        const chosen = this.fields[id] ?? all.find(o => o.selected)?.value;
+        // `selected` is the documented field for a dropdown's current value, but UiOption also
+        // carries `checked` (which "checks" uses) and games set it on selects too — honour both
+        // rather than silently rendering nothing as chosen.
+        const chosen = this.fields[id] ?? all.find(o => o.selected || o.checked)?.value;
 
         const pick = (v: string) => {
           this.fields[id] = v;                       // remembered either way, so `gather` can read it
@@ -798,7 +961,7 @@ export class MgPanel3d {
         const it: any = this.items?.()?.[nd.id || ''];
         const clips: any[] = it?.mesh?.userData?.['clips'] || [];
         if (!clips.length) {
-          parent.add(new Text({ text: '(model still loading)', fontSize: 15, color: '#64748b' }));
+          parent.add(new Text({ text: '(model still loading)', fontSize: TYPE.small, color: INK.faint }));
           return;
         }
         const akey = nd.argKey || 'idx';
@@ -824,40 +987,24 @@ export class MgPanel3d {
         return;
       }
 
-      case 'input': {
-        // uikit ships a real text field with a caret, so this keeps working on desktop/mobile.
-        // The value is remembered locally so a `gather` button can collect it, exactly as the
-        // DOM panel read it out of the <input>.
-        const id = nd.id || '';
-        const box = new Container({
-          backgroundColor: '#111827', borderRadius: 8, borderWidth: 1, borderColor: '#334155',
-          paddingX: 10, paddingY: 8,
-        });
-        parent.add(box);
-        box.add(new UiInput({
-          value: this.fields[id] ?? '',
-          placeholder: nd.placeholder || '',
-          fontSize: 19,
-          color: '#e5e7eb',
-          onValueChange: (v: string) => { this.fields[id] = v; },
-        }));
-        return;
-      }
-
       case 'text':
       default: {
         // A chip/pill, or plain text. Unknown node types land here and show their text rather
         // than breaking, so the server can add a node type without breaking an old client.
         if (has(nd.style, 'pill') || has(nd.style, 'chip') || nd.bg) {
+          const base = col(nd.bg, fill(nd.style));
           const chip = new Container({
-            backgroundColor: col(nd.bg, fill(nd.style)), borderRadius: 999,
-            paddingX: 12, paddingY: 5, flexShrink: 0,
+            backgroundColor: base,
+            borderWidth: 1, borderColor: shade(base, 0.1),
+            borderRadius: RADIUS.pill,
+            paddingX: SPACE.md, paddingY: SPACE.xs, flexShrink: 0,
+            alignItems: 'center', justifyContent: 'center',
           });
           parent.add(chip);
-          chip.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? 19, color: col(nd.color, '#ffffff') }));
+          chip.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? TYPE.chip, fontWeight: 'bold', color: col(nd.color, '#ffffff') }));
           return;
         }
-        parent.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? 21, color: col(nd.color, '#e5e7eb') }));
+        parent.add(new Text({ text: txt(nd.text), fontSize: nd.size ?? TYPE.body, color: col(nd.color, INK.base) }));
         return;
       }
     }
@@ -905,17 +1052,20 @@ export class MgPanel3d {
     let toggle = () => { };
     const head = new Container({
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      backgroundColor: '#111827', borderWidth: 1, borderColor: isOpen ? '#3b82f6' : '#334155',
-      borderRadius: 8, paddingX: 12, paddingY: 9,
-    });
+      backgroundColor: SURFACE.raised, borderWidth: 1,
+      borderColor: isOpen ? '#3b82f6' : SURFACE.line,
+      borderRadius: RADIUS.md, paddingX: SPACE.md, paddingY: SPACE.sm + 2,
+      cursor: 'pointer',
+      hover: { borderColor: isOpen ? '#3b82f6' : shade(SURFACE.line, 0.16) },
+    } as any);
     box.add(head);
     const caption = new Text({
       text: txt(chosen ? chosen.label : (placeholder || 'Choose...')),
-      fontSize: 19, color: chosen ? '#e5e7eb' : '#94a3b8',
+      fontSize: TYPE.label, color: chosen ? INK.base : INK.faint,
     });
     head.add(caption);
     // 'v' / '^' rather than a caret glyph: the atlas has no arrows at all (see GLYPHS).
-    const caret = new Text({ text: isOpen ? '^' : 'v', fontSize: 17, color: '#94a3b8' });
+    const caret = new Text({ text: isOpen ? '^' : 'v', fontSize: TYPE.small, color: INK.mute });
     head.add(caret);
 
     // The open list:
@@ -929,6 +1079,8 @@ export class MgPanel3d {
     const list = new Container({
       positionType: 'absolute', positionTop: '100%', positionLeft: 0, width: '100%',
       display: isOpen ? 'flex' : 'none',
+      // NOTE `visible` is set alongside this below — `display:'none'` removes the list from
+      // LAYOUT, but three's raycaster still happily intersects it.
       // pointerEvents must follow the open state. pointerEventsOrder below makes this list beat
       // its siblings in the hit-test, and 'display: none' does NOT take an element out of
       // hit-testing — so a CLOSED list left at 'auto' silently swallowed every click in the whole
@@ -936,12 +1088,13 @@ export class MgPanel3d {
       pointerEvents: isOpen ? 'auto' : 'none',
       zIndexOffset: 100, renderOrder: 1000, depthTest: false, pointerEventsOrder: 100,
       flexDirection: 'column', gap: 2, alignItems: 'stretch',
-      backgroundColor: '#0b1220', borderRadius: 8, padding: 4,
-      borderWidth: 1, borderColor: '#3b4a63',
+      backgroundColor: SURFACE.sunken, borderRadius: RADIUS.md, padding: SPACE.xs,
+      borderWidth: 1, borderColor: SURFACE.line,
       // opacity is INHERITED, and the panel root sets 0.92 — without overriding it here the
       // options list stays see-through and the controls behind it read straight through the menu.
       opacity: 1,
     });
+    list.visible = isOpen;
     box.add(list);
 
     // Open/closed is pure LOCAL view state, so it is driven in place. Rebuilding the panel for it
@@ -949,8 +1102,9 @@ export class MgPanel3d {
     const setOpen = (v: boolean) => {
       isOpen = v;
       this.open[id] = v;                // remembered, so a later server-driven rebuild agrees
+      list.visible = v;                 // keeps the closed list out of every raycast (see hitTargets)
       list.setProperties({ display: v ? 'flex' : 'none', pointerEvents: v ? 'auto' : 'none' });
-      head.setProperties({ borderColor: v ? '#3b82f6' : '#334155' });
+      head.setProperties({ borderColor: v ? '#3b82f6' : SURFACE.line });
       caret.setProperties({ text: v ? '^' : 'v' });
     };
     toggle = () => setOpen(!isOpen);
@@ -963,15 +1117,17 @@ export class MgPanel3d {
       // not part of the panel's fingerprint, so relying on a rebuild left the menu hanging open.
       const activate = () => {
         setOpen(false);
-        caption.setProperties({ text: txt(o.label), color: '#e5e7eb' });
+        caption.setProperties({ text: txt(o.label), color: INK.base });
         choose(o.value);
       };
       const row = new Container({
-        paddingX: 12, paddingY: 8, borderRadius: 6,
-        backgroundColor: selected ? '#1d4ed8' : '#0b0f14',
-      });
+        paddingX: SPACE.md, paddingY: SPACE.sm, borderRadius: RADIUS.sm,
+        backgroundColor: selected ? FILL['team'] : 'transparent',
+        cursor: 'pointer',
+        hover: { backgroundColor: selected ? shade(FILL['team'], 0.09) : SURFACE.raised },
+      } as any);
       list.add(row);
-      row.add(new Text({ text: txt(o.label), fontSize: 19, color: '#e5e7eb' }));
+      row.add(new Text({ text: txt(o.label), fontSize: TYPE.label, color: INK.base }));
       this.makeInteractive(row, activate);
     }
   }
@@ -998,55 +1154,108 @@ export class MgPanel3d {
    * since a controller ray cannot rely on the widget's own click handling.
    */
   private labelled(control: any, caption: string | undefined, activate?: () => void): Container {
-    const row = new Container({ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 });
+    // The row highlights as one thing and is padded to a comfortable hit height — a 16px checkbox
+    // is a poor target for a mouse and a hopeless one for a VR laser.
+    const row = new Container({
+      flexDirection: 'row', alignItems: 'center', gap: SPACE.md, flexShrink: 0,
+      paddingX: SPACE.sm, paddingY: SPACE.xs + 2,
+      borderRadius: RADIUS.sm,
+      // 'transparent' is a real uikit colour (writeColor zeroes RGBA for it) — NOT a three colour
+      // name, and NOT backgroundOpacity, which uikit has no such property for and silently drops.
+      backgroundColor: 'transparent',
+      cursor: 'pointer',
+      hover: { backgroundColor: SURFACE.raised },
+    } as any);
     row.add(control);
-    if (caption) row.add(new Text({ text: txt(caption), fontSize: 19, color: '#e5e7eb' }));
+
+    // The listener goes on the CONTROL and on the CAPTION — deliberately not on the row.
+    //
+    // pointer-events dispatches to the deepest hit object and then BUBBLES to the parents, and
+    // nothing calls stopPropagation. A listener on the row therefore also fires for a click on
+    // the control, which already runs its own handler — so every checkbox toggled twice, i.e.
+    // "checks" groups could not be ticked at all (splice then push = no change). One listener per
+    // reachable target, no overlap: the caption is a plain Text with no handler of its own.
     this.makeInteractive(control, activate, true);
+    if (caption) {
+      const label = new Text({ text: txt(caption), fontSize: TYPE.label, color: INK.base });
+      row.add(label);
+      if (activate) this.makeInteractive(label, activate);
+    }
     return row;
   }
 
   /**
-   * Make one object clickable by BOTH input paths, with no change to either:
-   *  * desktop — the InteractionManager raycasts registered objects and dispatches DOM-ish events
-   *    ('click', 'mouseover', 'mouseout'); uikit Components override raycast(), so they intersect
-   *    correctly and their own onClick/onCheckedChange fires from that dispatched 'click';
-   *  * VR — mg.three's controller raycast walks up parents looking for exactly this userData shape
-   *    (ItemData.clickActions with at least one key), so it finds the control for free. `uiArgs`
-   *    marks it as a UI activation rather than a clicked board item.
+   * A button.
+   *
+   * Three visual weights, chosen by the style keyword so the server keeps expressing INTENT and
+   * the client keeps deciding what that looks like:
+   *   solid    — a FILL keyword (ok / no / primary / team / cur / win / lose). The call to action.
+   *   outlined — the "ghost" keyword: transparent with a hairline. Secondary, recedes.
+   *   neutral  — no keyword. The default, a muted solid.
+   *
+   * Plus hover and pressed states. uikit supports conditional `hover` / `active` property blocks,
+   * and every state is derived from the ONE base colour via shade() — so adding a keyword to FILL
+   * gets its whole state set for free, and nothing drifts out of step.
    */
   private addButton(parent: Container, rawLabel: string, style: string | undefined,
-                    iconUrl: string | undefined, onClick: () => void) {
+                    iconUrl: string | undefined, onClick: () => void,
+                    bg?: string, color?: string, size?: number, iconName?: string) {
     const big = has(style, 'big');
-    const base = fill(style);
-    const { Icon, rest: label } = splitIcon(rawLabel);
+    const outlined = has(style, 'ghost');
+    // Bg / Color / Size were all dropped here, so a button could only be styled through the FILL
+    // style keywords — the one node type that ignored the common fields every other type honours.
+    // An explicit value now wins over the keyword default.
+    const base = col(bg, fill(style));
+    const solid = !outlined;
+    const ink = col(color, outlined ? INK.base : '#ffffff');
+    const fontSize = size ?? (big ? TYPE.title : TYPE.button);
+    const { Icon, rest: label } = resolveIcon(iconName, rawLabel);
 
     const btn = new Container({
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
-      backgroundColor: base,
-      borderRadius: 10,
-      paddingX: big ? 20 : 14,
-      paddingY: big ? 12 : 9,
+      gap: SPACE.sm,
+      // 'transparent' is handled by uikit's own colour writer (writeColor zeroes RGBA), so it is
+      // safe here even though THREE.Color would parse it as white. `backgroundOpacity` is NOT a
+      // uikit property — passing it looks right and does nothing, which is how the outlined
+      // variant ended up rendering as a solid block.
+      backgroundColor: solid ? base : 'transparent',
+      // A hairline slightly lighter than the fill gives a flat rectangle an edge; on an outlined
+      // button it IS the button.
+      borderWidth: 1,
+      borderColor: solid ? shade(base, 0.14) : SURFACE.line,
+      borderRadius: RADIUS.md,
+      paddingX: big ? SPACE.xl : SPACE.lg,
+      paddingY: big ? SPACE.md : SPACE.sm + 2,
       flexShrink: 0,
-    });
+      cursor: 'pointer',
+      hover: {
+        backgroundColor: solid ? shade(base, 0.09) : SURFACE.raised,
+        borderColor: solid ? shade(base, 0.22) : shade(SURFACE.line, 0.16),
+      },
+      active: {
+        // Pressed goes DARKER and loses its edge highlight — the button reads as pushed in.
+        backgroundColor: solid ? shade(base, -0.07) : shade(SURFACE.raised, -0.04),
+        borderColor: solid ? shade(base, 0.04) : SURFACE.line,
+      },
+    } as any);
     parent.add(btn);
 
     if (Icon) {
-      const sz = big ? 26 : 20;
-      btn.add(new Icon({ width: sz, height: sz, color: '#ffffff', flexShrink: 0 }));
+      const sz = fontSize * 0.95;
+      btn.add(new Icon({ width: sz, height: sz, color: ink, flexShrink: 0 }));
     }
     if (iconUrl) {
       const isModel = /\.(gltf|glb|obj|stl)$/i.test(iconUrl);
-      const icon = new UiImage({ height: big ? 30 : 24, width: big ? 30 : 24, flexShrink: 0 });
+      const px = fontSize * 1.35;
+      const icon = new UiImage({ height: px, width: px, borderRadius: RADIUS.sm, flexShrink: 0 });
       btn.add(icon);
       if (isModel) this.thumbnail(iconUrl, icon);
       else icon.setProperties({ src: gamesUrl(iconUrl) });
     }
-    if (label) btn.add(new Text({ text: txt(label), fontSize: big ? 26 : 21, fontWeight: 'bold', color: '#ffffff' }));
+    if (label) btn.add(new Text({ text: txt(label), fontSize, fontWeight: 'bold', color: ink }));
 
-    // Hover and cursor are uikit's own now that it receives pointerover / pointerout.
     this.makeInteractive(btn, onClick);
   }
 
@@ -1064,22 +1273,13 @@ export class MgPanel3d {
     obj.userData['ItemData'] = { id: '', clickActions: { [this.seatId]: '__panel3d' }, attributes: {} };
     if (activate) obj.userData['uiArgs'] = { fire: activate };
 
-    // DESKTOP: one 'click' listener, fed by whichever system PANEL_INPUT selects. Both dispatch
-    // the same event name on the same object, so the listener itself does not care — which is
-    // exactly why only one of them may be attached at a time.
+    // DESKTOP: one 'click' listener, delivered by @pmndrs/pointer-events. The panel is
+    // deliberately NOT registered with the InteractionManager — that is what keeps the two
+    // systems from both firing the same action.
     if (activate && !selfHandled) {
-      const fire = (ev?: any) => {
-        // pointer-events wraps the DOM event (HtmlEvent.nativeEvent); the InteractionManager passes
-        // its own plain object. That difference is the only honest way to tell who delivered this.
-        notePanelClick(ev?.nativeEvent != null ? 'pointer-events' : 'interaction-manager');
-        activate();
-      };
-      obj.userData['__onClick'] = fire;
-      obj.addEventListener('click', fire);
+      obj.userData['__onClick'] = activate;
+      obj.addEventListener('click', activate);
     }
-    // Registering with the InteractionManager is what makes it raycast this object. Skipping it
-    // under 'pointer-events' is what keeps the two systems from both firing the action.
-    if (PANEL_INPUT === 'interaction-manager') this.mgThree.interactionManager?.add(obj);
     (this.building?.clickables ?? []).push(obj);
   }
 
@@ -1105,4 +1305,21 @@ export class MgPanel3d {
 
   /** Set by the host: the game's loaded items, so an `animpick` can read a model's clips. */
   items?: () => { [id: string]: any };
+
+  /**
+   * Every object currently carrying a panel action, for the VR controller ray.
+   *
+   * It cannot find them by walking the scene: uikit's Component.raycast always returns FALSE,
+   * and three treats that as "do not descend", so an ordinary recursive raycast stops at a
+   * pane's root Container and never sees a single widget. uikit's own input path gets around
+   * this by consulting root.interactableDescendants explicitly — this is the equivalent, using
+   * the list makeInteractive already keeps.
+   */
+  hitTargets(): any[] {
+    const out: any[] = [];
+    for (const p of this.panes) {
+      for (const c of p.clickables) if (visibleInTree(c)) out.push(c);
+    }
+    return out;
+  }
 }
