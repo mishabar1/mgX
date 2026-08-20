@@ -15,6 +15,7 @@ import {GeneralService} from '../../bl/general.service';
 export class HomeViewComponent implements  OnInit, OnDestroy, AfterViewInit, OnChanges{
 
   usernameModel = "";
+  error = "";
 constructor(private router: Router,
             private generalService:GeneralService,
             private signalRService: SignalrService,
@@ -39,14 +40,22 @@ constructor(private router: Router,
   }
 
   login() {
-    this.dalService.login(this.usernameModel).subscribe(res=>{
+    if (!this.usernameModel.trim()) return;   // the server rejects a blank name with a 400
+    this.error = "";
 
-      //store token + user (also persists to localStorage for next time)
-      this.generalService.setAuth(res.token, res.user);
-      this.signalRService.startConnection(res.user.id);
+    this.dalService.login(this.usernameModel).subscribe({
+      next: res => {
+        //store token + user (also persists to localStorage for next time)
+        this.generalService.setAuth(res.token, res.user);
+        this.signalRService.startConnection(res.user.id);
 
-      // navigate
-      this.router.navigate([RouteNames.GamesList]);
+        // navigate
+        this.router.navigate([RouteNames.GamesList]);
+      },
+      // Without this the request just failed silently and the screen sat there doing nothing.
+      error: err => {
+        this.error = err?.error?.error || 'Could not sign in. Is the server running?';
+      }
     })
 
 

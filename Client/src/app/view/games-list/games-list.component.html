@@ -3,6 +3,8 @@
   <div class="mg-header">
     <p-button (onClick)="backClick()" icon="fa-solid fa-chevron-left" severity="secondary"></p-button>
     <div class="mg-title">Hello, {{user.name}}</div>
+    <div class="mg-spacer"></div>
+    <p-button (onClick)="logout()" label="Sign out" icon="pi pi-sign-out" severity="secondary"></p-button>
   </div>
 
   <div class="mg-section">Your games</div>
@@ -22,18 +24,20 @@
       <!-- buttons stop the click from bubbling to the card so they don't open the game -->
       <div class="mg-row-center" style="gap:8px;" (click)="$event.stopPropagation()">
         <p-button (onClick)="setup(game)" severity="warn" label="Settings" icon="pi pi-cog"></p-button>
-        <p-button (onClick)="delete(game)" severity="danger" label="Delete" icon="pi pi-trash"></p-button>
+        @if (game.creatorId && game.creatorId === user?.id) {
+          <p-button (onClick)="delete(game)" severity="danger" label="Delete" icon="pi pi-trash"></p-button>
+        }
       </div>
     </div>
   }
 
   <div class="mg-section">Create a game</div>
-  <div class="mg-row-center" style="column-gap: 12px;">
-    <p-button (onClick)="createGame('TIK_TAK_TOE')" label="Tic-Tac-Toe" icon="pi pi-th-large"></p-button>
-    <p-button (onClick)="createGame('CHESS')" label="Chess" icon="pi pi-flag"></p-button>
-    <p-button (onClick)="createGame('GOMOKU')" label="Gomoku" icon="pi pi-circle-fill"></p-button>
-    <p-button (onClick)="createGame('REVERSI')" label="Reversi" icon="pi pi-circle"></p-button>
-    <p-button (onClick)="createGame('CHECKERS')" label="Checkers" icon="pi pi-star"></p-button>
-    <p-button (onClick)="createGame('DND')" label="D&D" icon="pi pi-compass"></p-button>
+  <div class="create-grid">
+    @for (gt of gameTypes; track gt.type) {
+      <button class="create-tile" (click)="createGame(gt.type)" [title]="gt.label">
+        <img [src]="assetsBase + gt.image" [alt]="gt.label" loading="lazy">
+        <span>{{ gt.label }}</span>
+      </button>
+    }
   </div>
 </div>

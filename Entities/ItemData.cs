@@ -17,7 +17,7 @@ namespace MG.Server.Entities
         public Dictionary<string, string> HoverActions { get; set; } // player id - action name
 
         public string Text { get; set; }
-        public int AnimationIdx { get; set; }
+        public int AnimationIdx { get; set; } = -1; // -1 = no animation (default). >=0 plays that clip.
         public string PlayType { get; set; }
         
 
@@ -59,27 +59,28 @@ namespace MG.Server.Entities
             HoverActions = new Dictionary<string, string>();
         }
 
+        // Depth-first search for a descendant by id.
+        //
+        // FIXED (two bugs, both latent until a game nests items — D&D already parents label
+        // ItemData to its tokens, DnDGameFlow.cs:349/370/385):
+        //   1) a nested hit returned the PARENT of the match instead of the match itself, so
+        //      ExecuteAction handed the game flow the wrong ItemData;
+        //   2) `return` inside List.ForEach only ends THAT iteration, so the search never
+        //      short-circuited and a later sibling could overwrite an already-found match.
+        // A plain foreach with real returns fixes both.
         public ItemData? FindItem(string itemId)
         {
-            ItemData found = null;
+            if (string.IsNullOrEmpty(itemId)) return null;
 
-            Items.ForEach(item =>
+            foreach (var item in Items)
             {
-                if (item.Id == itemId)
-                {
-                    found = item;
-                    return;
-                }
-                var f = item.FindItem(itemId);
-                if (f != null)
-                {
-                    found = item;
-                    return;
-                }
+                if (item.Id == itemId) return item;
 
-            });
+                var found = item.FindItem(itemId);
+                if (found != null) return found;
+            }
 
-            return found;
+            return null;
         }
 
         public void RemoveItem(string itemId)

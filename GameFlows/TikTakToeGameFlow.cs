@@ -162,12 +162,14 @@ namespace MG.Server.GameFlows
             var current = GameData.Players.FirstOrDefault(p => p.Id == GameData.CurrentTurnId);
             if (current == null || data.Player == null) return;
 
-            // Server-authoritative turn check: the click must come from the user who
-            // controls the current-turn seat (AI seats have no user, so allow those).
-            if (current.User != null && data.Player.User?.Id != current.User.Id) return;
+            // Server-authoritative turn check: the click must come from the user who controls
+            // the current-turn seat. Hotseat (one user on both seats) still works; an AI's turn
+            // is NOT playable by a human, which the old `current.User != null &&` form allowed.
+            if (!ControlsSeat(data, current)) return;
 
             string type = current.GetStringAttribute("type"); // whose turn it is: "x" or "o"
 
+            SaveUndoPoint();
             var a = addItem(type == "x" ? Assets.X : Assets.O);
             a.AddAttribute("item");
             a.AddAttribute(type); // x or o

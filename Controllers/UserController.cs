@@ -21,8 +21,11 @@ namespace MG.Server.Controllers
         public async Task<IActionResult> Login(LoginData data)
         {
             _logger.LogTrace("Login");
-            //await _dataRepository.GetGameByID(gameId)
-            return Ok(await _userBL.Login(data) );
+
+            var result = await _userBL.Login(data);
+            if (result == null) return BadRequest(new { error = "A name is required." });
+
+            return Ok(result);
         }
 
         [HttpGet("TensofFlowTest")]

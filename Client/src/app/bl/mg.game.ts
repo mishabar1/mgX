@@ -1,5 +1,5 @@
 import {GameData} from '../entities/game.data';
-import {MgThree} from './mg.three';
+import {MgThree, GAMES_BASE, HEADS_BASE} from './mg.three';
 import {UserData} from '../entities/user.data';
 import {ItemData} from '../entities/item.data';
 import * as THREE from 'three';
@@ -16,6 +16,46 @@ import {Vector3} from "three/src/math/Vector3.js";
 import {Box3} from "three/src/math/Box3.js";
 import {Group} from "three/src/objects/Group.js";
 
+// three-mesh-ui CRASHES on any character missing from its MSDF atlas: it logs "The character
+// 'x' is not included in the font characters set." and then dereferences the absent glyph in
+// mapUVs. That throw lands inside ThreeMeshUI.update() in the render loop, i.e. before the frame
+// is drawn, so one stray character costs the whole scene.
+//
+// Do NOT assume "ASCII is safe" — this atlas is missing '>' as well as '·'. The only reliable
+// answer is the atlas's own character list, so read it from the font JSON and filter against it.
+// Until that arrives, letters/digits/space are the conservative subset every atlas carries.
+const MSDF_FONT_JSON = '/assets/fonts/Roboto-msdf.json';   // absolute: a relative path resolves
+                                                           // against /game-play/<id>/ and the SPA
+                                                           // fallback answers it with index.html
+let msdfCharset: Set<string> | null = null;
+fetch(MSDF_FONT_JSON).then(r => r.json()).then(j => {
+  const cs = new Set<string>();
+  if (typeof j?.info?.charset === 'string') for (const c of j.info.charset) cs.add(c);
+  if (Array.isArray(j?.chars)) for (const c of j.chars) if (c?.char) cs.add(c.char);
+  cs.add(' ');
+  msdfCharset = cs;
+}).catch(() => { /* keep the conservative fallback */ });
+
+// Fold the typographic characters the server actually uses onto plain ones. Note arrows collapse
+// to '-' rather than '->' precisely because '>' is NOT in this atlas.
+const MSDF_MAP: [RegExp, string][] = [
+  [/[\u00b7\u2022]/g, '-'], [/[\u2014\u2013]/g, '-'],
+  [/[\u2192\u2190]/g, '-'],
+  [/[\u2018\u2019]/g, "'"], [/[\u201c\u201d]/g, '"'],
+  [/[\u2714\u2713]/g, 'v'], [/\u00d7/g, 'x'], [/\u2026/g, '...'],
+];
+
+function msdfSafe(s: any): string {
+  let t = String(s ?? '');
+  for (const [re, to] of MSDF_MAP) t = t.replace(re, to);
+  if (msdfCharset) {
+    let out = '';
+    for (const c of t) out += msdfCharset.has(c) ? c : ' ';
+    return out;
+  }
+  return t.replace(/[^A-Za-z0-9 ]/g, ' ');
+}
+
 export class MgGame{
 
   gameData!: GameData;
@@ -24,6 +64,43 @@ export class MgGame{
   playerData!: PlayerData;
   allItems: { [key: string]: ItemData } = {};
 
+  // per-player hand/table anchor meshes, so updateGame can refresh those zones live
+  handMeshes: { [id: string]: THREE.Object3D } = {};
+  tableMeshes: { [id: string]: THREE.Object3D } = {};
+  // floating name labels + a "DEFENDING" badge above each opponent's head
+  nameSprites: { [id: string]: THREE.Sprite } = {};
+  defendSprites: { [id: string]: THREE.Sprite } = {};
+
+  // Drag-vs-click guard: a camera-orbit drag that happens to end over a clickable item must
+  // NOT fire that item's action. Track pointer travel between press and release.
+  private _ptrDown = false;
+  private _ptrX = 0;
+  private _ptrY = 0;
+  private _ptrMoved = false;
+  private _dragGuardReady = false;
+
+  setupDragGuard() {
+    if (this._dragGuardReady || !this.mgThree?.renderer) return;
+    this._dragGuardReady = true;
+    const el = this.mgThree.renderer.domElement;
+    el.addEventListener('pointerdown', (e: PointerEvent) => {
+      this._ptrDown = true; this._ptrX = e.clientX; this._ptrY = e.clientY; this._ptrMoved = false;
+    });
+    el.addEventListener('pointermove', (e: PointerEvent) => {
+      if (!this._ptrDown) return;
+      const dx = e.clientX - this._ptrX, dy = e.clientY - this._ptrY;
+      if (dx * dx + dy * dy > 36) this._ptrMoved = true;   // >6px travel = a drag, not a click
+    });
+    el.addEventListener('pointerup', () => { this._ptrDown = false; });
+  }
+
+  // Per-animal head tuning: rotX/rotY in DEGREES, size = fitted height (world units), y = lift.
+  // Only override what differs from the defaults (rotY 0 = face table; GLB body: rotX 0,
+  // size 2.6, y 1.4; OBJ head: rotX -90, size 1.9, y 2.0). Filled in as we eyeball each.
+  static ANIMAL_TWEAK: { [k: string]: { rotX?: number, rotY?: number, size?: number, y?: number } } = {
+    // (per-animal overrides go here if any Quaternius model needs adjusting)
+  };
+
   // red bounding-box helpers + the green/cyan player table & hand boxes —
   // all hidden unless DEBUG is toggled on.
   showDebugBoxes = false;
@@ -31,7 +108,7 @@ export class MgGame{
   debugPlanes: THREE.Mesh[] = []; // player table (green) + hand (cyan) anchors
   setDebugBoxes(on: boolean) {
     this.showDebugBoxes = on;
-    this.boxHelpers.forEach(h => h.visible = on);
+    this.rebuildDebugBoxes();   // actually ADD the red frames when on, and REMOVE them when off
     // Toggle the coloured boxes' visibility via opacity so any child items
     // (e.g. cards on a player's table) keep rendering when DEBUG is off.
     this.debugPlanes.forEach(m => {
@@ -42,6 +119,22 @@ export class MgGame{
     });
   }
 
+  // Remove every red item frame from the scene, then (only if debug is on) create a fresh one
+  // per current item. Called on toggle and after each game update, so frames are gone when
+  // debug is off and never linger for cards that have since been removed.
+  rebuildDebugBoxes() {
+    this.boxHelpers.forEach(h => { h.parent?.remove(h); (h as any).geometry?.dispose?.(); });
+    this.boxHelpers = [];
+    if (!this.showDebugBoxes) return;
+    forEach(this.allItems, (item: any) => {
+      if (item?.mesh) {
+        const bh = new THREE.BoxHelper(item.mesh, new THREE.Color(0xFF0000));
+        this.boxHelpers.push(bh);
+        this.mgThree.scene.add(bh);
+      }
+    });
+  }
+
   // Player avatar heads (suzanne). Optional — toggled from the game setup page
   // (persisted in localStorage) and read when the game loads.
   showHeads = true;
@@ -49,6 +142,8 @@ export class MgGame{
   setHeadsVisible(on: boolean) {
     this.showHeads = on;
     this.headMeshes.forEach(h => h.visible = on);
+    // The floating name tags belong to the avatar — hide them along with the heads.
+    forEach(this.nameSprites, (spr: THREE.Sprite) => { spr.visible = on; });
   }
 
   getPlayerByUserId(userId: string): PlayerData | null | undefined {
@@ -57,11 +152,18 @@ export class MgGame{
 
   loadGame(mgThree:MgThree, user:UserData) {
     this.mgThree=mgThree;
+    this.setupDragGuard();
 
     this.playerData = this.getPlayerByUserId(user.id)!;
 
+    // VR: a controller "select" on an item dispatches the same click as the mouse would.
+    this.mgThree.vrClickHandler = (mesh: any, point: any) => this.MeshClickFunc({ target: mesh, point });
+    // VR: glow (cyan) the item the controller is pointing at (OutlinePass can't run in VR).
+    this.mgThree.vrHoverHandler = (mesh: any) => this.vrHover(mesh);
+
     // Heads-visibility preference set on the game setup page (default: shown).
-    this.showHeads = localStorage.getItem('mg.showHeads') !== 'false';
+    // Read the "show heads" preference from the saved game state (default shown).
+    this.showHeads = this.gameData.attributes?.['showHeads'] === '1';   // OFF by default; on only if explicitly enabled
 
     console.log("loadGame");
     // console.log(gameData, dayjs().startOf('month').add(1, 'day').set('year', 2018).format('YYYY-MM-DD HH:mm:ss'));
@@ -73,12 +175,38 @@ export class MgGame{
     } else {
       this.mgThree.camera.position.set(this.gameData.observer.position.x, this.gameData.observer.position.y, this.gameData.observer.position.z);
     }
+    this.lastServerCam = this.serverCamKey(this.gameData);
 
+  }
+
+  // ---- server-driven camera (generic renderer capability, NOT game logic) ----
+  // The server owns the camera like everything else. If the server-sent camera position for my
+  // seat (or the observer) CHANGES between updates, the game decided the view must move (e.g. a
+  // growing board needs a higher viewpoint) — glide there. While the server value is unchanged,
+  // the user's manual orbit is never touched.
+  private lastServerCam: string | null = null;
+  private serverCamKey(g: GameData): string | null {
+    const me = g.players?.find((p: PlayerData) => p.id === this.playerData?.id);
+    const pos = me?.camera?.position ?? g.observer?.position;
+    return pos ? `${pos.x},${pos.y},${pos.z}` : null;
+  }
+  private applyServerCamera(new_game: GameData) {
+    const key = this.serverCamKey(new_game);
+    if (!key || key === this.lastServerCam) return;
+    this.lastServerCam = key;
+    const [x, y, z] = key.split(',').map(Number);
+    new TWEEN.Tween(this.mgThree.camera.position)
+      .to({ x, y, z }, 900)
+      .easing(TWEEN.Easing.Quadratic.InOut)
+      .start();
   }
 
   addPlayers(){
 
     forEach(this.gameData.players,(playerData:PlayerData)=>{
+
+      // Unfilled seats (Durak has up to 6, most optional) get no avatar/zones in the scene.
+      if (playerData.type === 'EMPTY_SEAT') return;
 
       let group = new THREE.Group();
       group.name = "PLAYER";
@@ -87,57 +215,261 @@ export class MgGame{
       group.lookAt(0,0,0);
       this.mgThree.scene.add(group);
 
-      // head
-      this.mgThree.gltfLoader.load('\\assets\\heads\\suzanne.glb', (gltf) => {
-        const head: THREE.Group = gltf.scene;
+      // head — each seat shows its ANIMAL model (from the seat's "<Colour> <Animal>" name),
+      // tinted to the colour word. Missing models fall back to the monkey (suzanne), also tinted.
+      const isSelf = !!(this.playerData && this.playerData.id == playerData.id);
+      const animal = this.animalOf(playerData);
+      const tint = this.nameColor(playerData);
 
-        // let texture = this.mgThree.textureLoader.load("\\assets\\heads\\base-color.png");
-        this.mgThree.textureLoader.load("\\assets\\heads\\metallic.png",texture=>{
-          texture.flipY = false;
-          head.traverse( function( object:any ) {
-            if ( object.isMesh ) {
-              object.material.map = texture;
-              object.material.side = THREE.DoubleSide;
-              object.material.needsUpdate = true;
+      // Place any loaded model (GLB body or OBJ head, whatever its native scale/orientation):
+      // tint it, fix normals, then auto-fit to a uniform size and recentre so every animal
+      // sits the same regardless of source. isObj models are often Z-up, so tip them upright.
+      // keepTex = leave the model's own textures/colours alone (used for D&D hero models);
+      // otherwise the model is recoloured to the seat's tint (used for the animal avatars).
+      const applyHead = (root: THREE.Object3D, isObj: boolean, keepTex = false) => {
+        root.traverse((object: any) => {
+          if (object.isMesh) {
+            if (object.geometry && !object.geometry.attributes?.normal) object.geometry.computeVertexNormals();
+            if (object.material) {
+              const mats = Array.isArray(object.material) ? object.material : [object.material];
+              mats.forEach((m: any) => {
+                if (!keepTex) { m.map = null; if (m.color) m.color.setHex(tint); }
+                m.side = THREE.DoubleSide;
+                m.needsUpdate = true;
+              });
             }
-          } );
+          }
         });
 
-        // playerData.avatar.mesh = mesh;
-        // mesh.lookAt(0,0,0);
-        if(this.playerData && this.playerData.id == playerData.id){
-          // this is me, no need to add head
-          // mesh.position.set(playerData.avatar.position.x,playerData.avatar.position.y,playerData.avatar.position.z);
-          // this.mgThree.camera.add(mesh);
-        }else{
-          head.visible = this.showHeads;   // optional per the setup-page setting
-          this.headMeshes.push(head);
-          playerData.avatar.mesh!.add(head)
-        }
+        // Per-animal fine-tuning (rotX/rotY in DEGREES, size = fitted world height, y = lift).
+        // Defaults: OBJ heads are Z-up so tip them upright and make them smaller than the
+        // full-body GLB animals; tweak individual entries below as we see them.
+        const D = Math.PI / 180;
+        const tw = MgGame.ANIMAL_TWEAK[animal] || {};
+        const rotX = (tw.rotX !== undefined ? tw.rotX : (isObj ? -90 : 0)) * D;
+        const rotY = (tw.rotY !== undefined ? tw.rotY : 0) * D;   // face the table centre
+        const target = tw.size !== undefined ? tw.size : (isObj ? 1.9 : 2.6);
+        const yLift = tw.y !== undefined ? tw.y : (isObj ? 2.0 : 1.4);
+        root.rotation.set(rotX, rotY, 0);
 
-      });
+        // Auto-fit: scale so the largest dimension is `target`, then recentre at (0, yLift, 0).
+        root.updateWorldMatrix(true, true);
+        const box = new THREE.Box3().setFromObject(root);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        const s = target / maxDim;
+        root.scale.setScalar(s);
+        root.position.set(-center.x * s, -center.y * s + yLift, -center.z * s);
 
-      //table (green) — a debug anchor for the player's table items
-      const playerTable = new Mesh(new BoxGeometry(0.1, 0.01, 0.1), new MeshBasicMaterial({color: 0x00ff00, transparent: true, opacity: this.showDebugBoxes ? 1 : 0}));
+        if (isSelf) return;                // you don't need to see your own head
+        root.visible = this.showHeads;     // optional per the setup-page setting
+        this.headMeshes.push(root);
+        playerData.avatar.mesh!.add(root);
+      };
+
+      // D&D seats carry a "heroUrl" — render that hero model (keeping its own textures) as the
+      // seated avatar. Everyone else shows the tinted animal, falling back to the monkey.
+      const heroUrl = playerData.attributes?.['heroUrl'];
+      // Generic, server-driven: a game sets attribute "noAvatars"=1 when seats have no seated
+      // figure (e.g. D&D players are tray tokens). No game type is hard-coded here.
+      const noAvatars = this.gameData?.attributes?.['noAvatars'] === '1';
+      if (heroUrl || noAvatars) {
+        // No seated figure for this seat.
+      } else {
+        this.mgThree.gltfLoader.load(
+          `${HEADS_BASE}animals/${animal}.glb`,
+          (gltf) => applyHead(gltf.scene, false),
+          undefined,
+          () => this.mgThree.gltfLoader.load(HEADS_BASE + 'suzanne.glb', (gltf) => applyHead(gltf.scene, false))
+        );
+      }
+
+      // Where the per-seat HAND/TABLE anchors sit is decided ENTIRELY by the server via the
+      // "tableAnchor"/"handAnchor" ("x,y,z") and "tableRot"/"handRot" ("xDeg,yDeg,zDeg") attributes.
+      // The client hard-codes NOTHING — an absent attribute means identity (no offset); the server
+      // (BaseGameFlow) supplies the standard defaults for every game.
+      const vec = (key: string): number[] => {
+        // per-seat attribute wins, then game-level, then identity — the client decides nothing.
+        const s = playerData?.attributes?.[key] ?? this.gameData?.attributes?.[key];
+        if (s) { const p = String(s).split(',').map(Number); if (p.length >= 3 && p.every(n => !isNaN(n))) return p; }
+        return [0, 0, 0];
+      };
+
+      const playerTable = new Group();
       playerTable.name = "PLAYER TABLE";
       playerData.avatar.mesh?.add(playerTable);
-      playerTable.position.set(0,-1.5,1.5);
-      this.debugPlanes.push(playerTable);
+      const tp = vec('tableAnchor'); playerTable.position.set(tp[0], tp[1], tp[2]);
+      const tr = vec('tableRot');    playerTable.rotation.set(MathUtils.degToRad(tr[0]), MathUtils.degToRad(tr[1]), MathUtils.degToRad(tr[2]));
 
+      this.tableMeshes[playerData.id] = playerTable;
       this.createItem(playerData.table,playerTable);
 
-      //hand (cyan) — a debug anchor for the player's hand items
-      const playerHand = new Mesh(new BoxGeometry(0.1, 0.01, 0.1), new MeshBasicMaterial({color: 0x00ffff, transparent: true, opacity: this.showDebugBoxes ? 1 : 0}));
+      const playerHand = new Group();
       playerHand.name = "PLAYER HAND";
       playerData.avatar.mesh?.add(playerHand);
-      playerHand.rotation.x = -Math.PI / 2;
-      playerHand.position.set(0,0,1.5);
-      this.debugPlanes.push(playerHand);
+      const hp = vec('handAnchor'); playerHand.position.set(hp[0], hp[1], hp[2]);
+      const hr = vec('handRot');    playerHand.rotation.set(MathUtils.degToRad(hr[0]), MathUtils.degToRad(hr[1]), MathUtils.degToRad(hr[2]));
 
+      this.handMeshes[playerData.id] = playerHand;
       this.createItem(playerData.hand, playerHand);
 
+      // Floating name label + a DEFENDING badge above each OTHER player's head (you know your
+      // own seat). Skipped entirely for D&D — no seated figures there.
+      if (!(this.playerData && this.playerData.id === playerData.id) && !playerData.attributes?.['heroUrl'] && this.gameData?.attributes?.['noAvatars'] !== '1') {
+        const disp = playerData.user?.name || playerData.name || (playerData.type === 'AI' ? 'AI' : 'open');
+        const nameSpr = this.makeTextSprite(disp, 'rgba(18,28,38,0.75)', '#ffffff');
+        nameSpr.position.set(0, 3.3, 0);
+        nameSpr.visible = this.showHeads;   // hide the name too when avatars are hidden
+        playerData.avatar.mesh!.add(nameSpr);
+        this.nameSprites[playerData.id] = nameSpr;
+
+        const defSpr = this.makeTextSprite('DEFENDING', 'rgba(210,32,42,0.92)', '#ffffff');
+        defSpr.position.set(0, 2.5, 0);
+        defSpr.visible = false;
+        playerData.avatar.mesh!.add(defSpr);
+        this.defendSprites[playerData.id] = defSpr;
+      }
 
 
+
+    });
+
+    this.refreshDefenderBadges();
+  }
+
+  // The animal word (last token of the "<Colour> <Animal>" name) → the .glb filename to load.
+  animalOf(p: PlayerData): string {
+    const parts = (p.name || '').trim().split(/\s+/);
+    return (parts[parts.length - 1] || 'fox').toLowerCase();
+  }
+
+  // The colour to tint the head: resolve the name's colour word(s) as a CSS colour when
+  // possible (so "Chartreuse Fox" is literally chartreuse), else a stable hash of the name.
+  nameColor(p: PlayerData): number {
+    const parts = (p.name || '').trim().split(/\s+/);
+    const colorWord = parts.slice(0, -1).join('');       // everything but the animal
+    const css = this.cssColorToHex(colorWord);
+    return css !== null ? css : this.hashColor(p.name || 'x');
+  }
+
+  cssColorToHex(name: string): number | null {
+    if (!name) return null;
+    const ctx = document.createElement('canvas').getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = '#010203';                            // sentinel
+    try { ctx.fillStyle = name; } catch { return null; }
+    const v = String(ctx.fillStyle);
+    if (v === '#010203') return null;                     // unchanged → not a valid CSS colour
+    if (v[0] === '#') return parseInt(v.slice(1), 16);
+    const m = v.match(/\d+/g);
+    if (m && m.length >= 3) return (parseInt(m[0]) << 16) | (parseInt(m[1]) << 8) | parseInt(m[2]);
+    return null;
+  }
+
+  hashColor(s: string): number {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return this.hslToHex(h % 360, 65, 55);
+  }
+
+  hslToHex(h: number, s: number, l: number): number {
+    s /= 100; l /= 100;
+    const k = (n: number) => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    const to = (x: number) => Math.round(x * 255);
+    return (to(f(0)) << 16) | (to(f(8)) << 8) | to(f(4));
+  }
+
+  // Build a billboard text label (canvas texture) that always faces the camera.
+  makeTextSprite(text: string, bg: string, fg: string): THREE.Sprite {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    const fontSize = 52;
+    const font = `bold ${fontSize}px Arial, sans-serif`;
+    ctx.font = font;
+    const textW = Math.max(40, ctx.measureText(text || ' ').width);
+    const pad = 26;
+    canvas.width = Math.ceil(textW + pad * 2);
+    canvas.height = Math.ceil(fontSize + pad * 2);
+    ctx.font = font;                       // re-set (resizing the canvas clears state)
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    if ((ctx as any).roundRect) (ctx as any).roundRect(0, 0, canvas.width, canvas.height, 18);
+    else ctx.rect(0, 0, canvas.width, canvas.height);
+    ctx.fill();
+    ctx.fillStyle = fg;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;   // canvas colours are sRGB — keep labels crisp, not washed out
+    tex.needsUpdate = true;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
+    const spr = new THREE.Sprite(mat);
+    const h = 0.9;
+    spr.scale.set(h * (canvas.width / canvas.height), h, 1);
+    return spr;
+  }
+
+  private rrect(ctx: any, x: number, y: number, w: number, h: number, r: number) {
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+  }
+
+  // A billboard "character card": name, an HP bar, and the rolled dice — one tidy nameplate.
+  makeCharCard(name: string, hpStr: string, maxStr: string, rollsStr: string, kind: string): THREE.Sprite {
+    const hp = parseInt(hpStr || '0', 10), max = parseInt(maxStr || '0', 10);
+    const rolls = (rollsStr || '').split(';').filter(x => x).map(x => x.split(':').pop() as string);
+    const W = 320, H = rolls.length ? 172 : 118;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d')!;
+    // panel
+    this.rrect(ctx, 4, 4, W - 8, H - 8, 18);
+    ctx.fillStyle = 'rgba(14,20,34,0.92)'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = kind === 'hero' ? '#3a5a8c' : '#8c4a3a'; ctx.stroke();
+    // name
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 30px system-ui, sans-serif';
+    ctx.fillStyle = kind === 'hero' ? '#e8edf5' : '#ffcaa0';
+    ctx.fillText(name, W / 2, 34);
+    // HP bar
+    const bx = 24, by = 56, bw = W - 48, bh = 24;
+    this.rrect(ctx, bx, by, bw, bh, 9); ctx.fillStyle = '#1c2740'; ctx.fill();
+    const f = max > 0 ? Math.max(0, Math.min(1, hp / max)) : 1;
+    const col = f > 0.5 ? '#3fb950' : f > 0.25 ? '#d4a017' : '#e5484d';
+    this.rrect(ctx, bx, by, Math.max(8, bw * f), bh, 9); ctx.fillStyle = col; ctx.fill();
+    ctx.font = 'bold 16px system-ui, sans-serif'; ctx.fillStyle = '#fff';
+    ctx.fillText('HP ' + hp + ' / ' + max, W / 2, by + bh / 2 + 1);
+    // dice chips
+    if (rolls.length) {
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.font = '20px system-ui'; ctx.fillStyle = '#8aa0c0'; ctx.fillText('🎲', 22, 138);
+      let x = 56;
+      rolls.forEach(v => {
+        ctx.font = 'bold 22px system-ui, sans-serif';
+        const tw = ctx.measureText(v).width + 18;
+        this.rrect(ctx, x, 122, tw, 32, 8); ctx.fillStyle = '#241c14'; ctx.fill();
+        ctx.fillStyle = '#ffd166'; ctx.textAlign = 'center'; ctx.fillText(v, x + tw / 2, 139);
+        ctx.textAlign = 'left'; x += tw + 8;
+      });
+    }
+    const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
+    const spr = new THREE.Sprite(mat);
+    const hh = 1.35;
+    spr.scale.set(hh * (W / H), hh, 1);
+    return spr;
+  }
+
+  // Show the DEFENDING badge over whoever is currently defending (hide once the game is over).
+  refreshDefenderBadges() {
+    const def = this.gameData?.attributes?.['defender'];
+    const over = this.gameData?.attributes?.['over'];
+    forEach(this.defendSprites, (spr: THREE.Sprite, id: string) => {
+      spr.visible = !over && !!def && id === def;
     });
   }
 
@@ -152,8 +484,8 @@ export class MgGame{
         this.allItems[itemData.id] = itemData;
         return;
       }
-      const frontURL = '\\assets\\games\\' + this.gameData.assets[itemData.asset].frontURL;
-      const backURL = '\\assets\\games\\' + (this.gameData.assets[itemData.asset].backURL || this.gameData.assets[itemData.asset].frontURL);
+      const frontURL = GAMES_BASE + this.gameData.assets[itemData.asset].frontURL;
+      const backURL = GAMES_BASE + (this.gameData.assets[itemData.asset].backURL || this.gameData.assets[itemData.asset].frontURL);
       const asset = this.gameData.assets[itemData.asset];
       const assetType = asset.type;
 
@@ -161,13 +493,17 @@ export class MgGame{
         if (frontURL.toLowerCase().endsWith("glb") || frontURL.toLowerCase().endsWith("gltf")) {
           this.mgThree.gltfLoader.load(frontURL, (gltf) => {
             const group:Group = gltf.scene;
-            // console.log(gltf.animations.length);
-            // debugger;
 
-            if(gltf.animations && gltf.animations.length && itemData.animationIdx!=null) {
-              let mixer = new THREE.AnimationMixer(group);
-              mixer.clipAction(gltf.animations[itemData.animationIdx]).play();
+            // Keep a mixer + the clip list so the DM can switch animations live (CycleAnim).
+            let mixer: any = null;
+            if (gltf.animations && gltf.animations.length) {
+              mixer = new THREE.AnimationMixer(group);
               this.mgThree.animationMixers.push(mixer);
+              if (itemData.animationIdx != null && itemData.animationIdx >= 0) {
+                const action = mixer.clipAction(gltf.animations[itemData.animationIdx % gltf.animations.length]);
+                if (itemData.attributes?.['animOnce'] === '1') { action.setLoop(THREE.LoopOnce, 1); action.clampWhenFinished = true; }
+                action.play();
+              }
             }
 
             // scale to 1
@@ -185,7 +521,8 @@ export class MgGame{
             group.scale.set(scaleX,scaleY,scaleZ);
             let g = new Group();
             g.add(group);
-
+            g.userData['mixer'] = mixer;                    // for live animation swaps
+            g.userData['clips'] = gltf.animations || [];
 
             this.processItem(itemData, g, parentMesh);
           });
@@ -246,7 +583,7 @@ export class MgGame{
 
       if (assetType == "TOKEN") {
 
-        this.mgThree.textureLoader.load(frontURL, frontTexture => {
+        this.mgThree.getTexture(frontURL, (frontTexture: any) => {
           // console.log( frontTexture.image.width, frontTexture.image.height );
           let aspect = frontTexture.image.width / frontTexture.image.height;
           let x = 1;
@@ -255,6 +592,15 @@ export class MgGame{
             z = 1;
             x = aspect;
           }
+
+          const backTexture = this.mgThree.getTexture(backURL);
+
+          // Owner-only faces: if a card carries an "owner" attribute and I'm not that owner,
+          // draw the BACK on the visible (top) face too — so opponents only ever see the back,
+          // from any camera angle, with a single card item.
+          const ownerId = itemData.attributes?.['owner'];
+          const amOwner = !ownerId || (this.playerData && this.playerData.id === ownerId);
+          const topTexture = amOwner ? frontTexture : backTexture;
 
           var cubeMaterial = [
 
@@ -267,12 +613,13 @@ export class MgGame{
               color: 0xffffff, opacity: 0.5, transparent: true
             }),
             new THREE.MeshBasicMaterial({
-              // top
-              map: frontTexture, transparent: true
+              // top — alphaTest discards fully-transparent pixels so PNGs with an alpha
+              // channel (e.g. the suit symbols) show the felt through, not a black square.
+              map: topTexture, transparent: true, alphaTest: 0.5
             }),
             new THREE.MeshBasicMaterial({
               // bottom
-              map: this.mgThree.textureLoader.load(backURL), transparent: true
+              map: backTexture, transparent: true, alphaTest: 0.5
             }),
             new THREE.MeshBasicMaterial({
               // front
@@ -292,6 +639,31 @@ export class MgGame{
       }
 
       if (assetType == "TEXT3D") {
+        const la = itemData.attributes || {};
+        if (la['charcard']) {
+          // A single "character card" billboard: name + HP bar + dice, nicely formatted.
+          const spr = this.makeCharCard(la['cardName'] || '', la['cardHp'] || '', la['cardMax'] || '', la['cardRolls'] || '', la['cardKind'] || 'hero');
+          const p: any = itemData.position;
+          if (p) spr.position.set(p.x, p.y, p.z);
+          (spr as any).userData['ItemData'] = itemData;
+          itemData.mesh = spr as any;
+          if (parentMesh) parentMesh.add(spr); else this.mgThree.scene.add(spr);
+          this.allItems[itemData.id] = itemData;
+          return;
+        }
+        if (la['label'] || la['hplabel']) {
+          // Character name / HP captions: render as a billboard sprite so they always face the
+          // camera (like the avatar name tags), instead of flat 3D text on the ground.
+          const fg = la['textColor'] ? '#' + la['textColor'] : '#ffffff';
+          const spr = this.makeTextSprite(itemData.text || '', 'rgba(18,28,38,0.72)', fg);
+          const p: any = itemData.position;
+          if (p) spr.position.set(p.x, p.y, p.z);
+          (spr as any).userData['ItemData'] = itemData;
+          itemData.mesh = spr as any;
+          if (parentMesh) parentMesh.add(spr); else this.mgThree.scene.add(spr);
+          this.allItems[itemData.id] = itemData;
+          return;
+        }
         this.mgThree.fontLoader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', (font) => {
 
           const geometry = new TextGeometry(itemData.text!, {
@@ -306,8 +678,12 @@ export class MgGame{
             bevelSegments: 5,
           });
           geometry.center(); // center the text on the item's position
+          // Colour from an optional "textColor" attribute (hex string, e.g. "ffffff");
+          // defaults to red so existing text (chess "CHECK!") is unchanged.
+          const colorAttr = itemData.attributes?.['textColor'];
+          const textColor = colorAttr ? parseInt(colorAttr, 16) : 0xff0000;
           var textMaterial = new THREE.MeshPhongMaterial(
-            {color: 0xff0000, specular: 0xffffff}
+            {color: textColor, specular: 0xffffff}
           );
           let mesh = new THREE.Mesh(geometry, textMaterial);
           this.processItem(itemData, mesh, parentMesh);
@@ -326,8 +702,12 @@ export class MgGame{
           height: 100,
           justifyContent: 'center',
           textAlign: 'center',
-          fontFamily: 'assets/fonts/Roboto-msdf.json',
-          fontTexture: 'assets/fonts/Roboto-msdf.png',
+          // ABSOLUTE (leading slash): three-mesh-ui resolves these against the CURRENT PAGE URL,
+          // so a relative path becomes '/game-play/<id>/assets/...', which the SPA fallback answers
+          // with index.html (HTTP 200!) instead of the font — every glyph metric then comes back
+          // undefined and the library crashes in BufferGeometry.translate.
+          fontFamily: '/assets/fonts/Roboto-msdf.json',
+          fontTexture: '/assets/fonts/Roboto-msdf.png',
           fontColor: new THREE.Color(0x000000),
           // borderRadius: 0.05,
           backgroundOpacity: 0
@@ -337,7 +717,7 @@ export class MgGame{
         // container.rotation.x = -0.55;
         // this.scene.add( container );
 
-        const t1: any = new ThreeMeshUI.Text({content: itemData.text});
+        const t1: any = new ThreeMeshUI.Text({content: msdfSafe(itemData.text)});
         container.add(t1);
 
         this.processItem(itemData, container, parentMesh);
@@ -356,6 +736,7 @@ export class MgGame{
           sound.setBuffer(buffer);
           sound.setLoop(itemData.playType == "LOOP");
           sound.setVolume(1);
+          sound.setRefDistance(80);   // ambient: stay audible across the board / as the camera moves
           sound.play();
           // sound.stop()
         });
@@ -365,6 +746,62 @@ export class MgGame{
         this.processItem(itemData, soundGroup, parentMesh);
 
 
+      }
+
+      if (assetType == "CYLINDER") {
+        // Procedural round disc (a flat cylinder lying on its circular face). Used for
+        // Reversi discs & move markers; the per-item "tint" attribute recolours it via
+        // applyBaseTint(). Unit size is diameter 1, thickness 0.16 — the item's scale
+        // (and the asset scale) size it to the board.
+        const geometry = new THREE.CylinderGeometry(0.5, 0.5, 0.16, 48);
+        const material = new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 0.0, roughness: 0.85});
+        const mesh = new THREE.Mesh(geometry, material);
+        let g = new Group();
+        g.add(mesh);
+        g.scale.set(asset.scale.x, asset.scale.y, asset.scale.z);
+        this.processItem(itemData, g, parentMesh);
+      }
+
+      if (assetType == "ARROW") {
+        // Flat "last move" arrow: a shaft + cone head pointing along +X from the item's
+        // origin. Length comes from the "len" attribute; rotation.y aims it; tint colours it.
+        const len = parseFloat((itemData.attributes && itemData.attributes['len']) || '1');
+        const headLen = 0.42, headR = 0.17, shaftW = 0.1;
+        const shaftLen = Math.max(0.02, len - headLen);
+        const mat = new THREE.MeshStandardMaterial({color: 0xffffff, metalness: 0.0, roughness: 0.9});
+        const shaft = new THREE.Mesh(new THREE.BoxGeometry(shaftLen, 0.06, shaftW), mat);
+        shaft.position.x = shaftLen / 2;
+        const head = new THREE.Mesh(new THREE.ConeGeometry(headR, headLen, 16), mat);
+        head.rotation.z = -Math.PI / 2; // cone points +Y by default → aim it +X
+        head.position.x = shaftLen + headLen / 2;
+        const g = new Group();
+        g.add(shaft); g.add(head);
+        this.processItem(itemData, g, parentMesh);
+      }
+
+      if (assetType == "DIE") {
+        // A real 3D die model (dices/d.glb) with the rolled number floating above it ("?" while
+        // pending) so everyone sees the result. Sits over the figure until the DM takes it.
+        const sides = (itemData.attributes && itemData.attributes['sides']) || '';
+        const result = parseInt((itemData.attributes && itemData.attributes['result']) || '0', 10);
+        const g = new Group();
+        this.mgThree.gltfLoader.load(GAMES_BASE + 'dices/d.glb', (gltf) => {
+          const model = gltf.scene;
+          const box = new THREE.Box3().setFromObject(model);
+          const sz = box.getSize(new THREE.Vector3());
+          const c = box.getCenter(new THREE.Vector3());
+          const s = 2.0 / (Math.max(sz.x, sz.y, sz.z) || 1);   // normalise to ~2 units
+          model.scale.setScalar(s);
+          model.position.set(-c.x * s, -c.y * s, -c.z * s);
+          model.rotation.set(0.5, 0.8, 0.25);                  // tumbled orientation
+          model.traverse((o: any) => { if (o.isMesh) o.castShadow = true; });
+          g.add(model);
+        });
+        // Result number (billboard, always faces the camera), floating above the die.
+        const num = this.makeTextSprite(result > 0 ? String(result) : '?', 'rgba(20,20,20,0.85)', '#ffd166');
+        num.position.set(0, 1.9, 0);
+        g.add(num);
+        this.processItem(itemData, g, parentMesh);
       }
 
 
@@ -391,7 +828,17 @@ export class MgGame{
     old_item.clickActions = new_item.clickActions;
     old_item.visible = new_item.visible;
     old_item.hoverActions = new_item.hoverActions;
+    const prevAnimOnce = old_item.attributes?.['animOnce'], prevAnimNonce = old_item.attributes?.['animNonce'];
     old_item.attributes = new_item.attributes;
+
+    // Swap the playing animation live if the DM changed the clip, flipped the recursive/once
+    // mode, or re-triggered the same clip (the server bumps animNonce so one-shots can replay).
+    if (new_item.animationIdx !== old_item.animationIdx
+        || new_item.attributes?.['animOnce'] !== prevAnimOnce
+        || new_item.attributes?.['animNonce'] !== prevAnimNonce) {
+      old_item.animationIdx = new_item.animationIdx;
+      this.applyAnimation(old_item);
+    }
 
     // colour the selected piece / move-target markers from their attributes
     this.refreshItemHighlight(old_item);
@@ -414,15 +861,59 @@ export class MgGame{
     this.handleItemVisibility(old_item);
   }
 
+  // --- sound effects (Web Audio, no asset files) -----------------------------
+  private audioCtx?: AudioContext;
+  private movedThisUpdate = false;
+  private playTone(freq: number, dur: number, gain = 0.06, type: OscillatorType = 'triangle') {
+    try {
+      if (!this.audioCtx) this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const ctx = this.audioCtx;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(gain, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(); o.stop(ctx.currentTime + dur);
+    } catch {}
+  }
+  private playMove() { this.playTone(320, 0.08, 0.05, 'triangle'); }
+  private playCapture() { this.playTone(150, 0.15, 0.09, 'sawtooth'); }
+  // A "real" board piece/card (not a marker, label, arrow, button…).
+  private static REAL = ['piece', 'disc', 'stone', 'item', 'card', 'fieldAtt', 'fieldDef'];
+  private static CAPTURABLE = ['piece', 'disc', 'stone', 'item'];
+  private hasAny(it: ItemData, keys: string[]) { const a = it.attributes || {}; return keys.some(k => a[k] != null); }
+
   updateGame(new_game: GameData) {
     //console.log("updateGame",new_game);
+
+    // Snapshot before the diff, to tell a move from a capture for the sound cue.
+    const prevRealIds = new Set(Object.keys(this.allItems).filter(id => this.hasAny(this.allItems[id], MgGame.REAL)));
+    const prevCapturable = Object.values(this.allItems).filter(it => this.hasAny(it, MgGame.CAPTURABLE)).length;
+    this.movedThisUpdate = false;
 
     //mark all items to delete - and each item that updated - will be mrked "not"
     forEach(this.allItems, (item, key) => {
       item.markForDelete = true;
     });
 
+    // keep the asset dictionary current — new cards drawn during play add assets, and the
+    // client resolves item.asset against this map (otherwise "unknown asset key").
+    if (new_game.assets) this.gameData.assets = new_game.assets;
+
+    // keep game attributes current (defender/turn/over) so the DEFENDING badge tracks play.
+    if (new_game.attributes) this.gameData.attributes = new_game.attributes;
+    this.refreshDefenderBadges();
+
+    // server may re-position the camera mid-game (e.g. pull back over a growing board)
+    this.applyServerCamera(new_game);
+
     this.updateItem(new_game.table, null);
+
+    // also refresh each player's hand & table zones (cards move in/out of these during play)
+    forEach(new_game.players, (p: PlayerData) => {
+      if (p.hand && this.handMeshes[p.id]) this.updateItem(p.hand, this.handMeshes[p.id]);
+      if (p.table && this.tableMeshes[p.id]) this.updateItem(p.table, this.tableMeshes[p.id]);
+    });
 
     forEach(this.allItems, (item, key) => {
       if (item.markForDelete) {
@@ -438,6 +929,18 @@ export class MgGame{
 
     //players - move / add / remove
 
+    // keep debug frames in sync with the rebuilt item set (no-op when debug is off)
+    if (this.showDebugBoxes) this.rebuildDebugBoxes();
+
+    this.refreshOutline();   // glowing selection contour around the currently-selected item(s)
+
+    // Sound cue: fewer capturable pieces than before ⇒ a capture; otherwise if any real
+    // item changed or a piece glided ⇒ a move. (No sound on a no-op update.)
+    const nowRealIds = Object.keys(this.allItems).filter(id => this.hasAny(this.allItems[id], MgGame.REAL));
+    const nowCapturable = Object.values(this.allItems).filter(it => this.hasAny(it, MgGame.CAPTURABLE)).length;
+    let realChanged = nowRealIds.length !== prevRealIds.size || nowRealIds.some(id => !prevRealIds.has(id));
+    if (nowCapturable < prevCapturable) this.playCapture();
+    else if (realChanged || this.movedThisUpdate) this.playMove();
   }
 
 
@@ -446,16 +949,26 @@ export class MgGame{
     //console.log("updateItemPosition", item, position);
 
     item.position = position;
-    // Set directly (was a TWEEN.Tween that stopped advancing after the tween.js v25 bump,
-    // so pieces updated in data but never moved on screen). Direct set is reliable.
-    item.mesh!.position.set(position.x, position.y, position.z);
+    if (!item.mesh) return;
 
+    const target = new THREE.Vector3(position.x, position.y, position.z);
+    // If it's essentially where it already is, snap (avoids needless work); otherwise
+    // glide there smoothly via the render loop (so opponent moves animate, not jump).
+    if (item.mesh.position.distanceTo(target) < 0.001) {
+      item.mesh.position.copy(target);
+    } else {
+      this.movedThisUpdate = true; // a piece actually moved (for the move sound)
+      this.mgThree.animateTo(item.mesh, target);
+    }
   }
 
   updateItemScale(item: ItemData, scale: V3) {
     //console.log("updateItemScale", item, scale);
 
     item.scale = scale;
+    // Billboard sprite labels manage their own (aspect-ratio) scale — don't overwrite it with
+    // the item's tiny text scale, or the label gets squished/blurred.
+    if ((item.mesh as any)?.isSprite) return;
     item.mesh!.scale.set(scale.x, scale.y, scale.z);
 
   }
@@ -478,7 +991,7 @@ export class MgGame{
   updateItemText(item: ItemData, text?: string) {
     if (item.asset == "TEXTBLOCK") {
       item.text = text;
-      (item.mesh! as any).childrenTexts[0].set({content: text});
+      (item.mesh! as any).childrenTexts[0].set({content: msdfSafe(text)});
     }
   }
 
@@ -514,15 +1027,15 @@ export class MgGame{
       this.mgThree.scene.add(mesh);
     }
 
-    // Add a box helper
-    let boxHelper = new THREE.BoxHelper(mesh, new THREE.Color(0xFF0000));
-    boxHelper.visible = this.showDebugBoxes;   // only visible when DEBUG is on
-    this.boxHelpers.push(boxHelper);
-    this.mgThree.scene.add(boxHelper);
-
+    // (Red debug frames are managed centrally by rebuildDebugBoxes, only while DEBUG is on.)
 
     mesh.userData['ItemData'] = itemData;
     itemData.mesh = mesh
+    // Models load ASYNCHRONOUSLY, so anything derived from a mesh was computed before this point
+    // and has to be re-run now. On a page refresh that is why a selected piece did not glow (the
+    // OutlinePass was handed an item with no mesh yet) and why an animation picker stayed stuck on
+    // "model still loading" (its clips live on the mesh). Debounced, because a scene loads many.
+    this.meshReady();
 
     // Cast & receive shadows so pieces separate visually (contact + inter-piece shadows).
     mesh.traverse((o: any) => {
@@ -581,14 +1094,13 @@ export class MgGame{
 
 
   MeshClickFunc(event: any) {
-    // console.log(event.point);
-    // const direction = new THREE.Vector3();
-    // direction.subVectors( event.target.position, event.point ) ;
-    // console.log(direction);
+    // Ignore clicks that were really the end of a camera-orbit drag.
+    if (this._ptrMoved) { this._ptrMoved = false; return; }
 
     if (this.playerData) {
 
       let action = event.target.userData.ItemData.clickActions[this.playerData.id] || event.target.userData.ItemData.clickActions[''];
+      if (!action) return;   // item has no click action for me → do nothing (avoids stray VR/mouse dispatches)
       SignalrService.singletone.executeAction(
         this.gameData.id,
         this.playerData.id,
@@ -600,17 +1112,20 @@ export class MgGame{
   }
 
   MeshMouseOverFunc(event: any) {
-    // event.target.userData['c'] = event.target.material.clone().color;
-    // event.target.material.color.set(0xff0000);
+    // Hover cue: pointer cursor + a cyan glow on the clickable item under the cursor. We don't
+    // touch OrbitControls here (pieces move by click, not drag), so the camera stays controllable.
     document.body.style.cursor = 'pointer';
-    this.mgThree.orbitControls.enabled = false;
+    const it = event?.target?.userData?.['ItemData'];
+    if (event?.target && this.isHoverable(it)) this.mgThree.setHovered([event.target]);
   }
 
   MeshMouseOutFunc(event: any) {
-    // let c: any = event.target.userData['c'];
-    // event.target.material.color.set(c.r, c.g, c.b);
-    document.body.style.cursor = 'default';
-    this.mgThree.orbitControls.enabled = true;
+    // Don't steal the cursor back from the UI. uikit sets 'pointer' once, on pointerenter, and
+    // never re-applies it; the InteractionManager runs afterwards in the same frame and used to
+    // stamp 'default' over it the moment the pointer crossed off a board item onto a panel — so
+    // panel buttons showed an arrow.
+    if (!this.mgThree?.isUiHovered) document.body.style.cursor = 'default';
+    this.mgThree.setHovered([]);
   }
 
   onMeshClickFunc = this.MeshClickFunc.bind(this);
@@ -633,6 +1148,153 @@ export class MgGame{
 
   // Tint every material in an item's mesh to `hex` (sets base colour + emissive so it's
   // clearly visible regardless of the model's material); null reverts to the original.
+  // Play the model's clip at item.animationIdx (wrapped to the clip count); idx < 0 = stop/static.
+  applyAnimation(item: ItemData) {
+    const mesh: any = item.mesh; if (!mesh) return;
+    const mixer = mesh.userData?.['mixer']; const clips = mesh.userData?.['clips'];
+    if (!mixer || !clips || !clips.length) return;
+    mixer.stopAllAction();
+    const idx: any = (item as any).animationIdx;
+    if (idx != null && idx >= 0) {
+      const action = mixer.clipAction(clips[idx % clips.length]).reset();
+      // server-driven loop mode: attribute animOnce="1" = play the clip ONCE and freeze on the
+      // last frame; otherwise loop forever (default).
+      if (item.attributes?.['animOnce'] === '1') { action.setLoop(THREE.LoopOnce, 1); action.clampWhenFinished = true; }
+      action.play();
+    }
+  }
+
+  // A canvas texture for a die face: ivory background, big number (or "?"), small "dN" caption.
+  makeDieTexture(numStr: string, label: string): THREE.CanvasTexture {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+    const ctx = c.getContext('2d')!;
+    const g = ctx.createLinearGradient(0, 0, 256, 256);
+    g.addColorStop(0, '#f6f1e4'); g.addColorStop(1, '#d9ccb1');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 256);
+    ctx.strokeStyle = '#2a2118'; ctx.lineWidth = 12; ctx.strokeRect(8, 8, 240, 240);
+    ctx.fillStyle = '#241c14'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 150px Georgia, serif';
+    ctx.fillText(numStr, 128, 128);
+    ctx.font = 'bold 30px system-ui, sans-serif'; ctx.fillStyle = '#7a4a24';
+    ctx.fillText(label, 128, 224);
+    const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true;
+    return tex;
+  }
+
+  /** Set by the host: a model finished loading, so mesh-derived UI must be rebuilt. */
+  onMeshesReady?: () => void;
+
+  private meshReadyPending = false;
+
+  /**
+   * Called whenever a model load attaches a mesh. Coalesced: loading a scene attaches dozens of
+   * meshes in a burst, and re-running the dependent work once at the end is enough.
+   */
+  private meshReady() {
+    if (this.meshReadyPending) return;
+    this.meshReadyPending = true;
+    setTimeout(() => {
+      this.meshReadyPending = false;
+      this.refreshOutline();     // a selected item that had no mesh yet can finally be outlined
+      try { this.onMeshesReady?.(); } catch (e) { console.error('[mg.game] onMeshesReady threw', e); }
+    }, 60);
+  }
+
+  // Collect the meshes of all currently-selected items and hand them to the OutlinePass so it
+  // draws a glowing contour around them (instead of recolouring the model).
+  refreshOutline() {
+    const outlined: any[] = [];
+    let selItem: any = null;
+    forEach(this.allItems, (it: any) => {
+      if (it?.attributes?.['selected'] == '1' && it.mesh) { outlined.push(it.mesh); selItem = it; }
+    });
+    // Desktop → OutlinePass contour. VR → a green inverted-hull contour on the selected item.
+    if (this.mgThree?.renderer?.xr?.isPresenting) {
+      this.mgThree.setOutlined([]);
+      const newSelId = selItem?.id || null;
+      if (this.vrSelId && this.vrSelId !== newSelId) this.removeHullByKey('sel:' + this.vrSelId);
+      this.vrSelId = newSelId;
+      if (selItem) this.addHull(selItem, 0x3dff6a, 0.045, 'sel:' + selItem.id);
+    } else {
+      this.mgThree.setOutlined(outlined);
+    }
+  }
+
+  // ---- VR contour highlight (inverted-hull outline; works without postprocessing) ----------
+  private hulls: { [id: string]: any[] } = {};   // per item id → its hull meshes
+  private vrHoverItem: any = null;
+  private vrHoverId: string | null = null;
+  private vrSelId: string | null = null;
+
+  // Add a coloured back-faces "shell" around each mesh of an item — a contour that follows it
+  // (the shell meshes are siblings of the originals, so they move/rotate with the piece).
+  private addHull(item: ItemData, colorHex: number, factor: number, key: string) {
+    if (!item.mesh || this.hulls[key]) return;
+    const srcs: any[] = [];
+    item.mesh.traverse((o: any) => { if (o.isMesh && o.geometry && !o.userData?.['isHull']) srcs.push(o); });
+    const made: any[] = [];
+    srcs.forEach((o: any) => {
+      // Expand a CLONED geometry along its normals — this keeps skin weights so a skinned hull
+      // deforms with the same pose (a plain transform-scale would ignore the skeleton = T-pose).
+      const geo = o.geometry.clone();
+      let norA: any = geo.getAttribute('normal');
+      if (!norA) { geo.computeVertexNormals(); norA = geo.getAttribute('normal'); }   // STL etc. have no normals
+      const posA: any = geo.getAttribute('position');
+      if (posA && norA) {
+        geo.computeBoundingSphere();
+        const grow = (geo.boundingSphere?.radius || 1) * factor;
+        for (let i = 0; i < posA.count; i++) {
+          posA.setXYZ(i, posA.getX(i) + norA.getX(i) * grow, posA.getY(i) + norA.getY(i) * grow, posA.getZ(i) + norA.getZ(i) * grow);
+        }
+        posA.needsUpdate = true;
+      }
+      const mat = new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.BackSide });
+      let hull: any;
+      if (o.isSkinnedMesh && o.skeleton) {
+        hull = new THREE.SkinnedMesh(geo, mat);
+        hull.bindMode = o.bindMode;
+        hull.bind(o.skeleton, o.bindMatrix);   // share the skeleton → same pose
+      } else {
+        hull = new THREE.Mesh(geo, mat);
+      }
+      hull.userData['isHull'] = true;
+      hull.position.copy(o.position);
+      hull.quaternion.copy(o.quaternion);
+      hull.scale.copy(o.scale);
+      o.parent.add(hull);
+      made.push(hull);
+    });
+    this.hulls[key] = made;
+  }
+  private removeHullByKey(key: string | null) {
+    if (!key) return;
+    const list = this.hulls[key];
+    if (list) { list.forEach(h => h.parent?.remove(h)); delete this.hulls[key]; }
+  }
+
+  // VR hover: a cyan contour on the item the controller points at (skips the board and the
+  // selected item, which already has its own contour).
+  // Don't hover-highlight the board, or a coloured piece that isn't the side to move (chess/
+  // checkers) — even though it stays clickable (e.g. to capture).
+  private isHoverable(it: any): boolean {
+    if (!it) return false;
+    if (it.attributes?.['scene'] == '1') return false;
+    const color = it.attributes?.['color'], turn = this.gameData?.attributes?.['turn'];
+    if (color && turn && color !== turn) return false;
+    return true;
+  }
+
+  vrHover(mesh: any) {
+    if (this.vrHoverItem === mesh) return;
+    this.removeHullByKey('hover:' + this.vrHoverId);   // clear the old hover contour
+    this.vrHoverItem = mesh;
+    const it = mesh?.userData?.['ItemData'];
+    this.vrHoverId = it?.id || null;
+    // A bigger cyan contour — shown even on the selected piece (outer ring beyond the green),
+    // so you can tell when you're hovering it.
+    if (this.isHoverable(it)) this.addHull(it, 0x38d6ff, 0.10, 'hover:' + it.id);
+  }
+
   applyEmissive(item: ItemData, hex: number | null) {
     if (!item.mesh) return;
     item.mesh.traverse((o: any) => {
@@ -640,20 +1302,22 @@ export class MgGame{
         const mats = Array.isArray(o.material) ? o.material : [o.material];
         mats.forEach((m: any) => {
           if (!m) return;
+          if (!m.userData) m.userData = {};
           if (hex != null) {
-            if (!o.userData.hl) {
-              o.userData.hl = {
-                color: m.color ? m.color.clone() : null,
-                emissive: m.emissive ? m.emissive.clone() : null
+            // Glow ONLY the emissive channel — keep the model's own colours/textures (so the
+            // whole item isn't flooded with the highlight colour). Saved per-material.
+            if (!m.userData.hl) {
+              m.userData.hl = {
+                emissive: m.emissive ? m.emissive.clone() : null,
+                ei: ('emissiveIntensity' in m) ? m.emissiveIntensity : null
               };
             }
-            if (m.color) m.color.setHex(hex);
-            if (m.emissive) m.emissive.setHex(hex);
+            if (m.emissive) { m.emissive.setHex(hex); if ('emissiveIntensity' in m) m.emissiveIntensity = 0.85; }
             m.needsUpdate = true;
-          } else if (o.userData.hl) {
-            if (m.color && o.userData.hl.color) m.color.copy(o.userData.hl.color);
-            if (m.emissive && o.userData.hl.emissive) m.emissive.copy(o.userData.hl.emissive);
-            o.userData.hl = null;
+          } else if (m.userData.hl) {
+            if (m.emissive && m.userData.hl.emissive) m.emissive.copy(m.userData.hl.emissive);
+            if (('emissiveIntensity' in m) && m.userData.hl.ei != null) m.emissiveIntensity = m.userData.hl.ei;
+            m.userData.hl = null;
             m.needsUpdate = true;
           }
         });
@@ -689,10 +1353,17 @@ export class MgGame{
     });
   }
 
-  // Colour an item from its attributes: selected piece = bright green, move-target = bright yellow.
+  // Colour an item from its attributes: selected piece = bright green, checked king = red,
+  // move-target = bright yellow.
   refreshItemHighlight(item: ItemData) {
     const a = item.attributes || {};
-    if (a['selected'] == '1') this.applyEmissive(item, 0x33ff44);
+    // The "playable" hint is private: only show it on cards the viewer OWNS, otherwise an
+    // opponent's face-down cards would glow and leak which cards they can play.
+    const owner = a['owner'];
+    const mine = !owner || (this.playerData && this.playerData.id === owner);
+    if (a['selected'] == '1') this.applyEmissive(item, null);   // shown by the OutlinePass (desktop) or a ground ring (VR)
+    else if (a['check'] == '1') this.applyEmissive(item, 0xEE2222);
+    else if (a['playable'] == '1' && mine) this.applyEmissive(item, 0x8cff8c);   // a card YOU can play now
     else if (a['moveMarker'] || a['captureTarget'] == '1') this.applyEmissive(item, 0xffe000);
     else this.applyEmissive(item, null);
   }

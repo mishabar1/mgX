@@ -2,8 +2,16 @@
 
   <div class="title">MG X</div>
 
-  <input [(ngModel)]="usernameModel" class="username-input">
+  <input [(ngModel)]="usernameModel" class="username-input"
+         placeholder="Enter your name"
+         autofocus
+         (keyup.enter)="login()">
 
-  <p-button (onClick)="login()"  styleClass="p-button-lg" icon="pi pi-user" label="LOGIN"></p-button>
+  <p-button (onClick)="login()" [disabled]="!usernameModel.trim()"
+            styleClass="p-button-lg" icon="pi pi-user" label="LOGIN"></p-button>
+
+  @if (error) {
+    <div style="margin-top:12px;color:#b91c1c;font:600 14px sans-serif;">{{ error }}</div>
+  }
 
 </div>

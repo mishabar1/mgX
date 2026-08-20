@@ -76,6 +76,21 @@ export class InteractionManager {
   raycaster: THREE.Raycaster;
   treatTouchEventsAsMouseEvents: boolean;
 
+  /**
+   * OCCLUSION HOOK. Returns how far along the current ray the nearest UI panel sits, or Infinity
+   * when the ray misses the UI entirely. mg.three wires this to the in-scene control panels.
+   *
+   * Why it has to exist: the panels are uikit geometry parented to the CAMERA, and they are
+   * deliberately NOT registered here (they are driven by @pmndrs/pointer-events instead — see
+   * mg.panel3d). This manager therefore knew nothing about them and happily raycast straight
+   * THROUGH a panel to the board behind it, so clicking a panel button also selected whatever
+   * piece happened to line up behind it. Solid geometry in front of a thing should hide it.
+   */
+  blockerTest?: (raycaster: THREE.Raycaster) => number;
+
+  /** Distance to the nearest UI panel on this ray; anything further away is occluded. */
+  private blockDistance = Infinity;
+
   constructor(
     renderer: THREE.WebGLRenderer,
     camera: THREE.Camera,
@@ -241,6 +256,12 @@ export class InteractionManager {
   update = () => {
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
+    // Measure the UI once per pass, not once per object. Every event entry point (click,
+    // mousedown, pointerdown, touchstart) calls update() before dispatching, so computing it
+    // here covers hover AND activation, and covers touch — where a tap arrives with no
+    // preceding move, so a hover-flag approach would let the first tap through.
+    this.blockDistance = this.blockerTest ? this.blockerTest(this.raycaster) : Infinity;
+
     this.interactiveObjects.forEach((object) => {
       if (object.target) this.checkIntersection(object);
     });
@@ -297,7 +318,9 @@ export class InteractionManager {
       });
       // object.intersectedObject = intersects[0];
       object.point = intersects[0].point;
-      object.intersected = true;
+      // Behind a panel = not under the cursor. Reported as a plain miss so hover, mouseleave
+      // and click all agree; a piece that slides under a panel correctly un-highlights.
+      object.intersected = distance <= this.blockDistance;
       object.distance = distance;
     } else {
       object.intersected = false;
@@ -371,6 +394,9 @@ export class InteractionManager {
   };
 
   onMouseClick = (mouseEvent: MouseEvent) => {
+    // Raycast at the click/tap point. Essential for touch: a tap synthesises a click with
+    // no preceding mousemove, so without this the ray would use a stale position.
+    this.mapPositionToPoint(this.mouse, mouseEvent.clientX, mouseEvent.clientY);
     this.update();
     this.dispatchToClosest(new InteractiveEvent('click', mouseEvent));
   };

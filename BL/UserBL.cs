@@ -30,12 +30,39 @@ namespace MG.Server.BL
             _tokenService = tokenService;
         }
 
-        internal async Task<LoginResult> Login(LoginData data)
+        internal async Task<LoginResult?> Login(LoginData data)
         {
+            // A blank name would create an anonymous, unaddressable account (and every later
+            // blank login would collide with it). Refuse it here; the controller turns null
+            // into a 400.
+            if (string.IsNullOrWhiteSpace(data?.name)) return null;
+
+            // Exact match — "A" and "a" are different users on purpose.
             var user = _dataRepository.Users.FindLast(x => x.Name == data.name);
+
+            var derivedId = UserData.IdForName(data.name);
+
+            if (user != null && user.Id != derivedId)
+            {
+                // An account created before ids were derived from the name. Adopt the derived id
+                // so the invariant "id == f(name)" holds for EVERY account, not just new ones —
+                // otherwise behaviour would depend on when you first signed up.
+                //
+                // This orphans that user's references in already-saved games (CreatorId,
+                // seat.User.Id). Accepted deliberately: this is POC data, the store already lives
+                // in the OS temp folder, and a one-off break now beats an id scheme with two
+                // permanent classes of user in it.
+                Console.WriteLine($"Login: re-issuing id for '{data.name}': {user.Id} -> {derivedId}");
+                user.Id = derivedId;
+            }
+
             if (user == null)
             {
-                user = new UserData() { Name = data.name };
+                // The id is DERIVED FROM THE NAME (UserData.IdForName), not random. That is what
+                // makes logging back in as "A" land on the same account: it no longer depends on
+                // the users list having survived, so a wiped SQLite file, a restart, or a
+                // redeploy can't quietly turn you into a stranger who doesn't own their own games.
+                user = new UserData { Name = data.name, Id = derivedId };
                 _dataRepository.Users.Add(user);
             }
 

@@ -11,7 +11,7 @@ namespace MG.Server.GameFlows
     // The grid is built from white tiles that abut into a continuous grid and auto-expand
     // around the played area, so you can always keep playing outward in any direction.
     // Freestyle rules: five OR MORE in a row wins. X moves first.
-    public class GomokuGameFlow : BaseGameFlow
+    public class GomokuGameFlow : BoardGameFlow
     {
         internal class Assets
         {
@@ -70,18 +70,6 @@ namespace MG.Server.GameFlows
 
         protected override Task EndGame() => Task.CompletedTask;
 
-        protected override Task<bool> IsEndGame() => Task.FromResult(GameData.Attributes.ContainsKey("over"));
-
-        protected override List<PlayerData> GetGameWinners()
-        {
-            if (GameData.Attributes.TryGetValue("winnerColor", out var wc) && !string.IsNullOrEmpty(wc))
-            {
-                var p = getPlayerByAttribute("type", wc);
-                if (p != null) return new List<PlayerData> { p };
-            }
-            return new List<PlayerData>();
-        }
-
         // ------------------------------------------------------------------
         // Placing a mark (human clicks an empty intersection tile).
         // ------------------------------------------------------------------
@@ -93,7 +81,7 @@ namespace MG.Server.GameFlows
             string turn = GameData.Attributes.TryGetValue("turn", out var t) ? t : "X";
             var current = getPlayerByAttribute("type", turn);
             if (current == null || data.Player == null) { await Task.CompletedTask; return; }
-            if (current.User != null && data.Player.User?.Id != current.User.Id) { await Task.CompletedTask; return; } // not your turn
+            if (!CallerToMove(data)) { await Task.CompletedTask; return; } // not your turn (AI turns included)
             if (data.Item == null || !data.Item.HaveAttribute("cell")) { await Task.CompletedTask; return; }
 
             PlaceStoneAt(data.Item.GetIntAttribute("gx"), data.Item.GetIntAttribute("gy"), turn);
@@ -103,6 +91,7 @@ namespace MG.Server.GameFlows
         // Core placement, shared by the human action and the AI.
         private void PlaceStoneAt(int gx, int gy, string mark)
         {
+            SaveUndoPoint();
             char c = mark == "X" ? 'b' : 'w'; // engine uses b/w internally (X→b, O→w)
 
             if (BuildStoneMap().ContainsKey((gx, gy))) return; // occupied

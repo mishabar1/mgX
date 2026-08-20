@@ -8,12 +8,14 @@ namespace MG.Server.GameFlows
     // destinations (blocking, captures, castling, en passant, promotion, and moves
     // that would leave your own king in check are excluded). Turns alternate
     // white → black. Move legality is computed by the pure ChessRules engine.
-    public class ChessGameFlow : BaseGameFlow
+    public class ChessGameFlow : BoardGameFlow
     {
         internal class Assets
         {
-            // The client normalizes every model so max(width,depth) == asset.scale.
-            internal static AssetData BOARD = new ObjectAssetData("chess/board.glb") { Scale = new V3(8) };
+            // Wooden 8x8 board (grid + frame) as a flat textured tile — chess's OWN copy
+            // (chess/board_tex.png), independent of the checkers board. Scale is applied to
+            // the board ITEM (a TOKEN renders as a 1x1 tile) → 8x8 grid inside a 1-unit frame.
+            internal static AssetData BOARD = new TokenAssetData("chess/board_tex.png");
 
             internal static AssetData KING_W = new ObjectAssetData("chess/king_w.gltf");
             internal static AssetData QUEEN_W = new ObjectAssetData("chess/queen_w.gltf");
@@ -30,15 +32,18 @@ namespace MG.Server.GameFlows
             internal static AssetData PAWN_B = new ObjectAssetData("chess/pawn_b.gltf");
 
             // yellow move-target marker (reused from tic-tac-toe), shown on a piece's legal squares
-            internal static AssetData MARKER = new ObjectAssetData("ticktacktoe/hover.gltf") { Scale = new V3(0.6) };
+            internal static AssetData MARKER = new ObjectAssetData("ticktacktoe/hover.gltf") { Scale = new V3(0.5) };
 
             // 3D text used for the "whose turn" labels around the board edges.
             internal static AssetData TURN_TEXT = new Text3dAssetData("turn");
+
+            // "Last move" arrow (from → to), shown until the next move.
+            internal static AssetData ARROW = new ArrowAssetData("move");
         }
 
-        // Square centers along x and z, measured from the live board (8 squares over ~[-3.63..3.64]).
-        private static readonly double[] COORDS = { -3.18, -2.27, -1.36, -0.45, 0.45, 1.36, 2.27, 3.18 };
-        private const double PIECE_SCALE = 0.85;
+        // Cell centres on a clean 8x8 grid: cell = 1 world unit, board spans -4..+4.
+        private static readonly double[] COORDS = { -3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5 };
+        private const double PIECE_SCALE = 0.62; // smaller pieces (were 0.85 — too big for the squares)
 
         // Piece tints (the raw models are harsh pure-white / purple). Charcoal (not pure
         // black) keeps the black pieces' shape readable under lighting.
@@ -59,6 +64,7 @@ namespace MG.Server.GameFlows
             addAsset(Assets.BISHOP_B); addAsset(Assets.KNIGHT_B); addAsset(Assets.PAWN_B);
             addAsset(Assets.MARKER);
             addAsset(Assets.TURN_TEXT);
+            addAsset(Assets.ARROW);
 
             GameData.Observer.Position.Set(0, 10, 0);
 
@@ -82,8 +88,9 @@ namespace MG.Server.GameFlows
 
         protected override Task StartGame()
         {
-            // board.glb's model origin is at a CORNER, so recenter it on the origin.
-            addItem(Assets.BOARD).SetPosition(-3.17, 0, -3.14); // static surface (no free-move action)
+            // Board centred at the origin, scaled to a 10-unit tile: 8x8 grid (-4..+4, matching
+            // COORDS) inside a 1-unit wooden frame that carries the turn text.
+            addItem(Assets.BOARD).SetPosition(0, 0, 0).SetScale(10, 1, 10); // static surface (no free-move action)
 
             GameData.Attributes["turn"] = "white"; // white moves first
             GameData.Attributes.Remove("ep");      // no en-passant target yet
@@ -109,8 +116,31 @@ namespace MG.Server.GameFlows
         private void UpdateTurnText()
         {
             string turn = GameData.Attributes.TryGetValue("turn", out var tv) ? tv : "white";
-            SetBoardText((turn == "white" ? "WHITE" : "BLACK") + " TO MOVE",
-                         turn == "white" ? "0xF2F2F2" : "0x151515"); // colour follows the side to move
+            char side = turn == "white" ? 'w' : 'b';
+            var (board, _) = BuildBoard();
+            bool inCheck = ChessRules.InCheck(board, side);
+
+            // Flag the checked king so the client lights it red (clear any stale flag first).
+            foreach (var k in getItemsByAttribute("check")) k.Attributes.Remove("check");
+            if (inCheck)
+            {
+                var king = FindKing(side);
+                if (king != null) king.Attributes["check"] = "1";
+            }
+
+            string label = (turn == "white" ? "WHITE" : "BLACK") + " TO MOVE";
+            if (inCheck) label += "  -  CHECK!";
+            SetBoardText(label, turn == "white" ? "0xF2F2F2" : "0x151515"); // colour follows the side to move
+        }
+
+        // The king item of the given side ('w'/'b'), or null.
+        private ItemData? FindKing(char side)
+        {
+            foreach (var it in getItemsByAttribute("piece"))
+                if (TypeChar(it.GetStringAttribute("piece")) == 'K' &&
+                    (it.GetStringAttribute("color") == "white" ? 'w' : 'b') == side)
+                    return it;
+            return null;
         }
 
         // Place the same label flat on all 4 board edges (readable from any side).
@@ -120,13 +150,14 @@ namespace MG.Server.GameFlows
         {
             foreach (var t in getItemsByAttribute("turnText")) removeItem(t.Id);
 
-            // (x, z, rollZ°) for the south, north, west and east edges.
+            // (x, z, rollZ°) for the south, north, west and east edges. On the wooden frame
+            // (grid ends at ±4, frame centre ≈ ±4.5).
             (double x, double z, double roll)[] sides =
             {
-                (0, -3.9, 180),  // south (white's side)
-                (0,  3.9, 0),    // north (black's side)
-                (-3.9, 0, -90),  // west
-                ( 3.9, 0,  90),  // east
+                (0, -4.5, 180),  // south (white's side)
+                (0,  4.5, 0),    // north (black's side)
+                (-4.5, 0, -90),  // west
+                ( 4.5, 0,  90),  // east
             };
             foreach (var s in sides)
             {
@@ -171,6 +202,18 @@ namespace MG.Server.GameFlows
             return Task.FromResult(true);
         }
 
+        // Server-decided top HUD (material readout). The client just displays attribute "hud".
+        protected override void RefreshScreens()
+        {
+            var val = new Dictionary<string, int> { { "pawn", 1 }, { "knight", 3 }, { "bishop", 3 }, { "rook", 5 }, { "queen", 9 }, { "king", 0 } };
+            int Mat(string c) => getItemsByAttribute("piece")
+                .Where(p => p.GetStringAttribute("color") == c)
+                .Sum(p => val.GetValueOrDefault(p.GetStringAttribute("piece"), 0));
+            int w = Mat("white"), b = Mat("black"), d = w - b;
+            string adv = d > 0 ? $"White +{d}" : d < 0 ? $"Black +{-d}" : "even";
+            GameData.Attributes["hud"] = $"White {w}   Black {b}   ({adv})";
+        }
+
         protected override List<PlayerData> GetGameWinners()
         {
             if (GameData.Attributes.TryGetValue("winnerColor", out var wc) && !string.IsNullOrEmpty(wc))
@@ -180,8 +223,6 @@ namespace MG.Server.GameFlows
             }
             return new List<PlayerData>();
         }
-
-        private static string Cap(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s.Substring(1);
 
         // ------------------------------------------------------------------
         // Selecting a piece → show only its legal moves as yellow markers.
@@ -247,6 +288,12 @@ namespace MG.Server.GameFlows
         [GameAction]
         public async Task ChessSelect(ExecuteActionData data)
         {
+            // Chess previously had NO caller check anywhere — OnPieceSelected only verified the
+            // PIECE's colour matched the turn, so the black player (or any other seat) could play
+            // White's move. Both entry points are gated now.
+            if (GameData.Attributes.ContainsKey("over")) { await Task.CompletedTask; return; }
+            if (!CallerToMove(data)) { await Task.CompletedTask; return; }
+
             var clicked = data.Item;
 
             // Clicking the already-selected piece deselects it (toggle off).
@@ -283,12 +330,15 @@ namespace MG.Server.GameFlows
             }
 
             // Not a capture of the selected piece → normal selection.
-            await SelectPiece(data);
+            await SelectPieceCore(data);
         }
 
         [GameAction]
         public async Task ChessMove(ExecuteActionData data)
         {
+            if (GameData.Attributes.ContainsKey("over")) { await Task.CompletedTask; return; }
+            if (!CallerToMove(data)) { await Task.CompletedTask; return; }
+
             var marker = data.Item;
             if (marker == null || !marker.HaveAttribute("moveMarker")) { await Task.CompletedTask; return; }
 
@@ -319,6 +369,7 @@ namespace MG.Server.GameFlows
         // Shared by human moves (ChessMove) and the AI (PlayAI).
         private void ApplyMove(ItemData piece, int fromC, int fromR, ChessRules.Move m)
         {
+            SaveUndoPoint();
             var (_, items) = BuildBoard();
             int tc = m.ToC, tr = m.ToR;
 
@@ -384,7 +435,24 @@ namespace MG.Server.GameFlows
             Console.WriteLine($"CHESS: {moverColor} {moverPiece} {Square(fromC, fromR)}->{Square(tc, tr)}{tag}  |  {GameData.Attributes["turn"]} to move");
 
             UpdateTurnText();  // refresh the board-edge "whose turn" labels
+            DrawMoveArrow(fromC, fromR, tc, tr); // last-move arrow
             ClearSelection(); // un-highlight + remove markers
+        }
+
+        // Blue arrow from the moved piece's old square to its new one; replaced each move.
+        private void DrawMoveArrow(int fromC, int fromR, int toC, int toR)
+        {
+            foreach (var a in getItemsByAttribute("movearrow")) removeItem(a.Id);
+            double x1 = COORDS[fromC], z1 = COORDS[fromR], x2 = COORDS[toC], z2 = COORDS[toR];
+            double dxw = x2 - x1, dzw = z2 - z1;
+            double len = Math.Sqrt(dxw * dxw + dzw * dzw);
+            double ang = Math.Atan2(-dzw, dxw) * 180.0 / Math.PI;
+            addItem(Assets.ARROW)
+                .SetPosition(x1, 0.35, z1)
+                .SetRotation(0, ang, 0)
+                .AddAttribute("movearrow", "1")
+                .AddAttribute("len", len.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .AddAttribute("tint", "0x2F80ED");
         }
 
         // Board coordinate → algebraic square name, e.g. (4,0) → "e1".

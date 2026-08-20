@@ -7,6 +7,7 @@ import {Router} from '@angular/router';
 import {UserData} from '../../entities/user.data';
 import {GeneralService} from '../../bl/general.service';
 import {ConfirmationService} from 'primeng/api';
+import {GAMES_BASE} from '../../bl/mg.three';
 
 @Component({
     selector: 'app-games-list',
@@ -18,6 +19,8 @@ import {ConfirmationService} from 'primeng/api';
 export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, OnChanges {
 
   games: GameData[]=[];
+  gameTypes: {type: string, label: string, icon: string, image: string}[] = [];   // creatable games, from the server
+  assetsBase = GAMES_BASE;   // cover images are hosted by the server
   user!:UserData;
   constructor(public signalRService: SignalrService,
               private router: Router,
@@ -30,16 +33,17 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
   ngOnInit(): void {
     this.user = this.generalService.User!;
     this.updateGamesList();
+    this.dalService.getGameTypes().subscribe(list => this.gameTypes = list);   // server-driven "Create" buttons
 
     // SignalR callbacks fire OUTSIDE Angular's zone, so re-run the refresh inside
     // the zone — otherwise this.games updates but change detection never runs and
     // the list only repaints on the next in-app click (e.g. Refresh).
-    this.signalRService.hubConnection.on('GamesUpdated', data => {
+    this.signalRService.hubConnection?.on('GamesUpdated', data => {
       console.log('GamesUpdated', data);
       this.zone.run(() => this.updateGamesList());
     });
 
-    this.signalRService.hubConnection.on('GameDeleted', data => {
+    this.signalRService.hubConnection?.on('GameDeleted', data => {
       console.log('GameDeleted', data);
       this.zone.run(() => this.updateGamesList());
     });
@@ -55,6 +59,18 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
 
   ngOnDestroy(): void {
   }
+  /**
+   * Sign out: drop the token + cached user, close the hub socket, and go back to the login
+   * screen. There was no logout path in the app at all before this — GeneralService.clearAuth()
+   * existed but nothing ever called it — so the only way to "log out" was to clear localStorage
+   * by hand, which is also why the same name coming back as a different user was easy to miss.
+   */
+  logout() {
+    this.signalRService.stopConnection();
+    this.generalService.clearAuth();
+    this.router.navigate([RouteNames.Home]);
+  }
+
   updateGamesList(){
     this.dalService.getGamesList().subscribe(list=>{
       this.games=list;
@@ -73,11 +89,13 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
 
   // Participants, e.g. "A (white) vs AI (black)".
   playersLabel(game: GameData): string {
-    return (game.players || []).map(p => {
-      const who = p.user?.name || (p.type === 'AI' ? 'AI' : 'open');
-      const seat = p.attributes?.['type'];
-      return seat ? `${who} (${seat})` : who;
-    }).join(' vs ');
+    return (game.players || [])
+      .filter(p => p.type !== 'EMPTY_SEAT')          // hide untaken/open seats
+      .map(p => {
+        const who = p.user?.name || (p.type === 'AI' ? 'AI' : 'open');
+        const seat = p.attributes?.['type'];
+        return seat ? `${who} (${seat})` : who;
+      }).join(' vs ');
   }
 
   setup(game: GameData) {
