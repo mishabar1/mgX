@@ -42,8 +42,8 @@ bld/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
-# Uncomment if you have tasks that create the project's static files in wwwroot
-#wwwroot/
+# Angular build output is compiled from Client/ - never commit it
+wwwroot/
 
 # Visual Studio 2017 auto generated files
 Generated\ Files/
@@ -420,3 +420,23 @@ GameContent/**/*.pdf
 # Small World raw PnP sources (~1.1GB incl. 100MB map scans — GitHub rejects files > 100MB).
 # The runtime will use downscaled map_N.png files generated from these.
 GameContent/games/smallworld/src/
+
+# ---------------------------------------------------------------------------
+# Added 2026-08-23 during the history shrink (pack 1.24 GiB -> 282 MiB).
+# Build output - regenerated from Client/, never commit it:
+# ---------------------------------------------------------------------------
+wwwroot/
+MG.Server/wwwroot/
+_to_delete/
+
+# ---------------------------------------------------------------------------
+# 3D authoring / export formats with no code references. The runtime loads
+# .glb / .gltf / .stl only. Keep these outside the repo.
+#   .blend  174 files, 183 MB raw   .fbx  175 files
+#   .usdz   iOS AR export           (dnd_dice_set.glb is what ships)
+# ---------------------------------------------------------------------------
+*.blend
+*.blend1
+*.fbx
+*.FBX
+*.usdz
