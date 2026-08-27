@@ -125,6 +125,11 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     this.gameId = this.activatedRoute.snapshot.paramMap.get('id');
     console.log("ngOnInit", this.gameId);
 
+    // Receive updates for THIS game only. Previously every client got every game's full state
+    // and diffed it here before discarding it, which is what made a slow machine or a phone
+    // stutter on other people's turns in games it wasn't even in.
+    this.signalRService.watchGame(this.gameId);
+
     this.signalRService.hubConnection?.off('GameDeleted');
     this.signalRService.hubConnection?.on('GameDeleted', data => {
       console.log('GameDeleted', data);
@@ -137,23 +142,49 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
     this.signalRService.hubConnection?.off('GameUpdated');
     this.signalRService.hubConnection?.on('GameUpdated', data => {
       console.log('GameUpdated', data);
-      if (String(data?.id) !== String(this.gameId)) return;   // broadcast is Clients.All — ignore other games
-      if (this.mgGame) this.mgGame.updateGame(data);
-      // SignalR fires outside Angular's zone — run inside so the overlay renders.
-      this.zone.run(() => {
-        const status = String(data.gameStatus);
-        // Pop the overlay when the game FIRST ends; clear it if we leave ENDED (e.g. undo).
-        if (status === 'ENDED' && this.lastStatus !== 'ENDED') {
-          this.endMessage = data.attributes?.result || 'Game over';
-        } else if (status !== 'ENDED') {
-          this.endMessage = '';
+      if (String(data?.id) !== String(this.gameId)) return;   // belt-and-braces; the server now sends only this game
+      this.applyGameUpdate(data);
+    });
+
+    // RESYNC AFTER A RECONNECT. The socket comes back on its own; the updates it missed do not.
+    // Refetch the authoritative state so the board can't sit silently stale after a tunnel, a
+    // sleeping laptop or a dropped phone connection.
+    this.unsubscriberService.takeUntilDestroy(this.signalRService.reconnected$).subscribe(() => {
+      console.log('[resync] reconnected — refetching game state');
+      this.dalService.getGameById(this.gameId!).subscribe(game => {
+        if (!game) {
+          // Deleted while we were away.
+          this.zone.run(() => this.router.navigate([RouteNames.GamesList]));
+          return;
         }
-        this.lastStatus = status;
-        this.computeHud(data);
-        this.updateServerPanel(data);   // generic server-driven panel (any game)
+        this.applyGameUpdate(game);
       });
     });
 
+  }
+
+  /**
+   * Apply one authoritative game state to the scene and the panel.
+   *
+   * Shared by the live GameUpdated push and by the post-reconnect refetch on purpose: a resync
+   * then goes down exactly the same path as a normal update, instead of a second almost-identical
+   * one that drifts out of step the first time either is touched.
+   */
+  private applyGameUpdate(data: any) {
+    if (this.mgGame) this.mgGame.updateGame(data);
+    // SignalR fires outside Angular's zone — run inside so the overlay renders.
+    this.zone.run(() => {
+      const status = String(data.gameStatus);
+      // Pop the overlay when the game FIRST ends; clear it if we leave ENDED (e.g. undo).
+      if (status === 'ENDED' && this.lastStatus !== 'ENDED') {
+        this.endMessage = data.attributes?.result || 'Game over';
+      } else if (status !== 'ENDED') {
+        this.endMessage = '';
+      }
+      this.lastStatus = status;
+      this.computeHud(data);
+      this.updateServerPanel(data);   // generic server-driven panel (any game)
+    });
   }
 
   // Top-centre HUD. The TEXT is decided by the server (attribute "hud"); the client only shows it.
@@ -181,6 +212,7 @@ export class GamePlayComponent implements OnInit, OnDestroy, AfterViewInit {
   ngOnDestroy(): void {
     this.signalRService.hubConnection?.off('GameUpdated');
     this.signalRService.hubConnection?.off('GameDeleted');
+    this.signalRService.unwatchGame(this.gameId);
     this.voice.leave();   // drop out of the voice call when leaving the game view
     this.disposePanel3d();   // unregister the in-scene panel's clickables before the scene goes
     this.mgThree?.dispose();

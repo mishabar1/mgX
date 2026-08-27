@@ -38,12 +38,26 @@ namespace MG.Server.Controllers
         }
 
 
+        /// <summary>
+        /// The signed-in user id, from the JWT's NameIdentifier claim (TokenService.CreateToken).
+        /// These endpoints carry no [Authorize] (a known POC gap), but UseAuthentication still
+        /// populates User whenever a valid bearer token is present — and the Angular client always
+        /// sends one. Null here therefore means "anonymous", which redaction treats as "sees no
+        /// secrets" rather than "sees everything".
+        /// </summary>
+        private string? CallerUserId =>
+            User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
         [HttpGet("GetGameByID")]
         public async Task<IActionResult> GetGameByID(string gameId)
         {
             _logger.LogTrace("GetGameByID");
 
-            return Ok(await _gameBL.GetGameByID(gameId));
+            var game = await _gameBL.GetGameByID(gameId);
+            if (game == null) return Ok(null);
+
+            // Redacted exactly like the SignalR push — see GameBL.ViewFor.
+            return Ok(_gameBL.ViewFor(game, CallerUserId));
         }
 
 

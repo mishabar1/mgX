@@ -41,6 +41,39 @@ namespace MG.Server.GameFlows
         private const int MAXSEATS = 10;
         public override int MinPlayers => 3;
 
+        // ===================== SECRECY (real, not cosmetic) =====================
+        // Same fix as Resistance, but ONW needs a stronger rule: you do not know your OWN card
+        // either (the Robber/Troublemaker/Drunk may have swapped it), so the card attributes are
+        // hidden from everyone — not just from other seats — until the game is over.
+        public override bool HasHiddenInfo => true;
+
+        /// <summary>Cards nobody may see yet. Keyed by position: a seat id, or "c1"/"c2"/"c3" for the centre.</summary>
+        private static readonly string[] CardSecrets =
+        {
+            "orig:",   // the card dealt to this position — drives who acts at night
+            "cur:",    // the card there NOW, after the night swaps — drives teams and win conditions
+        };
+
+        /// <summary>Secrets that belong to one seat: what you did at night, and what you were shown.</summary>
+        private static readonly string[] SeatSecrets =
+        {
+            "nact:",   // this seat's submitted night action
+            "ninfo:",  // the private information the night resolution showed this seat
+            "vote:",   // votes are simultaneous; they reach the public log at resolution
+        };
+
+        public override void RedactFor(GameData view, string? userId)
+        {
+            // Once it's over, everything is public — the reveal IS the endgame.
+            if (view.GameStatus == GameStatusEnum.ENDED
+                || view.Attributes?.GetValueOrDefault("over") == "1") return;
+
+            var mine = SeatIdsOf(view, userId);
+            RedactAllKeys(view, CardSecrets);              // including the viewer's own
+            RedactOtherSeatKeys(view, SeatSecrets, mine);
+            RedactOtherScreens(view, mine);
+        }
+
         // ============================ roles ============================
         private const string WEREWOLF = "werewolf";
         private const string MINION = "minion";

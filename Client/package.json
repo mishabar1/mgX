@@ -1,12 +1,13 @@
 {
   "name": "mgx",
-  "version": "0.0.68",
+  "version": "0.0.69",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
     "prebuild": "npm version patch",
     "build": "ng build",
-    "watch": "ng build --watch --configuration development"
+    "watch": "ng build --watch --configuration development",
+    "e2e": "node e2e/e2e.mjs"
   },
   "private": true,
   "dependencies": {

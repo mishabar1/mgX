@@ -125,12 +125,15 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
     this.user = this.generalService.User!;
     this.gameId = this.activatedRoute.snapshot.paramMap.get('id');
 
+    // Receive updates for THIS game only (the server sends nothing else to this connection).
+    this.signalRService.watchGame(this.gameId);
+
     this.updateGame();
 
     this.signalRService.hubConnection?.off('GameUpdated');
     this.signalRService.hubConnection?.on('GameUpdated', data => {
       console.log('GameUpdated', data);
-      if (String(data?.id) !== String(this.gameId)) return;   // broadcast is Clients.All — ignore other games
+      if (String(data?.id) !== String(this.gameId)) return;   // belt-and-braces; the server now sends only this game
       // SignalR fires OUTSIDE Angular's zone — run inside so every client's seat list refreshes
       // immediately when anyone joins/leaves (not just on the next change-detection tick).
       this.zone.run(() => {
@@ -161,6 +164,14 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
       }
     });
 
+    // RESYNC AFTER A RECONNECT — updates sent while the socket was down are gone, so seat
+    // changes (and a game that started without us) would otherwise be missed silently.
+    // updateGame() already navigates away if the game no longer exists.
+    this.unsubscriberService.takeUntilDestroy(this.signalRService.reconnected$).subscribe(() => {
+      console.log('[resync] reconnected — refetching game');
+      this.zone.run(() => this.updateGame());
+    });
+
 
 
   }
@@ -169,6 +180,7 @@ export class GameSetupComponent implements  OnInit, OnDestroy, AfterViewInit, On
     this.signalRService.hubConnection?.off('GameUpdated');
     this.signalRService.hubConnection?.off('GamesUpdated');
     this.signalRService.hubConnection?.off('GameDeleted');
+    this.signalRService.unwatchGame(this.gameId);
   }
 
   updateGame(){

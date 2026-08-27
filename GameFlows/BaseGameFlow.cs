@@ -253,6 +253,87 @@ namespace MG.Server.GameFlows
         // or have no panel leave it as a no-op.
         protected virtual void RefreshScreens() { }
 
+        // ---------------------------------------------------------------------
+        // PER-SEAT REDACTION
+        //
+        // GameData is ONE object sent to everyone watching the game, so whatever a game keeps in
+        // Attributes is on the wire even when the UI shows it to a single seat. That was fine
+        // while "hidden" meant "not drawn"; it is not fine for Resistance / One Night Werewolf,
+        // where opening devtools hands you the whole game.
+        //
+        // Cost control: HasHiddenInfo is FALSE by default, and DataRepository then sends one
+        // shared payload to the whole game group and makes no copies at all — so the games with
+        // nothing to hide pay nothing for this. A game that opts in gets one DeepCopy per
+        // DISTINCT WATCHING USER, and RedactFor mutates that private copy.
+        // ---------------------------------------------------------------------
+
+        /// <summary>
+        /// True if this game keeps information some seats may not see. Opting in switches
+        /// DataRepository.HubGameUpdated to the per-viewer copy + RedactFor path.
+        /// </summary>
+        public virtual bool HasHiddenInfo => false;
+
+        /// <summary>
+        /// Strip everything <paramref name="userId"/> is not allowed to see.
+        /// <paramref name="view"/> is a PRIVATE DeepCopy for this one viewer — mutate it freely.
+        /// NEVER read or write this.GameData here: the live game must not end up redacted.
+        /// Only called when <see cref="HasHiddenInfo"/> is true.
+        /// </summary>
+        public virtual void RedactFor(GameData view, string? userId) { }
+
+        /// <summary>Every seat held by this user (one person can hold several seats in hotseat).</summary>
+        protected static HashSet<string> SeatIdsOf(GameData view, string? userId)
+        {
+            var seats = new HashSet<string>();
+            if (string.IsNullOrEmpty(userId) || view.Players == null) return seats;
+            foreach (var p in view.Players)
+                if (p.User?.Id == userId) seats.Add(p.Id);
+            return seats;
+        }
+
+        /// <summary>
+        /// Remove attributes named "&lt;prefix&gt;&lt;seatId&gt;" for every seat this user does NOT hold.
+        /// For per-seat secrets the owner IS allowed to see — e.g. a Resistance role.
+        /// </summary>
+        protected static void RedactOtherSeatKeys(GameData view, IEnumerable<string> prefixes, HashSet<string> mySeats)
+        {
+            if (view.Attributes == null) return;
+            foreach (var prefix in prefixes)
+            {
+                var doomed = view.Attributes.Keys
+                    .Where(k => k.StartsWith(prefix) && !mySeats.Contains(k.Substring(prefix.Length)))
+                    .ToList();
+                foreach (var k in doomed) view.Attributes.Remove(k);
+            }
+        }
+
+        /// <summary>
+        /// Remove EVERY attribute starting with one of these prefixes, the viewer's own included.
+        /// For secrets nobody may see yet — e.g. a One Night Werewolf card: you don't know your own.
+        /// </summary>
+        protected static void RedactAllKeys(GameData view, IEnumerable<string> prefixes)
+        {
+            if (view.Attributes == null) return;
+            foreach (var prefix in prefixes)
+            {
+                var doomed = view.Attributes.Keys.Where(k => k.StartsWith(prefix)).ToList();
+                foreach (var k in doomed) view.Attributes.Remove(k);
+            }
+        }
+
+        /// <summary>
+        /// Blank every other seat's Screen. The client renders only its OWN seat's panel
+        /// (game-play.component.ts finds players.find(p =&gt; p.user?.id === me &amp;&amp; p.screen)), and in
+        /// a hidden-role game another seat's panel spells its secret out in words ("You are a SPY").
+        /// Also the single biggest payload saving in these games: N panels become 1.
+        /// </summary>
+        protected static void RedactOtherScreens(GameData view, HashSet<string> mySeats)
+        {
+            if (view.Players == null) return;
+            foreach (var p in view.Players)
+                if (!mySeats.Contains(p.Id)) p.Screen = null;
+        }
+
         // Serializes all state mutations for THIS game (human actions, AI turns, undo) so a
         // background AI-timer tick can't interleave with a SignalR action and corrupt state.
         private readonly System.Threading.SemaphoreSlim _turnLock = new(1, 1);
@@ -487,7 +568,14 @@ namespace MG.Server.GameFlows
             HistoryGameData.Add(GameData.DeepCopy());
 
             await DataRepository.Singleton.HubGameUpdated(GameData);
-            await DataRepository.Singleton.HubGamesUpdated(GameData);
+
+            // The games LIST only shows a game's name, status and seats — none of which a
+            // mid-game move changes. This used to fire on every single action, and every client
+            // sitting on the lobby answered it with a full getGamesList() HTTP round-trip: one
+            // click in one game turned into N list refetches across the server. Ping the lobby
+            // only on the transition that is actually visible there.
+            if (ended)
+                await DataRepository.Singleton.HubGamesUpdated(GameData);
         }
 
         // ---------------------------------------------------------------------

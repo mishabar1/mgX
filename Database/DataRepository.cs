@@ -46,22 +46,71 @@ namespace MG.Server.Database
             LoadInternal();
         }
 
+        // ------------------------------------------------------------------------------------
+        // BROADCAST ROUTING. These used to be Clients.All, which meant every connected client
+        // received the FULL GameData of every game on every action — a player in a Tic-Tac-Toe
+        // game parsed and mark-and-sweep-diffed a ~200 KB Small World payload for a game they
+        // were not in. Cost scaled with (clients x active games), nearly all of it discarded by
+        // the `if (data.id !== this.gameId) return` guard on the client.
+        //
+        // Now there are two audiences, and a connection joins one of them explicitly:
+        //   * GAME group  ("game:<id>") — the connections currently VIEWING that game, i.e. the
+        //     game-play and game-setup views. Seated players AND spectators; membership means
+        //     "has this game open", not "owns a seat".
+        //   * LOBBY group ("lobby")     — the connections sitting on the games list.
+        // Joined via NotificationHub.WatchGame / WatchLobby; see SignalrService on the client.
+        // ------------------------------------------------------------------------------------
+
+        /// <summary>SignalR group carrying one game's full state.</summary>
+        internal static string GameGroup(string gameId) => "game:" + gameId;
+
+        /// <summary>SignalR group carrying "the games list changed" pings.</summary>
+        internal const string LobbyGroup = "lobby";
+
         internal async Task HubGameUpdated(GameData game)
         {
             await Save();
-            await Hub.Clients.All.SendAsync("GameUpdated", game);
+
+            // FAST PATH — nothing to hide (12 of 14 games). One shared payload, zero copies:
+            // exactly what this did before redaction existed.
+            var flow = game.GameFlow;
+            if (flow == null || !flow.HasHiddenInfo)
+            {
+                await Hub.Clients.Group(GameGroup(game.Id)).SendAsync("GameUpdated", game);
+                return;
+            }
+
+            // REDACTED PATH — Resistance / One Night Werewolf. Roles and cards live in
+            // Attributes, and each seat's panel spells its own secret out in words, so a single
+            // shared payload means anyone reading the socket sees the whole game. Build one view
+            // per DISTINCT WATCHING USER (not per connection — two tabs of the same account get
+            // the same view, and the group handles the fan-out).
+            //
+            // If nobody is watching, this sends nothing at all.
+            foreach (var userId in NotificationHub.WatcherUserIds(game.Id))
+            {
+                var view = game.DeepCopy();          // private copy; RedactFor mutates it
+                flow.RedactFor(view, userId);
+                await Hub.Clients.Group(NotificationHub.GameUserGroup(game.Id, userId))
+                                 .SendAsync("GameUpdated", view);
+            }
         }
 
         internal async Task HubGamesUpdated(GameData game)
         {
             await Save();
-            await Hub.Clients.All.SendAsync("GamesUpdated", game.Id);
+            await Hub.Clients.Group(LobbyGroup).SendAsync("GamesUpdated", game.Id);
         }
 
         internal async Task HubGameDeleted(string gameId)
         {
             await Save();
-            await Hub.Clients.All.SendAsync("GameDeleted", gameId);
+            // Both audiences: the lobby drops it from the list, and anyone with the game still
+            // open has to be kicked back to the list. A connection in both groups (only possible
+            // transiently, mid-navigation) may get this twice — both client handlers are
+            // idempotent (navigate / refetch), so a duplicate is harmless.
+            await Hub.Clients.Groups(new[] { LobbyGroup, GameGroup(gameId) })
+                             .SendAsync("GameDeleted", gameId);
         }
 
         private void LoadInternal()

@@ -33,6 +33,34 @@ namespace MG.Server.GameFlows
         private const int MAXSEATS = 10;
         public override int MinPlayers => 5;
 
+        // ===================== SECRECY (real, not cosmetic) =====================
+        // Roles used to be visible to anyone who opened devtools: GameData went to every client
+        // in full, and each seat's panel says "You are a SPY" in plain text. Now the server sends
+        // each viewer their own redacted copy. See BaseGameFlow.RedactFor.
+        public override bool HasHiddenInfo => true;
+
+        /// <summary>Per-seat secrets: your own role and role card are yours to see; nobody else's are.</summary>
+        private static readonly string[] SeatSecrets =
+        {
+            "role:",   // "spy" | "resistance"
+            "card:",   // role art — AXIS vs ALLY set, so it reveals the role just as plainly
+            "mcard:",  // mission success/sabotage card; only the FAIL COUNT is ever public
+        };
+
+        public override void RedactFor(GameData view, string? userId)
+        {
+            // Game over: everything is public. The end screen shows every role, and hiding it
+            // here would blank the reveal the whole game builds up to.
+            if (view.GameStatus == GameStatusEnum.ENDED
+                || view.Attributes?.GetValueOrDefault("over") == "1") return;
+
+            var mine = SeatIdsOf(view, userId);
+            RedactOtherSeatKeys(view, SeatSecrets, mine);
+            RedactOtherScreens(view, mine);
+            // Team approve/reject votes ("vote:") stay public on purpose — in Resistance they are
+            // revealed simultaneously and the discussion depends on them.
+        }
+
         // Character-card art (themed): allies = resistance (up to 6), axis = spies (up to 4).
         private static readonly string[] ALLY =
             { "ally-1-en.jpg", "ally-2-en.jpg", "ally-3-en.jpg", "ally-4-en.jpg", "ally-5.jpg", "ally-6-en.jpg" };

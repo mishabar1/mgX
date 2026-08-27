@@ -17,17 +17,38 @@ namespace MG.Server.BL
         }
 
 
-        internal async Task<List<GameData>> GetAllGames()
+        // The games LIST used to return every game IN FULL — every board, every panel tree and
+        // every hidden role on the server, to anyone who asked, on every list refresh. The list
+        // screen reads five scalars, each seat's name/type and the result line for a finished
+        // game; nothing else. Project exactly that: it is both the leak fix and by a wide margin
+        // the biggest payload cut in the app.
+        internal async Task<List<GameSummary>> GetAllGames()
         {
-            var list = _dataRepository.Games.ToList();
-
-            return list;
+            return _dataRepository.Games.Select(GameSummary.Of).ToList();
         }
 
 
         internal async Task<GameData?> GetGameByID(string gameId)
         {
             return _dataRepository.Games.Find(x => x.Id == gameId);
+        }
+
+        /// <summary>
+        /// The view of one game that <paramref name="userId"/> is allowed to see.
+        ///
+        /// This MUST mirror DataRepository.HubGameUpdated: the SignalR push is redacted, so if
+        /// the REST fetch is not, the secret is simply one GET away and redaction is theatre.
+        /// An unauthenticated caller gets userId == null, holds no seats, and therefore sees
+        /// none of the per-seat secrets — the safe default.
+        /// </summary>
+        internal GameData ViewFor(GameData game, string? userId)
+        {
+            var flow = game.GameFlow;
+            if (flow == null || !flow.HasHiddenInfo) return game;
+
+            var view = game.DeepCopy();
+            flow.RedactFor(view, userId);
+            return view;
         }
 
         internal async Task<GameData> CreateGame(CreateGameData data)

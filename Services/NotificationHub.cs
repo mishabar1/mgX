@@ -37,10 +37,14 @@ namespace MG.Server.Services
         private string? CallerUserId => Context.UserIdentifier;
 
         readonly GameBL _gameBL;
+        // Was injected and then DISCARDED. Kept now so WatchGame can check the game exists
+        // before subscribing a connection to a group that would never receive anything.
+        readonly DataRepository _dataRepository;
         private readonly ILogger<NotificationHub> _logger;
         public NotificationHub(GameBL gameBL, DataRepository dataRepository, ILogger<NotificationHub> logger) :base()
         {
             _gameBL = gameBL;
+            _dataRepository = dataRepository;
             _logger = logger;
         }
 
@@ -73,6 +77,112 @@ namespace MG.Server.Services
             // Pass the AUTHENTICATED user id alongside the payload. BaseGameFlow refuses any
             // action whose claimed seat isn't occupied by this user.
             await _gameBL.ExecuteAction(s, CallerUserId);
+        }
+
+        // ============================================================
+        // SUBSCRIPTIONS — who receives which broadcast.
+        //
+        // Updates used to go to Clients.All: every client parsed every game's full state on
+        // every action, then threw away everything but its own game. On a phone or an old
+        // laptop that is the difference between smooth and janky, so nothing is sent to a
+        // client that cannot use it. A connection now names what it is looking at, and
+        // DataRepository sends only to that audience:
+        //   WatchGame(id) -> "game:<id>"  gets GameUpdated (full state) for THAT game
+        //   WatchLobby()  -> "lobby"      gets GamesUpdated / GameDeleted list pings
+        //
+        // Membership is per CONNECTION, and a reconnect gets a new connection id — so the
+        // client re-sends its watch on reconnect (SignalrService.onreconnected). Without that
+        // a reconnected client silently stops receiving updates.
+        //
+        // No permission check on WatchGame: the games list and GetGameByID are already open to
+        // any signed-in user, so "watching" grants nothing new. Acting on a seat is what is
+        // gated, and that lives in BaseGameFlow.AuthorizeCaller.
+        // ============================================================
+
+        // Who is watching which game, so DataRepository can build ONE redacted payload per
+        // distinct viewer instead of one shared payload for everyone.
+        //   gameId -> (connectionId -> userId)
+        // Keyed by connection (not user) so a second tab, or two people on one account, are
+        // tracked and removed exactly.
+        private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, string>> GameWatchers = new();
+
+        /// <summary>Group carrying ONE viewer's redacted view of one game.</summary>
+        internal static string GameUserGroup(string gameId, string userId) => "game:" + gameId + ":u:" + userId;
+
+        /// <summary>Distinct users currently watching this game. Empty means: send nothing at all.</summary>
+        internal static List<string> WatcherUserIds(string gameId)
+            => GameWatchers.TryGetValue(gameId, out var room)
+                ? room.Values.Distinct().ToList()
+                : new List<string>();
+
+        public async Task WatchGame(string gameId)
+        {
+            if (string.IsNullOrEmpty(gameId)) return;
+
+            // Cheap sanity check so a crafted / stale id doesn't leave a connection waiting on a
+            // group that can never fire. Not a security gate — see the note above.
+            //
+            // FAIL OPEN, and guarded: Games is the shared list DataRepository mutates under its
+            // own lock, so enumerating it here can race with a create/delete and throw. This
+            // check is a convenience, never a gate — if we can't tell, let the watch through
+            // rather than turn a benign race into a failed hub invocation.
+            try
+            {
+                if (_dataRepository.Games.All(g => g.Id != gameId))
+                {
+                    _logger.LogInformation("WatchGame ignored — no game {GameId}", gameId);
+                    return;
+                }
+            }
+            catch (InvalidOperationException) { /* list mutated mid-enumeration — allow */ }
+
+            await Groups.AddToGroupAsync(Context.ConnectionId, DataRepository.GameGroup(gameId));
+
+            // Second membership, per (game, user): the delivery address for a redacted view.
+            var uid = CallerUserId;
+            if (!string.IsNullOrEmpty(uid))
+            {
+                await Groups.AddToGroupAsync(Context.ConnectionId, GameUserGroup(gameId, uid!));
+                GameWatchers.GetOrAdd(gameId, _ => new ConcurrentDictionary<string, string>())
+                            [Context.ConnectionId] = uid!;
+            }
+
+            _logger.LogInformation("Watch game={GameId} user={UserId} conn={ConnectionId}",
+                gameId, uid ?? "-", Context.ConnectionId);
+        }
+
+        public async Task UnwatchGame(string gameId)
+        {
+            if (string.IsNullOrEmpty(gameId)) return;
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, DataRepository.GameGroup(gameId));
+
+            var uid = CallerUserId;
+            if (!string.IsNullOrEmpty(uid))
+                await Groups.RemoveFromGroupAsync(Context.ConnectionId, GameUserGroup(gameId, uid!));
+
+            DropWatcher(gameId, Context.ConnectionId);
+            _logger.LogInformation("Unwatch game={GameId} conn={ConnectionId}", gameId, Context.ConnectionId);
+        }
+
+        private static void DropWatcher(string gameId, string connectionId)
+        {
+            if (GameWatchers.TryGetValue(gameId, out var room))
+            {
+                room.TryRemove(connectionId, out _);
+                if (room.IsEmpty) GameWatchers.TryRemove(gameId, out _);
+            }
+        }
+
+        public async Task WatchLobby()
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, DataRepository.LobbyGroup);
+            _logger.LogInformation("Watch lobby conn={ConnectionId}", Context.ConnectionId);
+        }
+
+        public async Task UnwatchLobby()
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, DataRepository.LobbyGroup);
+            _logger.LogInformation("Unwatch lobby conn={ConnectionId}", Context.ConnectionId);
         }
 
         // ============================================================
@@ -126,7 +236,11 @@ namespace MG.Server.Services
             if (string.IsNullOrEmpty(gameId) || string.IsNullOrWhiteSpace(text)) return;
             var line = text.Trim();
             if (line.Length > 300) line = line[..300];
-            await Clients.All.SendAsync("Transcript",
+            // Was Clients.All with the client filtering by gameId — and speech recognition
+            // fires continuously, so this was the chattiest path in the app: every connected
+            // browser woke up for every syllable spoken in every game. Captions only mean
+            // anything to someone who has THIS game open.
+            await Clients.Group(DataRepository.GameGroup(gameId)).SendAsync("Transcript",
                 new { gameId, userName = string.IsNullOrEmpty(userName) ? "player" : userName, text = line });
         }
 
@@ -138,6 +252,12 @@ namespace MG.Server.Services
                 if (kv.Value.ContainsKey(Context.ConnectionId))
                     await RemoveFromVoiceRoom(kv.Key, Context.ConnectionId);
             }
+
+            // ...and from the watcher registry, or a closed tab keeps a game "watched" forever
+            // and we go on building a redacted payload for a viewer who is gone. SignalR drops
+            // the group memberships themselves automatically; this dictionary is ours to clean.
+            foreach (var gameId in GameWatchers.Keys.ToList())
+                DropWatcher(gameId, Context.ConnectionId);
             await base.OnDisconnectedAsync(exception);
         }
 
