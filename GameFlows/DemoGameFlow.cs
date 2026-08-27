@@ -62,9 +62,17 @@ namespace MG.Server.GameFlows
             internal static AssetData MODEL = new ObjectAssetData("ticktacktoe/x.glb");    // a 3D model file
             internal static AssetData CARD  = new TokenAssetData("common/back/red-56.jpg", // an image card, with a
                                                                  "common/back/red-56.jpg");// separate back face
+            // Three real playing cards, each with a proper BACK. Dropped into a panel as "item3d"
+            // items with an "owner" attribute, they demonstrate the whole hand mechanic: the owner
+            // sees the face, every other player sees the red back.
+            internal static AssetData CARD_A = new TokenAssetData("common/PNG-cards/ace_of_spades.png", "common/back/red-56.jpg");
+            internal static AssetData CARD_B = new TokenAssetData("common/PNG-cards/10_of_hearts.png", "common/back/red-56.jpg");
+            internal static AssetData CARD_C = new TokenAssetData("common/PNG-cards/7_of_clubs.png", "common/back/red-56.jpg");
             internal static AssetData BEEP  = new SoundAssetData("ticktacktoe/beep.mp3");  // a short sound (ONCE)
             internal static AssetData MUSIC = new SoundAssetData("dnd/deutschland.mp3");   // a track to LOOP
             internal static AssetData DIE   = new DieAssetData("demo");                    // procedural numbered die
+            internal static AssetData BTN   = new ButtonAssetData("demo");                  // real 3D button; item.Text = label
+            internal static AssetData PNL   = new PanelAssetData("demo");                   // a uikit UI panel, carried by an item
             internal static AssetData ARROW = new ArrowAssetData("demo");                  // procedural flat arrow
             internal static AssetData BLOCK = new TextBlockAssetData("demo");              // billboard text block
             internal static AssetData HERO  = new ObjectAssetData("heroes/glTF/Warrior.gltf"); // a RIGGED model (has animation clips)
@@ -98,9 +106,14 @@ namespace MG.Server.GameFlows
             addAsset(Assets.DISC);
             addAsset(Assets.MODEL);
             addAsset(Assets.CARD);
+            addAsset(Assets.CARD_A);
+            addAsset(Assets.CARD_B);
+            addAsset(Assets.CARD_C);
             addAsset(Assets.BEEP);
             addAsset(Assets.MUSIC);
             addAsset(Assets.DIE);
+            addAsset(Assets.BTN);
+            addAsset(Assets.PNL);
             addAsset(Assets.ARROW);
             addAsset(Assets.BLOCK);
             addAsset(Assets.HERO);
@@ -127,14 +140,22 @@ namespace MG.Server.GameFlows
         // everything. In a real game you'd deal cards / place pieces instead.
         protected override Task StartGame()
         {
-            BuildBoardItems();      // 1) items on the shared board + click interactions
-            BuildPlayerZones();     // 2) items in each player's hand and personal table
-            BuildAssetGallery();    // 6) the remaining asset types: die, arrow, text block, music, rigged model
-            BuildMoveDemo();        // 5) the built-in "select a piece, click the surface to move it" system
-            BuildDragDemo();        // 4) item-onto-item interaction (click source, then target)
-            advanceNextTurn();      // 1) turn system: set the first seat to move
-            RefreshTurnArea();      // 1) show whose turn + a token only the current seat can click
-            BuildScreens();         // the CONTROL PANEL, described by the server (client just renders it)
+            // ===== ISOLATED FOR THE HOLDER WORK =====================================
+            // The demo normally shows every capability at once, which buries whatever is being
+            // worked on. Everything except the holders is commented out so the scene contains
+            // ONLY the feature under development. Un-comment a line to bring that part back —
+            // the methods are all still here, untouched.
+            BuildHolders();            // 7) HOLDERS: items attached to the camera / to a seat's figure
+            advanceNextTurn();         // 1) turn state only (sets whose turn it is; draws nothing)
+
+            // BuildBoardItems();      // 1) clickable disc / model / card / seat-private item on the board
+            // BuildPlayerZones();     // 2) items in each seat's player.Hand and player.Table zones
+            // BuildAssetGallery();    // 6) die, arrow, billboard text block, rigged model, music
+            // BuildMoveDemo();        // 5) "select a piece, then click the mat" movement system
+            // BuildDragDemo();        // 4) item-onto-item interaction (click source, then target)
+            // RefreshTurnArea();      // 1) whose-turn caption + a token only the current seat may click
+            // BuildScreens();         // the UiNode control panel (right dock) + the world panel
+            // ========================================================================
             return Task.CompletedTask;
         }
 
@@ -150,8 +171,42 @@ namespace MG.Server.GameFlows
             foreach (var seat in GameData.Players)
             {
                 if (seat.Type == PlayerTypeEnum.EMPTY_SEAT) { seat.Screen = null; continue; }
+
+                // ---- a WORLD-ANCHORED panel ------------------------------------------------
+                // Everything above docks to the edge of the viewer's own view and follows their
+                // camera. This one instead STANDS IN THE SCENE: the camera orbits around it, and
+                // because it is an ordinary scene object it is the only kind of panel another
+                // player's client could ever draw. That is the shape a visible hand of cards takes.
+                //
+                // Placed per seat, in front of that seat and turned to face it — exactly the
+                // computation a card game wants for "my hand, on the table, where everyone can
+                // see the backs".
+                var av = seat.Avatar?.Position ?? new V3(0, 1, 8);
+                var len = Math.Sqrt(av.X * av.X + av.Z * av.Z);
+                var k = len > 0.001 ? (len - 1.4) / len : 0;                   // pull it in off the seat
+                var at = new V3(av.X * k, 1.7, av.Z * k);
+                var yaw = Math.Atan2(av.X, av.Z) * 180 / Math.PI;              // turn to face the seat
+
                 seat.Screen = new List<UiNode>
                 {
+                    UiNode.PanelAt(at, new V3(-12, yaw, 0), 2.2, "public",
+                        UiNode.Title("🌍 World panel"),
+                        UiNode.Text_("Anchored in the SCENE, not in your view.", "8aa0c0", 13),
+                        UiNode.Note("Orbit the camera: this one stays put while the panel on the right follows you. "
+                                  + "It is marked public, so it is the anchor another player could see."),
+                        UiNode.Row(UiNode.Button("🎵 Play", nameof(PlayMusic)),
+                                   UiNode.Button("⏹ Stop", nameof(StopMusic))),
+                        // ---- REAL 3D ITEMS IN A PANEL ("item3d") ----------------------------
+                        // Not thumbnails: actual geometry, laid out by the panel's flexbox, and it
+                        // scrolls and clips with the panel. Each card carries owner = this seat, so
+                        // THIS player sees the face and everybody else sees the red back — which is
+                        // the whole hand-of-cards mechanic, with no player.Hand zone involved.
+                        UiNode.Text_("A hand, as panel items:", "8aa0c0", 13),
+                        UiNode.Row(
+                            UiNode.Item3d(panelItem(Assets.CARD_A).AddAttribute("owner", seat.Id), 90),
+                            UiNode.Item3d(panelItem(Assets.CARD_B).AddAttribute("owner", seat.Id), 90),
+                            UiNode.Item3d(panelItem(Assets.CARD_C).AddAttribute("owner", seat.Id), 90))),
+
                     UiNode.Title("🧪 Demo panel"),
                     UiNode.Text_("Spawn a disc on the board", "8aa0c0", 13),
                     UiNode.Select("color", colors),
@@ -164,6 +219,253 @@ namespace MG.Server.GameFlows
                     UiNode.Row(UiNode.Button("⏭ End turn", nameof(EndTurn)),
                                UiNode.Button("🏁 End game", nameof(EndDemo), confirm: "End the demo?")),
                 };
+            }
+        }
+
+        // ============================================================================
+        // 7) HOLDERS  (ItemData.Anchor)  — the generic replacement for player.Hand / player.Table
+        // ============================================================================
+        // A holder is just an item with no asset (so it draws nothing) that carries other items,
+        // plus an ANCHOR saying where it hangs. The client parents it there and applies each
+        // child's transform — and does NOTHING else. It never measures, arranges or scales to fit,
+        // so a holder cannot reflow: no flicker when the camera turns, no resize when an item
+        // changes. YOU place every child, in the holder's own coordinates.
+        // ---- the holder's placement, per seat, held ENTIRELY on the server -------------------
+        // The player changes these by clicking items in the tray (see the control rows below); the
+        // client never decides any of it. Offsets are stored in HUNDREDTHS as integers so there is
+        // no decimal-separator/culture question in an attribute string.
+        private string HudAnchorOf(string seatId)
+            => GameData.Attributes.GetValueOrDefault("hudAnchor:" + seatId, ItemAnchorEnum.CAMERA);
+        private string HudSideOf(string seatId)
+            => GameData.Attributes.GetValueOrDefault("hudSide:" + seatId, "center");
+        private int HudOff(string seatId, string axis)
+            => int.TryParse(GameData.Attributes.GetValueOrDefault($"hud{axis}:{seatId}", "0"), out var v) ? v : 0;
+
+        /// <summary>
+        /// Where the tray itself sits. The SIDE offsets are camera-space approximations of the edges
+        /// of the view: docking exactly to a screen edge needs the viewport, which is the only thing
+        /// the client legitimately knows — so these are numbers to taste, not a layout algorithm.
+        /// </summary>
+        private V3 HudHolderPos(string seatId)
+        {
+            var anchor = HudAnchorOf(seatId);
+            double x = 0, y = 0, z = 0;
+
+            if (anchor == ItemAnchorEnum.CAMERA || anchor == ItemAnchorEnum.HAND)
+            {
+                switch (HudSideOf(seatId))
+                {
+                    case "left":   x = -0.62; break;
+                    case "right":  x =  0.62; break;
+                    case "top":    y =  0.40; break;
+                    case "bottom": y = -0.34; break;
+                    // "center" leaves it where the children were authored
+                }
+            }
+            else if (anchor == ItemAnchorEnum.WORLD)
+            {
+                y = 2.2;    // float it over the middle of the table so it is not buried in the felt
+            }
+            // AVATAR: (0,0,0) — the children are already authored in front of the figure
+
+            return new V3(x + HudOff(seatId, "Dx") / 100.0,
+                          y + HudOff(seatId, "Dy") / 100.0,
+                          z);
+        }
+
+        // Rebuild just the holders after the player retargets one. Cheap: drop the holder items
+        // (children go with them) and run BuildHolders again. The client's diff removes the old
+        // meshes and re-parents the new ones through applyAnchors().
+        private void RebuildHolders()
+        {
+            var doomed = GameData.Table.Items
+                .Where(i => !string.IsNullOrEmpty(i.Anchor))
+                .Select(i => i.Id).ToList();
+            foreach (var id in doomed) GameData.Table.RemoveItem(id);
+            BuildHolders();
+        }
+
+        // ---- the controls: items whose click retargets the holder they live in ---------------
+        // Each button carries WHICH value it sets as an attribute, and the action reads it off the
+        // clicked item — the same pattern every board item in this project already uses.
+        /// <summary>
+        /// The value a control carries. A PANEL button sends it in args; a board-item click carries
+        /// it as an attribute on the clicked item. Both paths are supported so either kind of
+        /// control works.
+        /// </summary>
+        private static string ArgOrItem(ExecuteActionData d, string key)
+        {
+            if (d?.args != null && d.args.TryGetValue(key, out var fromArgs) && !string.IsNullOrEmpty(fromArgs))
+                return fromArgs;
+            return d?.Item?.GetStringAttribute(key) ?? "";
+        }
+
+        [GameAction] public async Task HudAnchor(ExecuteActionData d)
+        {
+            var v = ArgOrItem(d, "setAnchor");
+            if (!string.IsNullOrEmpty(v)) GameData.Attributes["hudAnchor:" + d.Player!.Id] = v!;
+            RebuildHolders();
+            await Task.CompletedTask;
+        }
+
+        [GameAction] public async Task HudSide(ExecuteActionData d)
+        {
+            var v = ArgOrItem(d, "setSide");
+            if (!string.IsNullOrEmpty(v)) GameData.Attributes["hudSide:" + d.Player!.Id] = v!;
+            RebuildHolders();
+            await Task.CompletedTask;
+        }
+
+        [GameAction] public async Task HudMove(ExecuteActionData d)
+        {
+            const int STEP = 6;   // hundredths of a world unit per click
+            var dir = ArgOrItem(d, "setMove");
+            var id = d.Player!.Id;
+            int dx = HudOff(id, "Dx"), dy = HudOff(id, "Dy");
+            switch (dir)
+            {
+                case "left":  dx -= STEP; break;
+                case "right": dx += STEP; break;
+                case "up":    dy += STEP; break;
+                case "down":  dy -= STEP; break;
+                case "reset": dx = 0; dy = 0; break;
+            }
+            GameData.Attributes["hudDx:" + id] = dx.ToString();
+            GameData.Attributes["hudDy:" + id] = dy.ToString();
+            RebuildHolders();
+            await Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// One control in the tray, as its OWN STANDALONE uikit PANEL holding a single button.
+        ///
+        /// So every button here is a real piece of the project's UI — the same Button node the
+        /// games already use, with its own fill keyword, label and hit box — but each one is an
+        /// ITEM, placed by the server, in a holder. Nothing arranges the row: the x/y below are the
+        /// only thing deciding where each button sits.
+        ///
+        /// `action` may be null, in which case the panel is a plain text plate (the status readout).
+        /// `style` is a UiNode fill keyword: ok | no | primary | team | cur | ghost.
+        /// </summary>
+        private ItemData Btn(ItemData holder, PlayerData seat, string label, double x, double y,
+                             string style, double width, Func<ExecuteActionData, Task>? action,
+                             string? argKey = null, string? argValue = null)
+        {
+            // The value travels in the BUTTON'S ARGS. A panel activation carries args and no clicked
+            // item, so reading it off d.Item (the way a board-item click does) silently yields
+            // nothing — which is exactly the bug the suite caught when these became panels.
+            var args = argKey != null ? new Dictionary<string, string> { { argKey, argValue ?? "" } } : null;
+
+            var content = action != null
+                ? UiNode.Button(label, action.Method.Name, args, null, style)
+                : UiNode.Text_(label, "8aa0c0", 12);
+
+            var item = addItemTo(holder, Assets.PNL)
+                .SetPosition(x, y - 0.30, -1.4)
+                .SetOwner(seat.Id)
+                .SetUi(width, content);
+            // Mirrored onto the item too, so the tray is self-describing (and testable) without
+            // digging into the UiNode tree.
+            if (argKey != null) item.AddAttribute(argKey, argValue ?? "");
+            return item;
+        }
+
+        private void BuildHolders()
+        {
+            foreach (var seat in GameData.Players)
+            {
+                if (seat.Type == PlayerTypeEnum.EMPTY_SEAT) continue;
+
+                // ---- the TRAY: a holder the player can re-anchor at will ----------------------
+                // Anchor and offset come from the seat's own attributes, so clicking a control
+                // below changes where this whole tray lives — camera, the seated figure, the world,
+                // or a VR hand — with no client change of any kind.
+                var anchor = HudAnchorOf(seat.Id);
+                var pos = HudHolderPos(seat.Id);
+                var hud = addHolder(anchor, seat).SetPosition(pos.X, pos.Y, pos.Z);
+                // "tint" is read with parseInt(), so it MUST be 0x-prefixed — a bare "22C55E"
+                // parses as 22 (it stops at the C) and the disc comes out near-black.
+                // Rotated upright so the flat face looks AT the player: a CYLINDER's unit form
+                // lies down (its axis is up), which from the camera reads as a puck seen edge-on.
+                // ---- the tray's contents: REAL 3D BUTTONS ------------------------------------
+                // Each one is an ordinary item with a printed label. The server gives every button
+                // its position, so nothing arranges anything and nothing can reflow. A button is
+                // 1 unit tall and as wide as its text, so Scale sets its physical size.
+                // Sizes tuned to the client's fixed item-panel pixel size (ITEM_PANEL_PX = 0.0024
+                // world units per authored px). A 0.40-wide panel is therefore ~167px of UI — room
+                // for a real label at a readable size. Ask for less and you get a thin illegible bar.
+                const double BW = 0.40;     // width of one button-panel, in world units (~167px)
+                const double ROW = 0.21;    // vertical spacing between rows (a one-button panel is ~0.16 tall)
+
+                // A status readout — a panel with text instead of a button.
+                Btn(hud, seat, $"{anchor} · {HudSideOf(seat.Id)} · {HudOff(seat.Id, "Dx")},{HudOff(seat.Id, "Dy")}",
+                    0, ROW * 2, "", 0.90, null);
+
+                // Row: WHERE IT HANGS — one button per anchor type.
+                var anchors = new (string val, string label, string style)[]
+                {
+                    (ItemAnchorEnum.CAMERA, "Camera",  "ok"),
+                    (ItemAnchorEnum.AVATAR, "Figure",  "team"),
+                    (ItemAnchorEnum.WORLD,  "World",   "ghost"),
+                    (ItemAnchorEnum.HAND,   "VR hand", "primary"),
+                };
+                for (int i = 0; i < anchors.Length; i++)
+                    Btn(hud, seat, anchors[i].label, -0.66 + i * 0.44, ROW, anchors[i].style, BW,
+                        HudAnchor, "setAnchor", anchors[i].val);
+
+                // Row: WHICH SIDE of the view (camera / VR hand only).
+                var sides = new[] { "Left", "Right", "Top", "Bottom", "Center" };
+                for (int i = 0; i < sides.Length; i++)
+                    Btn(hud, seat, sides[i], -0.88 + i * 0.44, 0, sides[i] == "Center" ? "cur" : "primary", BW,
+                        HudSide, "setSide", sides[i].ToLowerInvariant());
+
+                // Row: NUDGE it.
+                var moves = new (string val, string label)[]
+                    { ("left", "◀"), ("right", "▶"), ("up", "▲"), ("down", "▼"), ("reset", "Reset") };
+                for (int i = 0; i < moves.Length; i++)
+                    Btn(hud, seat, moves[i].label, -0.88 + i * 0.44, -ROW, moves[i].val == "reset" ? "ghost" : "no", BW,
+                        HudMove, "setMove", moves[i].val);
+
+                // Row: the original demo actions, to prove a click still reaches a game action.
+                Btn(hud, seat, "Play",     -0.44, -ROW * 2, "ok",      BW, PlayMusic);
+                Btn(hud, seat, "Stop",      0.00, -ROW * 2, "no",      BW, StopMusic);
+                Btn(hud, seat, "End turn",  0.44, -ROW * 2, "primary", BW, EndTurn);
+
+                // ---- a uikit PANEL, in the same holder as the 3D buttons ---------------------
+                // A uikit panel is three.js geometry, so it hangs in a holder like anything else:
+                // dense UI (a title, wrapped text, a select, real buttons) next to free-form 3D
+                // items in one tray. The HOLDER decides where it is and UiWidth how big — uikit
+                // only arranges the contents inside that fixed plate, which is why it cannot
+                // reflow or resize the way the docked panels do.
+                addItemTo(hud, Assets.PNL)
+                    .SetPosition(1.45, -0.30, -1.4)      // to the right of the button rows
+                    .SetOwner(seat.Id)                    // only this seat's client draws/uses it
+                    .SetUi(0.85,                          // 0.85 world units wide (~354px of UI)
+                        UiNode.Title("Panel in a holder"),
+                        UiNode.Text_("This is a uikit panel — the same UI the games already use — "
+                                   + "carried by an ITEM instead of docked to your screen.", "8aa0c0", 12),
+                        UiNode.Row(
+                            UiNode.Button("Play", nameof(PlayMusic), null, null, "ok"),
+                            UiNode.Button("Stop", nameof(StopMusic), null, null, "no")),
+                        UiNode.Note("Move the tray with the buttons on the left — the panel goes with it."));
+
+                // ---- a hand, anchored to this seat's FIGURE -----------------------------------
+                // Anchored to the avatar, so the WHOLE TABLE sees it — that is what gives a hand
+                // presence. The cards carry owner = this seat, so the renderer shows the face to
+                // its owner and the back to everyone else.
+                var hand = addHolder(ItemAnchorEnum.AVATAR, seat);
+                var cards = new[] { Assets.CARD_A, Assets.CARD_B, Assets.CARD_C };
+                for (int i = 0; i < cards.Length; i++)
+                {
+                    // Seat 0 sits at +Z and looks toward the origin, so "in front of the seat" is
+                    // NEGATIVE local Z. The first version used +1.1 — behind the seat, right on top
+                    // of the camera — which is why the cards filled the screen.
+                    addItemTo(hand, cards[i])
+                        .SetPosition(-0.34 + i * 0.34, 0.75, -0.55)  // spaced BY THE SERVER, in the seat's space
+                        .SetRotation(-55, 0, 0)                      // tilted up toward its owner
+                        .SetScale(0.40)
+                        .AddAttribute("owner", seat.Id);
+                }
             }
         }
 

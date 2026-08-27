@@ -16,6 +16,14 @@ export class ItemData {
   playType?:string;
   animationIdx?:number;
 
+  // The HOLDER mechanic: where this item's group attaches, and whose it is.
+  // See ItemData.cs — "world" (default) | "avatar" | "camera" | "hand".
+  anchor?: string;
+  owner?: string;
+  // asset type PANEL: a uikit panel carried BY this item (see ItemData.cs)
+  ui?: any[];
+  uiWidth?: number;
+
   visible! : any;
   clickActions! : any;
   hoverActions! : any;

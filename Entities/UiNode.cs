@@ -14,7 +14,9 @@ namespace MG.Server.Entities
     // ("row"/"col") hold Children so the SERVER controls layout and ordering.
     //
     // Node types the generic renderer understands (MgPanel3d.build, Client/src/app/bl/mg.panel3d.ts):
-    //   "panel"  - one docked panel      (Children, Style = right|left|top|bottom; see below)
+    //   "panel"  - one panel             (Children; Style = right|left|top|bottom for a screen
+    //                                     dock, or Anchor="world" + At/Rot/WorldWidth to stand it
+    //                                     in the scene where everyone can see it; see below)
     //   "col"    - vertical container    (Children, Size=gap, Bg)
     //   "row"    - horizontal container  (Children, Size=gap, Bg) — wraps
     //   "title"  - big heading           (Text, Icon, Color, Size)
@@ -22,6 +24,8 @@ namespace MG.Server.Entities
     //   "note"   - muted hint            (Text, Color, Size)
     //   "image"  - a picture             (Url, Size=height px, Overlays)
     //   "model"  - a 3D model shown as a picture (Url, Size=height px)
+    //   "item3d" - a REAL 3D item standing in the panel (Item, Size=slot height px) — geometry,
+    //                                     not a thumbnail; scrolls and clips with the panel
     //   "button" - a button              (Text, Icon=named icon, Color=label/icon ink,
     //                                     Size=label px, Bg=fill, Url=optional picture or model
     //                                     to use INSTEAD of a named icon, Action, Args, Confirm,
@@ -90,6 +94,59 @@ namespace MG.Server.Entities
         // in PERCENT of the base image so they stay glued to the right spot at any render size.
         public List<UiOverlay>? Overlays { get; set; }
 
+        /// <summary>
+        /// For Type == "item3d": a REAL 3D item standing in the panel, as opposed to "model" which
+        /// renders a model into a flat thumbnail picture. The item is described exactly like a board
+        /// item (asset + rotation + attributes), but it belongs to the PANEL: it is laid out by the
+        /// panel's flexbox like any other node, and it scrolls and clips with it.
+        ///
+        /// This is what lets a hand of cards be a panel instead of a `player.Hand` zone — and the
+        /// card-back rule comes free, because the renderer already draws the BACK face to anyone who
+        /// is not the item's "owner" (see the TOKEN branch of mg.game.ts).
+        ///
+        /// Asset types honoured in a panel: TOKEN (a card/tile) and OBJECT (a model). Anything else
+        /// renders as an empty slot rather than throwing.
+        /// </summary>
+        public ItemData? Item { get; set; }
+
+        // ---- panel placement (for Type == "panel") ---------------------------------------
+        /// <summary>
+        /// WHERE this panel lives. "screen" (default) pins it to an edge of the viewer's own view,
+        /// exactly as before. "world" puts it at a fixed spot in the scene: it does NOT follow the
+        /// camera, so the player can orbit around it — and it is the only anchor another player can
+        /// possibly see, because a screen-docked panel exists only in its owner's view space.
+        ///
+        /// The player may override their OWN panels' anchor from the UI (placement has always been
+        /// the client's business — see the note above); the server names the default and supplies
+        /// the world transform.
+        /// </summary>
+        public string? Anchor { get; set; }        // "screen" (default) | "world"
+
+        /// <summary>
+        /// WHO may see this panel. "own" (default) = only the seat it belongs to. "public" = every
+        /// viewer of the game, which is what lets a hand of cards sit in front of a player where
+        /// the table can see it (the owner sees faces, everyone else sees backs — the game decides
+        /// that per item, see PlayerData.Screen redaction).
+        ///
+        /// Only meaningful together with Anchor="world": there is no way to show one player's
+        /// screen-space HUD to anybody else, so the client ignores "public" on a screen panel.
+        /// </summary>
+        public string? Visibility { get; set; }    // "own" (default) | "public"
+
+        /// <summary>World position for Anchor="world". Ignored otherwise.</summary>
+        public V3? At { get; set; }
+
+        /// <summary>World rotation in DEGREES for Anchor="world" (e.g. face the table centre).</summary>
+        public V3? Rot { get; set; }
+
+        /// <summary>
+        /// How wide the panel should be in WORLD UNITS when Anchor="world". A screen panel derives
+        /// its size from the view (so it reads the same on every monitor); a world panel cannot —
+        /// it has a physical size on the table, and only the game knows what that should be next
+        /// to its own board. Defaults to a sensible hand-sized panel if omitted.
+        /// </summary>
+        public double? WorldWidth { get; set; }
+
         // ---- panels -------------------------------------------------------------------
         // A seat's Screen can be split into SEVERAL panels, each pinned to an edge of the player's
         // view: "right" | "left" | "top" | "bottom" (anything else falls back to right). Panels
@@ -107,6 +164,30 @@ namespace MG.Server.Entities
         // so a nested Panel rendered as one empty line and its whole subtree vanished.)
         public static UiNode Panel(string dock, params UiNode[] kids) =>
             new UiNode { Type = "panel", Style = dock, Children = new(kids) };
+
+        /// <summary>
+        /// A panel that lives IN THE SCENE instead of on the viewer's screen: it stays where it is
+        /// put while the camera orbits, and — unlike a screen-docked panel — other players can see
+        /// it, so it is how a game gives a seat a visible presence on the table (a hand of cards in
+        /// front of a player, a shared scoreboard, a rules card beside the board).
+        ///
+        /// <param name="at">Where, in world units.</param>
+        /// <param name="rot">Facing, in degrees; null = unrotated (flat, facing +Z).</param>
+        /// <param name="worldWidth">Physical width in world units. Pick it against your own board.</param>
+        /// <param name="visibility">"public" (the point of a world panel) or "own" to keep it private.</param>
+        /// </summary>
+        public static UiNode PanelAt(V3 at, V3? rot = null, double worldWidth = 1.2,
+                                     string visibility = "public", params UiNode[] kids)
+            => new UiNode
+            {
+                Type = "panel",
+                Anchor = "world",
+                Visibility = visibility,
+                At = at,
+                Rot = rot,
+                WorldWidth = worldWidth,
+                Children = new(kids),
+            };
 
         // ---- tiny fluent helpers so game flows read cleanly ----
         public static UiNode Col(params UiNode[] kids) => new UiNode { Type = "col", Children = new(kids) };
@@ -128,6 +209,18 @@ namespace MG.Server.Entities
         // A model rendered as a picture tile (the client turns the model URL into a thumbnail).
         public static UiNode Model(string url, double? h = null, string? style = null)
             => new UiNode { Type = "model", Url = url, Size = h, Style = style };
+
+        /// <summary>
+        /// A REAL 3D item inside the panel — actual geometry, not a thumbnail. Use it for a hand of
+        /// cards, a token the player is holding, a die they are about to roll.
+        /// <param name="item">The item, described exactly like a board item. Give it an "owner"
+        /// attribute (a seat id) and a TOKEN asset with a BackURL to get faces-for-me /
+        /// backs-for-everyone-else for free.</param>
+        /// <param name="slotPx">Height of the panel slot it sits in, in px. The item is scaled to it.</param>
+        /// </summary>
+        public static UiNode Item3d(ItemData item, double? slotPx = null, string? style = null,
+                                    string? action = null, Dictionary<string, string>? args = null)
+            => new UiNode { Type = "item3d", Item = item, Size = slotPx, Style = style, Action = action, Args = args };
         // A dropdown. If onChange, it dispatches Action with args[argKey]=selectedValue immediately;
         // otherwise a Button with Gather=[id] reads its value.
         public static UiNode Select(string id, List<UiOption> options, string? action = null, string? argKey = null,

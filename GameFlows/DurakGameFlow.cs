@@ -38,6 +38,37 @@ namespace MG.Server.GameFlows
         // Only two players are required; the rest of the ring is optional.
         public override int MinPlayers => 2;
 
+        // ===================== SECRECY =====================
+        // Durak's hands live in GameData.Attributes ("hand:<seatId>") and used to be broadcast to
+        // everyone: the client drew the backs, but the wire carried every card. Now each viewer
+        // gets their own redacted copy — and the card ART is swapped server-side too, so a hand a
+        // viewer may not see never reaches them as a URL, a code, or a clickable action.
+        public override bool HasHiddenInfo => true;
+
+        public override void RedactFor(GameData view, string? userId)
+        {
+            // Once it is over, everything is public — the loser's hand is the reveal.
+            if (view.GameStatus == GameStatusEnum.ENDED || view.Attributes?.ContainsKey("over") == true) return;
+
+            var mine = SeatIdsOf(view, userId);
+
+            // Your own hand only. The deck order and the (face-down) discard are nobody's to see.
+            RedactOtherSeatKeys(view, new[] { "hand:" }, mine);
+            RedactAllKeys(view, new[] { "deck", "discard" });
+
+            // The hand now lives in the ITEM TREE as a HAND-anchored holder. Another player's
+            // client already refuses to draw it (a hand/camera anchor is private to its owner), but
+            // that is a rendering rule, not secrecy — the cards would still be on the wire. So strip
+            // them here: swap every card in someone else's holder to the back asset and remove what
+            // would name it regardless of the picture.
+            var backKey = BackAsset().Name;
+            foreach (var holder in HoldersOf(view))
+            {
+                if (holder.Owner == null || mine.Contains(holder.Owner)) continue;
+                SwapItems(holder, backKey!, i => i.GetStringAttribute("card") == "1", "code", "playable");
+            }
+        }
+
         public DurakGameFlow(GameData gameData) : base(gameData)
         {
             gameData.GameType = GameTypeEnum.DURAK;
@@ -163,8 +194,20 @@ namespace MG.Server.GameFlows
         }
 
         // ============================ player actions ============================
-        [GameAction] public async Task AttackCard(ExecuteActionData d) { DoAttack(d.Player!.Id, d.Item!.GetStringAttribute("code")); Render(); await Task.CompletedTask; }
-        [GameAction] public async Task DefendCard(ExecuteActionData d) { DoDefend(d.Player!.Id, d.Item!.GetStringAttribute("code")); Render(); await Task.CompletedTask; }
+        /// <summary>
+        /// Which card was played. A panel activation carries no clicked board item, so the code now
+        /// comes through args; the d.Item path is kept as a fallback so anything still binding a
+        /// click to a board card keeps working.
+        /// </summary>
+        private static string CodeOf(ExecuteActionData d)
+        {
+            var fromArgs = d?.args != null && d.args.TryGetValue("code", out var v) ? v : null;
+            if (!string.IsNullOrEmpty(fromArgs)) return fromArgs!;
+            return d?.Item?.GetStringAttribute("code") ?? "";
+        }
+
+        [GameAction] public async Task AttackCard(ExecuteActionData d) { DoAttack(d.Player!.Id, CodeOf(d)); Render(); await Task.CompletedTask; }
+        [GameAction] public async Task DefendCard(ExecuteActionData d) { DoDefend(d.Player!.Id, CodeOf(d)); Render(); await Task.CompletedTask; }
         [GameAction] public async Task TakeCards(ExecuteActionData d) { DoTake(d.Player!.Id); Render(); await Task.CompletedTask; }
         [GameAction] public async Task DoneAttack(ExecuteActionData d) { DoDone(d.Player!.Id); Render(); await Task.CompletedTask; }
 
@@ -360,7 +403,11 @@ namespace MG.Server.GameFlows
         private void Render()
         {
             GameData.Table = ItemData.Table();
-            foreach (var p in GameData.Players) p.Hand = new ItemData("", null) { Name = "PLAYER HAND" };
+            foreach (var p in GameData.Players)
+            {
+                p.Hand = new ItemData("", null) { Name = "PLAYER HAND" };
+                p.Screen = null;   // rebuilt below by RenderHand for any seat holding cards
+            }
 
             addItem(Assets.TABLE).SetPosition(0, -0.05, 0).SetScale(20, 1, 20);
 
@@ -408,22 +455,77 @@ namespace MG.Server.GameFlows
                 .ThenBy(c => c.Suit)
                 .ThenBy(c => c.Rank)
                 .ToList();
+            // THE HAND IS A HOLDER — not a player.Hand zone, and not a uikit panel either.
+            //
+            // Anchor = HAND, which means: the owner's LEFT CONTROLLER in VR, and their CAMERA
+            // outside it (mg.game resolves that, and re-resolves it when the XR session changes).
+            // So the hand is a private HUD across the bottom of your view that becomes something you
+            // physically hold in a headset — and nobody else's client draws it at all.
+            //
+            // Every card's position is set HERE. The client parents the holder and applies these
+            // transforms; it measures and arranges nothing, so the hand cannot reflow or resize.
+            const double CARD_W = 0.23;    // spacing between cards, in world units
+            const double CARD_S = 0.30;    // card scale (a card is ~1 unit, so this is its height)
+            const double FAN = 4.0;        // degrees of fan per card
+            // A TOKEN card's printed face is its +Y (TOP) face — cards are built to lie face-up on a
+            // table, which is why flat field cards read correctly from an overhead camera. Held in
+            // front of the eye it must be STOOD UP so that +Y points at the viewer (+Z in camera
+            // space): Rx(+90) maps (0,1,0) to (0,0,1) exactly. +84 leaves a slight backward lean,
+            // the way a real hand sits.
+            //
+            // The SIGN matters and is easy to get backwards: Rx(-84) turns the face AWAY and you see
+            // the card's back (its -Y side, which carries the back texture). If this ever shows
+            // backs, flip this one number.
+            const double CARD_TILT = 84.0;
+
+            var hand = addHolder(ItemAnchorEnum.HAND, seat)
+                .SetPosition(0, -0.62, -1.35)   // camera space: low and centred, just off the bottom
+                .SetRotation(-6, 0, 0);         // a touch of tilt; the cards supply the rest
+
+            double mid = (cards.Count - 1) / 2.0;
             for (int i = 0; i < cards.Count; i++)
             {
-                double x = (i - (cards.Count - 1) / 2.0) * HAND_SPACING;
-                var item = addItemToPlayerHand(seat, CardAsset(cards[i]))
-                    .SetPosition(x, 0, 0)
-                    .SetScale(CARD_SCALE)
-                    .AddAttribute("card", "1")
-                    .AddAttribute("code", cards[i].Code)
-                    .AddAttribute("owner", seat.Id);   // only the owner's client draws the face
+                var c = cards[i];
+                bool can = playable != null && playable.Contains(c.Code) && clickAction != null;
 
-                if (playable != null && playable.Contains(cards[i].Code))
+                // Rotation order is XYZ (R = Rx·Ry·Rz), so Y is applied BEFORE the X tilt — i.e. the
+                // fan is a spin in the card's own plane, which is what fans a hand. Putting the fan
+                // on Z instead would lift one edge off the plane rather than rotate the card.
+                var card = addItemTo(hand, CardAsset(c))
+                    .SetPosition((i - mid) * CARD_W, 0, i * 0.001)   // a hair of Z so they layer cleanly
+                    .SetRotation(CARD_TILT, (i - mid) * -FAN, 0)
+                    .SetScale(CARD_S)
+                    .AddAttribute("card", "1")
+                    .AddAttribute("code", c.Code)
+                    .AddAttribute("owner", seat.Id);
+
+                if (can)
                 {
-                    item.AddAttribute("playable", "1");
-                    if (clickAction != null) item.ClickActions[seat.Id] = clickAction;
+                    card.AddAttribute("playable", "1");
+                    card.ClickActions[seat.Id] = clickAction!;   // a board-item click: code comes off d.Item
                 }
             }
+
+            // ...and a PUBLIC row of backs lying on the felt in front of the seat, so the table can
+            // still see HOW MANY cards you hold. Durak needs that — it is public information in the
+            // real game, and the private hand above is invisible to everyone else.
+            //
+            // WORLD-anchored and placed from the seat's own ring position, NOT anchored to the
+            // avatar: the avatar group is not turned to face the table, so a local offset would
+            // land along the world axes and put another seat's row somewhere random.
+            var av = seat.Avatar?.Position ?? new V3(0, 1, 9);
+            var len = Math.Sqrt(av.X * av.X + av.Z * av.Z);
+            var pull = len > 0.001 ? (len - 2.4) / len : 0;      // in off the seat, onto the felt
+            var yaw = Math.Atan2(av.X, av.Z) * 180 / Math.PI;    // turn the row to face that seat
+
+            var shown = addHolder(ItemAnchorEnum.WORLD, seat)
+                .SetPosition(av.X * pull, 0.04, av.Z * pull)
+                .SetRotation(0, yaw, 0);
+            for (int i = 0; i < cards.Count; i++)
+                addItemTo(shown, BackAsset())
+                    .SetPosition((i - mid) * 0.55, 0, 0)          // flat on the felt, face up = a back
+                    .SetScale(0.8)
+                    .AddAttribute("cardback", "1");
         }
 
         private HashSet<string> LegalAttacks(string seatId)

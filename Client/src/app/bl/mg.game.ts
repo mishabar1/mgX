@@ -64,6 +64,31 @@ export class MgGame{
   playerData!: PlayerData;
   allItems: { [key: string]: ItemData } = {};
 
+  /**
+   * Items whose Anchor moves them somewhere other than their parent — see ItemData.Anchor.
+   *
+   * They cannot be resolved as they are built: the table tree is created BEFORE addPlayers(), so an
+   * avatar-anchored holder would look for an avatar that does not exist yet. They are recorded here
+   * during the build and re-parented once in applyAnchors(), which runs after the avatars are up.
+   * Re-parenting is free in three.js and the local transform is untouched, because the server's
+   * Position/Rotation/Scale are already parent-relative.
+   */
+  private anchoredItems: { item: ItemData, mesh: THREE.Object3D }[] = [];
+
+  /**
+   * Holders anchored to the VR hand, kept for the LIFE of the scene rather than cleared like
+   * `anchoredItems`. Entering or leaving VR has to move them between the controller and the camera,
+   * and that happens long after they were built.
+   */
+  private handAnchored: { item: ItemData, mesh: THREE.Object3D }[] = [];
+
+  /**
+   * Build a uikit panel for an item whose asset type is PANEL. Wired by game-play to
+   * MgPanel3d.buildDetached, so MgGame needs to know nothing about uikit — it just receives an
+   * Object3D and treats it like any other item's geometry.
+   */
+  makeUiPanel?: (nodes: any[], worldWidth: number, seatId: string, interactive: boolean) => THREE.Object3D | null;
+
   // per-player hand/table anchor meshes, so updateGame can refresh those zones live
   handMeshes: { [id: string]: THREE.Object3D } = {};
   tableMeshes: { [id: string]: THREE.Object3D } = {};
@@ -170,6 +195,7 @@ export class MgGame{
     this.createItem(this.gameData.table, null);
 
     this.addPlayers();
+    this.applyAnchors();          // needs the avatars, so it runs after addPlayers()
     if (this.playerData) {
       this.mgThree.camera.position.set(this.playerData.camera.position.x, this.playerData.camera.position.y, this.playerData.camera.position.z);
     } else {
@@ -414,6 +440,66 @@ export class MgGame{
     return spr;
   }
 
+  /**
+   * A real 3D BUTTON: a solid plate with the label printed on its front face.
+   *
+   * Deliberately NOT a uikit panel and NOT a billboard sprite. uikit is 3D geometry too, but it
+   * sizes and arranges ITSELF; a sprite always turns to face the camera. A button is an ordinary
+   * item, so it must sit exactly where the server put it, at the size the server chose, facing the
+   * way the server turned it — in a holder on the camera, on a figure, in the world, or on a VR
+   * hand, with nothing reflowing.
+   *
+   * The plate is one unit tall and as wide as its label needs; the item's Scale sizes it.
+   */
+  private makeButton3d(itemData: ItemData): THREE.Object3D {
+    const label = itemData.text || '';
+    const a: any = itemData.attributes || {};
+    const bg = a['bg'] || '#1f2937';
+    const fg = a['fg'] || '#e8edf5';
+
+    // Label texture: the same canvas treatment the nameplates use, so buttons match the rest of
+    // the UI and need no font file.
+    const fontSize = 64;
+    const font = `bold ${fontSize}px Arial, sans-serif`;
+    const c = document.createElement('canvas');
+    let ctx = c.getContext('2d')!;
+    ctx.font = font;
+    const textW = Math.max(60, ctx.measureText(label || ' ').width);
+    const padX = 46, padY = 30;
+    c.width = Math.ceil(textW + padX * 2);
+    c.height = Math.ceil(fontSize + padY * 2);
+    ctx = c.getContext('2d')!;
+    ctx.font = font;                                  // resizing the canvas clears state
+    ctx.fillStyle = bg;
+    this.rrect(ctx, 0, 0, c.width, c.height, 26);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 4;
+    this.rrect(ctx, 2, 2, c.width - 4, c.height - 4, 24);
+    ctx.stroke();
+    ctx.fillStyle = fg;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, c.width / 2, c.height / 2);
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;            // canvas colours are sRGB — keep text crisp
+    tex.needsUpdate = true;
+
+    const aspect = c.width / c.height;
+    const depth = 0.14;
+    const geo = new THREE.BoxGeometry(aspect, 1, depth);
+
+    // BoxGeometry material order is [+X, -X, +Y, -Y, +Z, -Z]; index 4 is the face we print on.
+    const side = new THREE.MeshStandardMaterial({ color: new THREE.Color(bg), roughness: 0.8, metalness: 0.0 });
+    const face = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, metalness: 0.0 });
+    const mesh = new THREE.Mesh(geo, [side, side, side, side, face, side]);
+
+    const g = new Group();
+    g.add(mesh);
+    return g;
+  }
+
   private rrect(ctx: any, x: number, y: number, w: number, h: number, r: number) {
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
@@ -471,6 +557,84 @@ export class MgGame{
     forEach(this.defendSprites, (spr: THREE.Sprite, id: string) => {
       spr.visible = !over && !!def && id === def;
     });
+  }
+
+  /**
+   * Build the geometry for ONE item to stand inside a server-driven PANEL slot.
+   *
+   * Deliberately NOT createItem(): that one registers the item in `allItems`, wires board click
+   * handling and applies board positioning — and `updateGame`'s mark-and-sweep would then delete
+   * every panel item on the next update, because panel items are not in GameData.Table or in any
+   * seat's hand/table. A panel item belongs to the panel, so it gets a narrow path of its own and
+   * the board's registry stays clean.
+   *
+   * Returns a group normalised to roughly ONE unit, so the panel can scale it to its slot. Content
+   * arrives asynchronously (textures, models); the group is returned immediately and filled in.
+   *
+   * TOKEN and OBJECT are honoured — a card/tile and a model, which is what a hand or a held piece
+   * needs. Anything else yields an empty group rather than throwing.
+   *
+   * NOTE the card-back rule below is the same one the board's TOKEN branch implements. It is
+   * duplicated on purpose for now, to keep this path independent of createItem's bookkeeping; if a
+   * third caller ever needs it, lift the face-choosing into one helper rather than copying again.
+   */
+  buildPanelItem(itemData: any): THREE.Object3D {
+    const g = new THREE.Group();
+    g.name = 'PANEL_ITEM:' + (itemData?.asset || '');
+    const assetKey = itemData?.asset;
+    const asset = assetKey ? this.gameData?.assets?.[assetKey] : null;
+    if (!asset) {
+      if (assetKey) console.warn('[panel item] unknown asset key:', assetKey);
+      return g;
+    }
+
+    const frontURL = GAMES_BASE + asset.frontURL;
+    const backURL = GAMES_BASE + (asset.backURL || asset.frontURL);
+
+    // Face rule, identical to the board's: an item carrying an "owner" attribute shows its FRONT
+    // only to that seat. Everyone else sees the back — which is exactly what a hand of cards
+    // sitting on the table in front of a player should look like.
+    const ownerId = itemData?.attributes?.['owner'];
+    const amOwner = !ownerId || (this.playerData && this.playerData.id === ownerId);
+    const faceURL = amOwner ? frontURL : backURL;
+
+    if (asset.type === 'TOKEN') {
+      this.mgThree.getTexture(faceURL, (tex: any) => {
+        const iw = tex?.image?.width || 1, ih = tex?.image?.height || 1;
+        const aspect = iw / ih;
+        // Fit the card into a 1x1 box, preserving its aspect.
+        const w = aspect >= 1 ? 1 : aspect;
+        const h = aspect >= 1 ? 1 / aspect : 1;
+        const mesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(w, h),
+          new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide }),
+        );
+        g.add(mesh);
+      });
+      return g;
+    }
+
+    if (asset.type === 'OBJECT') {
+      const low = frontURL.toLowerCase();
+      if (low.endsWith('glb') || low.endsWith('gltf')) {
+        this.mgThree.gltfLoader.load(frontURL, (gltf: any) => {
+          const model: THREE.Object3D = gltf.scene;
+          // Normalise to ~1 unit on its largest horizontal axis, the same convention createItem uses.
+          const box = new THREE.Box3().setFromObject(model);
+          const sx = Math.abs(box.min.x) + Math.abs(box.max.x);
+          const sz = Math.abs(box.min.z) + Math.abs(box.max.z);
+          const k = 1 / Math.max(sx || 1, sz || 1);
+          model.scale.setScalar(k);
+          g.add(model);
+        }, undefined, (e: any) => console.warn('[panel item] model failed', frontURL, e));
+      } else {
+        console.warn('[panel item] unsupported OBJECT format for a panel slot:', frontURL);
+      }
+      return g;
+    }
+
+    console.warn('[panel item] asset type not supported in a panel:', asset.type);
+    return g;
   }
 
   createItem(itemData: ItemData, parentMesh: THREE.Object3D | null) {
@@ -779,6 +943,34 @@ export class MgGame{
         this.processItem(itemData, g, parentMesh);
       }
 
+      if (assetType == "PANEL") {
+        // A uikit panel, carried by an item. The ITEM owns the transform (and, through its holder,
+        // where it hangs); this only builds the contents at the physical width the server asked for.
+        const g = new Group();
+
+        // OWNER = PRIVATE. A PANEL item with an Owner belongs to that seat and is not built for
+        // anyone else; leave Owner unset for a panel the whole table should see.
+        //
+        // This is not only about secrecy — it is the difference between building 19 uikit panels
+        // and 38. Without it every seat's controls were built for every viewer and then thrown
+        // away again the moment applyAnchors() dropped their camera-anchored holder.
+        const mine = !itemData.owner || itemData.owner === this.playerData?.id;
+        if (mine) {
+          const built = this.makeUiPanel
+            ? this.makeUiPanel(itemData.ui || [], itemData.uiWidth || 1.0,
+                               this.playerData?.id || '', true)
+            : null;
+          if (built) g.add(built);
+          else console.warn('[panel item] no uikit builder wired, or empty ui', itemData.id);
+        }
+
+        this.processItem(itemData, g, parentMesh);
+      }
+
+      if (assetType == "BUTTON") {
+        this.processItem(itemData, this.makeButton3d(itemData), parentMesh);
+      }
+
       if (assetType == "DIE") {
         // A real 3D die model (dices/d.glb) with the rolled number floating above it ("?" while
         // pending) so everyone sees the result. Sits over the figure until the DM takes it.
@@ -927,6 +1119,10 @@ export class MgGame{
       }
     });
 
+    // A holder created mid-game (a hand dealt on the first turn, a DM tray opened) is recorded by
+    // processItem during the diff above and still sitting under its parent — attach it now.
+    this.applyAnchors();
+
     //players - move / add / remove
 
     // keep debug frames in sync with the rebuilt item set (no-op when debug is off)
@@ -989,12 +1185,96 @@ export class MgGame{
   }
 
   updateItemText(item: ItemData, text?: string) {
+    // A BUTTON's label is PRINTED into its front-face texture, so changing the text means
+    // redrawing it. Cheap, and it keeps a live readout (a status button) honest.
+    if (item.mesh && (this.gameData?.assets?.[item.asset] as any)?.type === 'BUTTON') {
+      item.text = text;
+      const fresh = this.makeButton3d(item);
+      const parent = item.mesh.parent;
+      fresh.position.copy(item.mesh.position);
+      fresh.rotation.copy(item.mesh.rotation);
+      fresh.scale.copy(item.mesh.scale);
+      fresh.userData['ItemData'] = item;
+      item.mesh.removeFromParent();
+      parent?.add(fresh);
+      item.mesh = fresh;
+      return;
+    }
     if (item.asset == "TEXTBLOCK") {
       item.text = text;
       (item.mesh! as any).childrenTexts[0].set({content: msdfSafe(text)});
     }
   }
 
+
+  /** That seat's seated figure, which is what an "avatar" anchor hangs on. */
+  private avatarMeshOf(seatId: string): THREE.Object3D | null {
+    const p = (this.gameData?.players || []).find((x: any) => x.id === seatId);
+    return (p as any)?.avatar?.mesh || null;
+  }
+
+  /**
+   * Move every anchored holder onto the thing it named.
+   *
+   * This is the ENTIRE client side of the holder mechanic: parent the group, nothing else. No
+   * measuring, no arranging, no fitting to a frustum — whatever the server put inside keeps the
+   * position it was given, so a holder cannot reflow when the camera moves or an item changes.
+   *
+   *   avatar  -> that seat's figure. Everyone sees it (an opponent's hand has table presence).
+   *   camera  -> the viewer's own camera, and ONLY for its owner: nobody else has that camera, so
+   *              for everyone else the group is dropped rather than left floating in the world.
+   *   hand    -> the owner's VR controller, falling back to the camera outside VR.
+   */
+  /**
+   * Move every "hand"-anchored holder to where it belongs NOW: the left controller in VR, the camera
+   * outside it. game-play calls this when the XR session starts or ends — without it a hand-anchored
+   * tray stays wherever it was first parented and never reaches the controller.
+   */
+  reattachHandAnchors() {
+    this.handAnchored = this.handAnchored.filter(h => !!h.mesh.parent);   // drop rebuilt-away items
+    if (!this.handAnchored.length) return;
+
+    const controller = this.mgThree?.leftController?.();
+    const target = controller || this.mgThree?.camera;
+    if (!target) return;
+
+    for (const { mesh } of this.handAnchored) target.add(mesh);
+    if (!controller) this.mgThree.scene?.add(this.mgThree.camera);
+  }
+
+  private applyAnchors() {
+    if (!this.anchoredItems.length) return;
+    const mySeat = this.playerData?.id;
+
+    for (const { item, mesh } of this.anchoredItems) {
+      const anchor = (item.anchor || '').toLowerCase();
+      const isMine = !!item.owner && item.owner === mySeat;
+
+      if (anchor === 'camera' || anchor === 'hand') {
+        if (!isMine) { mesh.removeFromParent(); continue; }   // somebody else's HUD is not ours to draw
+        if (anchor === 'hand') this.handAnchored.push({ item, mesh });
+        const controller = anchor === 'hand' ? this.mgThree.leftController?.() : null;
+        (controller || this.mgThree.camera).add(mesh);
+        // A camera is not normally in the scene graph, and children of an unparented camera are
+        // never rendered. Adding it is idempotent.
+        if (!controller) this.mgThree.scene?.add(this.mgThree.camera);
+        continue;
+      }
+
+      if (anchor === 'avatar') {
+        const av = item.owner ? this.avatarMeshOf(item.owner) : null;
+        if (av) av.add(mesh);
+        else console.warn('[holder] avatar anchor with no avatar for seat', item.owner);
+        continue;
+      }
+
+      console.warn('[holder] unknown anchor, left where it was:', item.anchor);
+    }
+
+
+    // Applied: these are parented for good now. Later updates record only NEW anchored items.
+    this.anchoredItems = [];
+  }
 
   processItem(itemData: ItemData, mesh: THREE.Object3D, parentMesh: THREE.Object3D | null) {
     //console.log("processItem",itemData,mesh,parentMesh);
@@ -1026,6 +1306,12 @@ export class MgGame{
     } else {
       this.mgThree.scene.add(mesh);
     }
+
+    // A HOLDER that lives somewhere other than its parent is parented properly above (so its
+    // transform and children are built exactly as usual) and then MOVED by applyAnchors(), which
+    // can only run once the avatars exist. See ItemData.Anchor.
+    const anchor = (itemData.anchor || '').toLowerCase();
+    if (anchor && anchor !== 'world') this.anchoredItems.push({ item: itemData, mesh });
 
     // (Red debug frames are managed centrally by rebuildDebugBoxes, only while DEBUG is on.)
 

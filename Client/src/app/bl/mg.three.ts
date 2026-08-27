@@ -185,6 +185,12 @@ export class MgThree{
   private magShowBtn?: HTMLDivElement;     // 🔍 to bring it back
   private magZoomBar?: HTMLDivElement;     // x2 / x4 / … zoom-level buttons
   private magSize = 280;                    // on-screen size of the loupe (css px)
+  /**
+   * Top offset of the whole loupe cluster (canvas, its ✕, the 🔍 restore button and the zoom bar).
+   * Everything used to sit at top:12px — the same corner as the game-play toolbar — so the ✕ landed
+   * on top of the "Games list" button. Kept as ONE value so the four elements never drift apart.
+   */
+  private magTop = 64;                      // clears the toolbar above it
   private magZoom = 4;                      // magnification factor (chosen via the zoom bar)
   private magMouse: { x: number, y: number } | null = null;
   magEnabled = true;
@@ -635,7 +641,7 @@ export class MgThree{
     const canvas = document.createElement('canvas');
     canvas.width = size; canvas.height = size;
     Object.assign(canvas.style, {
-      position: 'absolute', top: '12px', left: '12px',
+      position: 'absolute', top: this.magTop + 'px', left: '12px',
       width: size + 'px', height: size + 'px',
       borderRadius: '8px', border: '3px solid rgba(255,255,255,0.85)',
       boxShadow: '0 2px 12px rgba(0,0,0,0.55)',
@@ -663,7 +669,7 @@ export class MgThree{
     closeBtn.textContent = '✕';
     closeBtn.title = 'Hide magnifier';
     Object.assign(closeBtn.style, {
-      position: 'absolute', top: '16px', left: (15) + 'px',
+      position: 'absolute', top: (this.magTop + 4) + 'px', left: (15) + 'px',
       width: '22px', height: '22px', lineHeight: '22px', textAlign: 'center',
       borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff',
       font: 'bold 14px sans-serif', cursor: 'pointer', zIndex: '21',
@@ -677,7 +683,7 @@ export class MgThree{
     showBtn.textContent = '🔍';
     showBtn.title = 'Show magnifier';
     Object.assign(showBtn.style, {
-      position: 'absolute', top: '12px', left: '12px',
+      position: 'absolute', top: this.magTop + 'px', left: '12px',
       width: '34px', height: '34px', lineHeight: '34px', textAlign: 'center',
       borderRadius: '8px', background: 'rgba(0,0,0,0.55)', color: '#fff',
       fontSize: '18px', cursor: 'pointer', zIndex: '21',
@@ -689,7 +695,7 @@ export class MgThree{
     // Zoom-level bar (x2 / x4 / x6 / x8 / x10) under the loupe.
     const zoomBar = document.createElement('div');
     Object.assign(zoomBar.style, {
-      position: 'absolute', top: (12 + size + 6) + 'px', left: '12px',
+      position: 'absolute', top: (this.magTop + size + 6) + 'px', left: '12px',
       width: size + 'px', display: 'flex', gap: '4px', justifyContent: 'center',
       zIndex: '21', userSelect: 'none',
     } as any);
@@ -841,6 +847,16 @@ export class MgThree{
   onSelectStart = (x: any) => { if (x?.target) x.target.userData['selectPressed'] = true; };
   onSelectEnd = (x: any) => { if (x?.target) x.target.userData['selectPressed'] = false; };
 
+  /**
+   * The LEFT controller, by handedness rather than index. Null outside a session, or before the
+   * input sources have reported themselves — callers then fall back to the camera.
+   */
+  leftController(): any | null {
+    const list: any[] = this.controllers || [];
+    return list.find(c => c?.userData?.['handedness'] === 'left')
+        || (this.renderer?.xr?.isPresenting ? (list[0] || null) : null);
+  }
+
   buildControllers() {
     const controllerModelFactory = new XRControllerModelFactory();
 
@@ -859,6 +875,14 @@ export class MgThree{
       controller.add(line.clone());
       controller.userData["selectPressed"] = false;
       controller.userData["selectPressedPrev"] = false;
+      // WHICH HAND. getController(i) is connection order, not handedness — so "put this on the left
+      // controller" cannot be answered by an index. The XR input source reports it on connect.
+      controller.addEventListener('connected', (e: any) => {
+        controller.userData['handedness'] = e?.data?.handedness || '';
+      });
+      controller.addEventListener('disconnected', () => {
+        controller.userData['handedness'] = '';
+      });
       this.scene.add(controller);
       controllers.push(controller);
 

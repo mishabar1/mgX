@@ -331,7 +331,95 @@ namespace MG.Server.GameFlows
         {
             if (view.Players == null) return;
             foreach (var p in view.Players)
-                if (!mySeats.Contains(p.Id)) p.Screen = null;
+            {
+                if (mySeats.Contains(p.Id) || p.Screen == null) continue;
+
+                // Keep only what the seat DELIBERATELY publishes: a world-anchored panel marked
+                // public. That is how a hand of cards stays visible on the table (as backs) while
+                // a screen-docked HUD — which no other client could render anyway — is dropped.
+                var kept = p.Screen.Where(IsPublicWorldPanel).ToList();
+                p.Screen = kept.Count > 0 ? kept : null;
+            }
+        }
+
+        /// <summary>Every HOLDER in this view — an item that names where it hangs (ItemData.Anchor).</summary>
+        protected static List<ItemData> HoldersOf(GameData view)
+        {
+            var found = new List<ItemData>();
+            void Walk(ItemData? it)
+            {
+                if (it == null) return;
+                if (!string.IsNullOrEmpty(it.Anchor)) found.Add(it);
+                foreach (var c in it.Items) Walk(c);
+            }
+            Walk(view.Table);
+            return found;
+        }
+
+        /// <summary>
+        /// Rewrite matching items anywhere under <paramref name="root"/> to a different asset, and
+        /// strip what would give them away regardless of the picture.
+        ///
+        /// The SERVER-SIDE swap for hidden items in a holder: the face URL never goes on the wire.
+        /// A client-side rule ("draw the back to non-owners") is a rendering nicety, not secrecy —
+        /// the card is still in the payload. The click action goes too, or the item is invisible but
+        /// still actionable.
+        /// </summary>
+        protected static void SwapItems(ItemData root, string newAssetKey,
+                                        Func<ItemData, bool> shouldSwap, params string[] stripAttributes)
+        {
+            if (root == null) return;
+            if (shouldSwap(root))
+            {
+                root.Asset = newAssetKey;
+                if (root.Attributes != null)
+                    foreach (var k in stripAttributes) root.Attributes.Remove(k);
+                root.ClickActions?.Clear();
+                root.HoverActions?.Clear();
+            }
+            foreach (var c in root.Items) SwapItems(c, newAssetKey, shouldSwap, stripAttributes);
+        }
+
+        /// <summary>A panel the game has published to the whole table (see <see cref="UiNode.PanelAt"/>).</summary>
+        protected static bool IsPublicWorldPanel(UiNode n)
+            => string.Equals(n?.Type, "panel", StringComparison.OrdinalIgnoreCase)
+               && string.Equals(n?.Anchor, "world", StringComparison.OrdinalIgnoreCase)
+               && string.Equals(n?.Visibility, "public", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Rewrite every "item3d" in these panels to a different asset, and strip what would give
+        /// the item away regardless of its picture.
+        ///
+        /// This is the SERVER-SIDE face swap: a card the viewer may not see is replaced with the
+        /// back asset before the payload is built, so the front URL never goes on the wire at all.
+        /// Doing it client-side (drawing the back but shipping the face) is the leak, not the fix.
+        /// The identifying attributes and the click action go too — otherwise the card is still
+        /// named in `code`, and still clickable, behind a picture of a back.
+        /// </summary>
+        protected static void SwapPanelItems(List<UiNode>? screen, string newAssetKey,
+                                             Func<ItemData, bool> shouldSwap,
+                                             params string[] stripAttributes)
+        {
+            if (screen == null) return;
+            foreach (var n in screen) SwapPanelItemNode(n, newAssetKey, shouldSwap, stripAttributes);
+        }
+
+        private static void SwapPanelItemNode(UiNode n, string key, Func<ItemData, bool> shouldSwap,
+                                              string[] strip)
+        {
+            if (n == null) return;
+            if (string.Equals(n.Type, "item3d", StringComparison.OrdinalIgnoreCase)
+                && n.Item != null && shouldSwap(n.Item))
+            {
+                n.Item.Asset = key;
+                if (n.Item.Attributes != null)
+                    foreach (var k in strip) n.Item.Attributes.Remove(k);
+                n.Item.ClickActions?.Clear();
+                n.Action = null;
+                n.Args = null;
+            }
+            if (n.Children != null)
+                foreach (var c in n.Children) SwapPanelItemNode(c, key, shouldSwap, strip);
         }
 
         // Serializes all state mutations for THIS game (human actions, AI turns, undo) so a
@@ -641,6 +729,39 @@ namespace MG.Server.GameFlows
         //    var item = new ItemData(assetKey, this.GameData.Table);
         //    return item;
         //}
+
+        /// <summary>
+        /// An item destined for a PANEL slot (see <see cref="UiNode.Item3d"/>) rather than for the
+        /// board. Parentless on purpose: it belongs to the panel, not to GameData.Table and not to a
+        /// seat's hand/table zone — so it is laid out by the panel's flexbox and travels with it.
+        ///
+        /// Give it an "owner" attribute (a seat id) and a TOKEN asset with a BackURL to get
+        /// faces-for-the-owner / backs-for-everyone-else, which the renderer already implements.
+        /// </summary>
+        internal ItemData panelItem(AssetData asset) => new ItemData(asset.Name);
+
+        /// <summary>
+        /// A HOLDER: an assetless (invisible) item that carries other items, attached where you say.
+        ///
+        /// This is the generic replacement for player.Hand / player.Table. Put items inside it and
+        /// position each one YOURSELF, relative to the holder — the client parents and transforms,
+        /// and does no layout of its own, so nothing it contains can reflow or resize.
+        ///
+        ///   var tray = addHolder(ItemAnchorEnum.CAMERA, seat);      // a HUD only this seat sees
+        ///   addItemTo(tray, Assets.DISC).SetPosition(-0.3, 0, -1.2);
+        ///   addItemTo(tray, Assets.DISC).SetPosition( 0.3, 0, -1.2);
+        /// </summary>
+        internal ItemData addHolder(string anchor, PlayerData? owner = null, ItemData? parent = null)
+        {
+            var holder = new ItemData("", parent ?? this.GameData.Table);
+            holder.Name = "HOLDER:" + anchor;
+            holder.Anchor = anchor;
+            holder.Owner = owner?.Id;
+            return holder;
+        }
+
+        /// <summary>An item inside a specific holder (or any other item).</summary>
+        internal ItemData addItemTo(ItemData holder, AssetData asset) => new ItemData(asset.Name, holder);
 
         internal ItemData addTextItem(AssetData asset)
         {

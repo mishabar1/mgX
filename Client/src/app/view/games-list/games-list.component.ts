@@ -135,6 +135,28 @@ export class GamesListComponent  implements  OnInit, OnDestroy, AfterViewInit, O
 
 
 
+  // Housekeeping: clear the whole list. Same confirm treatment as a single delete, but it names
+  // the count, because "delete all" with no number is exactly the prompt people click through.
+  deleteAll() {
+    const n = this.games.length;
+    if (!n) return;
+    this.confirmationService.confirm({
+      header: 'Delete all games',
+      message: `Delete all ${n} game${n === 1 ? '' : 's'} on the server? This can't be undone.`,
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: `Delete all ${n}`,
+      rejectLabel: 'Cancel',
+      acceptButtonStyleClass: 'p-button-danger',
+      rejectButtonStyleClass: 'p-button-secondary p-button-outlined',
+      accept: () => this.dalService.deleteAllGames().subscribe({
+        // The server broadcasts a GameDeleted per game, which already refreshes the list — this
+        // refetch is just belt-and-braces for a dropped socket.
+        next: () => this.updateGamesList(),
+        error: () => this.updateGamesList(),
+      }),
+    });
+  }
+
   delete(game: GameData) {
     this.confirmationService.confirm({
       header: 'Delete game',

@@ -102,9 +102,14 @@ namespace MG.Server.Database
             await Hub.Clients.Group(LobbyGroup).SendAsync("GamesUpdated", game.Id);
         }
 
-        internal async Task HubGameDeleted(string gameId)
+        /// <param name="save">
+        /// Pass false when deleting several games at once: Save() serializes EVERY game, so saving
+        /// once per deletion would re-serialize the whole store N times for one user action.
+        /// The caller is then responsible for one Save() at the end.
+        /// </param>
+        internal async Task HubGameDeleted(string gameId, bool save = true)
         {
-            await Save();
+            if (save) await Save();
             // Both audiences: the lobby drops it from the list, and anyone with the game still
             // open has to be kicked back to the list. A connection in both groups (only possible
             // transiently, mid-navigation) may get this twice — both client handlers are

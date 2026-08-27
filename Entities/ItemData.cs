@@ -26,6 +26,74 @@ namespace MG.Server.Entities
 
         public string? ParentItemId { get; set; }
 
+        // ================================ THE HOLDER =====================================
+        // An item with no Asset is already a bare group that carries children (see the else
+        // branch of MgGame.createItem), and children are already positioned by the SERVER
+        // relative to their parent. So a "holder" needs exactly one thing that did not exist:
+        // WHERE it attaches.
+        //
+        // That is what Anchor is. It replaces the two hard-coded holders the client ships today —
+        // PLAYER HAND and PLAYER TABLE, each a Group bolted to the avatar and placed from
+        // handAnchor/tableAnchor attributes — with one generic mechanism, any number of them,
+        // nested however a game likes.
+        //
+        // The client only PARENTS and TRANSFORMS. It never measures, arranges, wraps or scales
+        // anything to fit: every child's Position/Rotation/Scale is the server's word, exactly as
+        // it already is for board items. That is the whole point — nothing can reflow, so nothing
+        // can flicker or resize when the camera moves or a card is clicked.
+        // =================================================================================
+
+        /// <summary>
+        /// Where this item's group hangs in the scene:
+        ///   "world" (or null) - under its parent item / the table, as every board item does today.
+        ///   "avatar"          - on <see cref="Owner"/>'s seated figure. EVERYONE sees it, which is
+        ///                       how a hand of cards has presence at the table.
+        ///   "camera"          - on the viewer's own camera: a HUD that rides the view. Rendered
+        ///                       ONLY for Owner — nobody else has that camera.
+        ///   "hand"            - on the owner's VR controller; falls back to "camera" outside VR.
+        /// Position/Rotation are relative to whatever it attaches to.
+        /// </summary>
+        public string? Anchor { get; set; }
+
+        /// <summary>
+        /// The seat this item belongs to. Required for the per-seat anchors ("avatar", "camera",
+        /// "hand") — it names whose avatar to hang on, and whose eyes may see it.
+        /// </summary>
+        public string? Owner { get; set; }
+
+        public ItemData SetAnchor(string anchor, string? ownerSeatId = null)
+        {
+            Anchor = anchor;
+            if (ownerSeatId != null) Owner = ownerSeatId;
+            return this;
+        }
+
+        public ItemData SetOwner(string ownerSeatId) { Owner = ownerSeatId; return this; }
+
+        // ---- a UI PANEL as an item -------------------------------------------------------
+        // The mirror image of UiNode.Item3d (a panel holding an item): an ITEM that IS a uikit
+        // panel. A uikit panel is ordinary three.js geometry, so it can hang in a holder like
+        // anything else — which means dense UI (labels, buttons, a log) and free-form 3D items can
+        // live side by side in the same tray.
+        //
+        // The holder decides WHERE it sits and UiWidth decides HOW BIG it is; uikit only arranges
+        // the contents inside that fixed plate. That split is the point: the flicker and the
+        // resizing came from the client choosing a panel's place and size from the camera every
+        // frame, never from the arranging.
+
+        /// <summary>For Type == PANEL: the panel's contents, exactly as PlayerData.Screen uses.</summary>
+        public List<UiNode>? Ui { get; set; }
+
+        /// <summary>Physical width of the panel in WORLD units. Its height follows its content.</summary>
+        public double? UiWidth { get; set; }
+
+        public ItemData SetUi(double worldWidth, params UiNode[] nodes)
+        {
+            UiWidth = worldWidth;
+            Ui = new List<UiNode>(nodes);
+            return this;
+        }
+
 
         public static ItemData Table()
         {

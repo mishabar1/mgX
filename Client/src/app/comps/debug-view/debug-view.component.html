@@ -1,5 +1,8 @@
-<div *ngIf="mgThree.scene" style="position: absolute;top: 0px;right: 0px;">
-  <button (click)="showDebug()" style="width: 100px;height: 30px">DEBUG</button>
+<!-- The TRIGGER is laid out by whoever hosts this component (game-play puts it in the single
+     top-left toolbar), so it must not position itself. The debug WINDOW below keeps its own
+     absolute placement — it is a big overlay, not a button. -->
+<div *ngIf="mgThree.scene" style="display:inline-block">
+  <button (click)="showDebug()" style="height:30px;padding:0 12px">DEBUG</button>
 </div>
 
 <div *ngIf="showDebugWindow && mgThree.scene && mgThree.camera"

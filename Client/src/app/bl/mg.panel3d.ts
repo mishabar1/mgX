@@ -54,6 +54,11 @@ export type UiNode = {
   options?: { label: string, value: string, checked?: boolean, selected?: boolean }[];
   children?: UiNode[]; id?: string; onChange?: boolean; checked?: boolean;
   confirm?: string; gather?: string[]; overlays?: { url: string, x: number, y: number, w: number }[];
+  // panel placement (type === 'panel'); see UiNode.cs
+  anchor?: string; visibility?: string;
+  item?: any;                          // type 'item3d': a real 3D item (an ItemData) in a slot
+  at?: { x: number, y: number, z: number }; rot?: { x: number, y: number, z: number };
+  worldWidth?: number;
 };
 
 /**
@@ -292,6 +297,83 @@ const DROPDOWN_FROM = 6;
 export type Dock = 'right' | 'left' | 'top' | 'bottom';
 const DOCKS: Dock[] = ['right', 'left', 'top', 'bottom'];
 
+/**
+ * WHERE a panel lives.
+ *   'screen' - pinned to an edge of this viewer's view; follows the camera; only the owner can
+ *              ever see it, because it exists in that camera's space and nowhere else.
+ *   'world'  - standing in the scene at a fixed transform. The camera orbits around it, and it is
+ *              the ONLY anchor another player can see — which is what makes a visible hand of
+ *              cards, or a shared scoreboard on the table, possible at all.
+ * The server names the default per panel; the player may override their own (placement has always
+ * been the client's business).
+ */
+export type Anchor = 'screen' | 'world';
+
+/**
+ * One seat's panel tree, as handed to the renderer.
+ *
+ * The panel used to render exactly ONE seat — the viewer's own. It now renders every seat whose
+ * panel the server published to the table, which is what makes a visible hand of cards possible:
+ * `interactive` is false for those, so you can see another player holding cards without being able
+ * to play them.
+ */
+export interface PanelSource {
+  seatId: string;
+  screen: UiNode[] | null;
+  interactive: boolean;      // true only for the viewer's own seat
+}
+
+/**
+ * World units per authored pixel for a panel carried by an ITEM.
+ *
+ * This is FIXED on purpose. A docked panel derives its scale from the viewport, which is what made
+ * it resize and flicker; an item-carried panel must not, so instead every one of them shares one
+ * pixel size and the panel's authored WIDTH follows the physical width the server asked for.
+ *
+ * The value: at the usual HUD distance (~1.4 units, 75° FOV) the view is ~2.15 units tall, so on a
+ * ~900px viewport one screen pixel is ~0.0024 world units. Matching that means one authored px is
+ * about one screen px — which is the whole reason UI authored in px looks right.
+ *
+ * (The bug this replaces: every panel was authored at PANEL_PX_SIDE = 520 and then squeezed into
+ * whatever width the server wanted, so a 0.2-unit button panel had pixelSize 0.00038 and its label
+ * came out two screen pixels tall — a row of illegible coloured bars.)
+ */
+const ITEM_PANEL_PX = 0.0024;
+
+/** Default physical width of a world panel when the game does not say. */
+const WORLD_WIDTH_DEFAULT = 1.2;
+/** How far in front of the eye a user-pinned panel is dropped when the game gave no position. */
+const PIN_DIST = 2.5;
+
+/**
+ * A slot in the panel's flexbox that holds REAL geometry instead of uikit widgets.
+ *
+ * `box` is an ordinary uikit Container, so yoga lays it out, scrolls it and clips it exactly like
+ * any other node. `group` is plain three.js and is a SIBLING of the uikit root inside the pane —
+ * every frame it is moved onto the box. That is possible because uikit's `globalMatrix` is
+ * expressed in WORLD UNITS in the pane root's own space (buildRootMatrix multiplies by pixelSize),
+ * and it already carries the scroll offset, so the geometry scrolls with the content for free.
+ */
+interface ItemSlot {
+  box: any;                 // the uikit Container acting as the layout slot
+  group: THREE.Group;       // the geometry, positioned onto the slot each frame
+  slotPx: number;           // authored slot height in px; the item is scaled to it
+}
+
+/** How much of its slot an item fills, leaving a little air around it. */
+const ITEM_FILL = 0.86;
+
+/** One panel's placement instruction, as read off the server tree. */
+interface PanelSpec {
+  dock: Dock;
+  nodes: UiNode[];
+  anchor: Anchor;
+  isPublic: boolean;
+  at?: { x: number, y: number, z: number };
+  rot?: { x: number, y: number, z: number };
+  worldWidth?: number;
+}
+
 /** Distance in front of the eye that docked panels hang at, in world units. */
 const HUD_DIST = 2;
 /** How wide a panel is when carried in VR, in metres. */
@@ -301,6 +383,13 @@ const HAND_MAX_HEIGHT = 0.30;
 
 interface Pane {
   dock: Dock;
+  anchor: Anchor;           // 'screen' -> camera-docked; 'world' -> standing in the scene
+  ownerSeatId: string;      // whose panel this is; actions dispatch as this seat
+  interactive: boolean;     // false for somebody else's public panel — look, don't touch
+  at?: { x: number, y: number, z: number };    // world transform (anchor === 'world')
+  rot?: { x: number, y: number, z: number };   // degrees
+  worldWidth?: number;      // physical width in world units (anchor === 'world')
+  slots: ItemSlot[];        // real-geometry slots ('item3d' nodes) living in this pane
   key: string;              // content fingerprint; unchanged key = keep this panel as it is
   clickables: any[];        // registered with the InteractionManager, released with the pane
   group: THREE.Group;       // positions the panel; a child of MgPanel3d.group
@@ -329,8 +418,27 @@ function dockOf(style: string | undefined): Dock {
  * one empty Text — silently discarding its whole subtree. A panel is a placement instruction, so
  * hoisting it out of its container is the only reading that makes sense.
  */
-function splitPanels(screen: UiNode[]): { dock: Dock, nodes: UiNode[] }[] {
-  const out: { dock: Dock, nodes: UiNode[] }[] = [];
+function anchorOf(nd: UiNode): Anchor {
+  return (nd.anchor || '').toLowerCase() === 'world' ? 'world' : 'screen';
+}
+
+function specOf(nd: UiNode, nodes: UiNode[]): PanelSpec {
+  const anchor = anchorOf(nd);
+  return {
+    dock: dockOf(nd.style),
+    nodes,
+    anchor,
+    // "public" only means anything in the world: there is no way to show one player's screen-space
+    // HUD to anybody else, so it is ignored on a screen panel rather than half-honoured.
+    isPublic: anchor === 'world' && (nd.visibility || '').toLowerCase() === 'public',
+    at: nd.at,
+    rot: nd.rot,
+    worldWidth: nd.worldWidth,
+  };
+}
+
+function splitPanels(screen: UiNode[]): PanelSpec[] {
+  const out: PanelSpec[] = [];
   let loose: UiNode[] | null = null;
 
   /** Strip panel descendants out of a subtree, pushing each onto `out`; return what's left. */
@@ -338,7 +446,7 @@ function splitPanels(screen: UiNode[]): { dock: Dock, nodes: UiNode[] }[] {
     const kept: UiNode[] = [];
     for (const nd of nodes) {
       if ((nd.type || '').toLowerCase() === 'panel') {
-        out.push({ dock: dockOf(nd.style), nodes: hoist(nd.children || []) });
+        out.push(specOf(nd, hoist(nd.children || [])));
       } else if (nd.children?.length) {
         // Copy rather than mutate: `screen` is the server's payload and the pane fingerprint is
         // taken from it, so rewriting it in place would make the cache key disagree with itself.
@@ -352,11 +460,15 @@ function splitPanels(screen: UiNode[]): { dock: Dock, nodes: UiNode[] }[] {
 
   for (const nd of screen) {
     if ((nd.type || '').toLowerCase() === 'panel') {
-      out.push({ dock: dockOf(nd.style), nodes: hoist(nd.children || []) });
+      out.push(specOf(nd, hoist(nd.children || [])));
     } else {
       const [rest] = hoist([nd]);
       if (rest) {
-        if (!loose) { loose = []; out.push({ dock: 'right', nodes: loose }); }
+        if (!loose) {
+          loose = [];
+          // The implicit panel every game that never mentions panels already gets.
+          out.push({ dock: 'right', nodes: loose, anchor: 'screen', isPublic: false });
+        }
         loose.push(rest);
       }
     }
@@ -406,8 +518,35 @@ function measuredHeightPx(p: Pane): number | null {
 
 export class MgPanel3d {
 
-  /** Everything this seat's panels live under. Parented to the camera, or to a hand in VR. */
+  /** SCREEN-anchored panels live under this. Parented to the camera, or to a hand in VR. */
   readonly group = new THREE.Group();
+
+  /**
+   * WORLD-anchored panels live under this instead, and it is added to the SCENE — not the camera.
+   * That is the whole difference: these panels stay where they are put while the camera orbits,
+   * and because they are ordinary scene objects another player's client can render them too.
+   */
+  readonly worldGroup = new THREE.Group();
+
+  /**
+   * Build the geometry for an 'item3d' node. Wired by game-play to MgGame.buildPanelItem, so the
+   * panel never needs to know anything about assets — it only positions what it is handed.
+   */
+  makeItem?: (item: any) => THREE.Object3D | null;
+
+  /**
+   * The player's own placement preference, overriding whatever the game asked for. Placement has
+   * always been the client's business (see CLAUDE.md), so this never goes near the server; it is a
+   * per-viewer convenience and lives in localStorage.
+   */
+  private anchorOverride: Anchor | null = null;
+
+  /**
+   * Where a user-pinned panel was dropped. Set when the player forces 'world' on a panel the game
+   * gave no position for: we take the spot in front of the camera at that moment, so "pin it" puts
+   * the panel where they were already looking and then leaves it alone.
+   */
+  private pinned: { at: { x: number, y: number, z: number }, rot: { x: number, y: number, z: number } } | null = null;
 
   private panes: Pane[] = [];
   /** The pane being built, so its interactive objects are recorded against it. */
@@ -436,6 +575,7 @@ export class MgPanel3d {
     private dispatch: (action: string, args: { [k: string]: string }) => void,
   ) {
     this.group.name = 'PANEL3D';
+    this.worldGroup.name = 'PANEL3D:WORLD';
     // uikit-default is themed light/dark; the panel is dark, so ask for the dark palette once.
     setPreferredColorScheme('dark');
     const r = mgThree?.renderer;
@@ -448,17 +588,139 @@ export class MgPanel3d {
 
   }
 
+  /**
+   * Force this viewer's panels to a placement, or pass null to go back to whatever each game asked
+   * for. Switching TO 'world' with no game-supplied position pins the panel where the player is
+   * currently looking.
+   */
+  setAnchorOverride(a: Anchor | null) {
+    if (a === this.anchorOverride) return;
+    this.anchorOverride = a;
+    if (a === 'world') this.pinned = this.pinInFrontOfCamera();
+    else this.pinned = null;
+    // Anchor is part of the pane fingerprint, so the next update() reparents and rebuilds.
+  }
+
+  get anchorPreference(): Anchor | null { return this.anchorOverride; }
+
+  /** The spot the player is looking at, PIN_DIST in front of the eye, facing back at them. */
+  private pinInFrontOfCamera() {
+    const cam = this.mgThree?.camera as THREE.Camera | undefined;
+    if (!cam) return { at: { x: 0, y: 1.5, z: 0 }, rot: { x: 0, y: 0, z: 0 } };
+    const dir = new THREE.Vector3();
+    cam.getWorldDirection(dir);
+    const at = cam.getWorldPosition(new THREE.Vector3()).add(dir.multiplyScalar(PIN_DIST));
+    const e = new THREE.Euler().setFromQuaternion(cam.getWorldQuaternion(new THREE.Quaternion()));
+    const deg = (r: number) => r * 180 / Math.PI;
+    return { at: { x: at.x, y: at.y, z: at.z }, rot: { x: deg(e.x), y: deg(e.y), z: deg(e.z) } };
+  }
+
+  /** Apply the viewer's placement preference to what the game asked for. */
+  private withOverride(sp: PanelSpec): PanelSpec {
+    if (!this.anchorOverride || this.anchorOverride === sp.anchor) return sp;
+    if (this.anchorOverride === 'screen') return { ...sp, anchor: 'screen' };
+    const p = this.pinned ?? this.pinInFrontOfCamera();
+    return { ...sp, anchor: 'world', at: sp.at ?? p.at, rot: sp.rot ?? p.rot };
+  }
+
+  /**
+   * Build a uikit panel as a FREE-STANDING scene object, for an item to carry (asset type PANEL).
+   *
+   * This is the whole "a panel is 3D geometry" idea made usable: the caller owns where it sits and
+   * how big it is, and this only builds the contents. It is deliberately NOT registered in
+   * `panes`, so `place()` never touches it — no camera-frustum fitting, no per-frame re-placement,
+   * which is exactly what made the docked panels flicker and resize.
+   *
+   * pixelSize is set ONCE from the physical width the caller asked for. The layout runs once, here;
+   * a rebuild happens when the server sends different content, same as a docked panel.
+   */
+  buildDetached(nodes: UiNode[], worldWidth: number, seatId: string, interactive = true): THREE.Group {
+    // Authored width follows the requested PHYSICAL width at a fixed pixel size, so text is the
+    // same legible size in every item-panel no matter how wide the panel is.
+    const wPx = Math.max(80, Math.round(worldWidth / ITEM_PANEL_PX));
+    const group = new THREE.Group();
+    group.name = 'PANEL3D:ITEM';
+
+    const root = new Container({
+      width: wPx,
+      flexDirection: 'column',
+      alignItems: 'stretch',
+      padding: SPACE.lg,
+      backgroundColor: SURFACE.panel,
+      opacity: 0.94,
+      borderRadius: RADIUS.lg,
+      borderWidth: 1,
+      borderColor: SURFACE.line,
+      // mg.three sets scene.pointerEvents = 'none' for the board; opt this subtree back in or
+      // @pmndrs/pointer-events never sees a widget.
+      pointerEvents: 'auto',
+    });
+    group.add(root);
+
+    const content = new Container({
+      flexDirection: 'column',
+      alignItems: 'stretch',
+      gap: 10,
+      width: '100%',
+      flexShrink: 0,
+    });
+    root.add(content);
+
+    const px = ITEM_PANEL_PX;
+    const pane: Pane = {
+      dock: 'right', anchor: 'world', ownerSeatId: seatId, interactive,
+      key: 'item-panel', clickables: [], slots: [],
+      group, root, wPx, px, maxHPx: 0,
+    };
+    root.setProperties({ pixelSize: px });
+
+    this.building = pane;
+    try { for (const nd of nodes) this.build(nd, content); }
+    finally { this.building = undefined; }
+
+    // One layout now, so the panel has a real size the moment it is added to the scene.
+    try { root.update(0); } catch { /* the next frame can do it */ }
+
+    this.detached.push(pane);
+    return group;
+  }
+
+  /** Panels carried by ITEMS. Kept apart from `panes` so the placement code cannot reach them. */
+  private detached: Pane[] = [];
+
+  /** Release an item-carried panel (its item was removed from the scene). */
+  disposeDetached(group: THREE.Object3D) {
+    const i = this.detached.findIndex(p => p.group === group);
+    if (i < 0) return;
+    this.clearPane(this.detached[i]);
+    this.detached.splice(i, 1);
+  }
+
   // ------------------------------------------------------------------ lifecycle
 
-  /** @returns true if anything is on screen (false = nothing to show for this seat). */
-  update(screen: UiNode[] | null, seatId: string): boolean {
-    this.seatId = seatId;
+  /** @returns true if anything is on screen (false = nothing to show at all). */
+  update(sources: PanelSource[], mySeatId: string): boolean {
+    this.seatId = mySeatId;
     this.reparent();
 
-    if (!screen || !screen.length) { this.clear(); this.group.visible = false; return false; }
-    this.group.visible = true;
+    // Flatten every seat's panels into one list, each tagged with who owns it.
+    //
+    // Somebody else's panels are filtered to the ones they PUBLISHED to the table: a screen-docked
+    // panel exists only in its owner's camera space, so there is nothing to draw for it here even
+    // if the server sent it. The viewer's own placement override applies only to their own panels —
+    // moving another player's hand around your view would be nonsense.
+    const specs: (PanelSpec & { ownerSeatId: string, interactive: boolean })[] = [];
+    for (const src of sources) {
+      if (!src.screen || !src.screen.length) continue;
+      for (let sp of splitPanels(src.screen)) {
+        if (src.interactive) sp = this.withOverride(sp);
+        else if (!(sp.anchor === 'world' && sp.isPublic)) continue;
+        specs.push({ ...sp, ownerSeatId: src.seatId, interactive: src.interactive });
+      }
+    }
 
-    const specs = splitPanels(screen);
+    if (!specs.length) { this.clear(); this.group.visible = false; return false; }
+    this.group.visible = true;
 
     // Rebuild PER PANEL, not per screen. A click usually changes one panel (the DM's die roll does
     // not touch his scene buttons), and tearing down a panel that did not change is both wasted
@@ -469,12 +731,16 @@ export class MgPanel3d {
     const local = JSON.stringify(this.picks) + '#' + JSON.stringify(this.fields);
     const keyed = specs.map(sp => ({
       ...sp,
-      key: seatId + '#' + sp.dock + '#' + JSON.stringify(sp.nodes) + '#' + local + '#' + this.clipSig(sp.nodes),
+      // Anchor is part of the fingerprint: switching placement changes the pane's PARENT, so it
+      // has to be rebuilt rather than merely repositioned. So is the OWNER, so one seat's panel is
+      // never mistaken for another's when a seat joins or leaves.
+      key: sp.ownerSeatId + '#' + sp.interactive + '#' + sp.dock + '#' + sp.anchor + '#'
+           + JSON.stringify(sp.nodes) + '#' + local + '#' + this.clipSig(sp.nodes),
     }));
 
     // If the panel LIST changed shape, positional matching is meaningless — start over.
     const sameShape = keyed.length === this.panes.length
-      && keyed.every((k, i) => k.dock === this.panes[i].dock);
+      && keyed.every((k, i) => k.dock === this.panes[i].dock && k.anchor === this.panes[i].anchor);
     if (!sameShape) this.clear();
 
     const kept: Pane[] = [];
@@ -489,6 +755,23 @@ export class MgPanel3d {
 
     // Size and position NOW rather than waiting for the next frame's tick.
     this.safePlace();
+
+
+    // Seat any real geometry ('item3d') now too. This has to come AFTER safePlace (which sets
+    // pixelSize) and after a layout pass (which is what produces the slot matrices we read).
+    //
+    // It is done HERE, and not only in tick(), on purpose: tick() is driven by mg.three's frame
+    // hook, and that hook is currently never firing (see the note on tick) — so a panel is laid
+    // out once per rebuild and nothing else. Seating the geometry on the same schedule as the
+    // layout it is derived from keeps the two in step regardless.
+    for (const p of this.panes) {
+      if (!p.slots.length) continue;
+      try { p.root.update(0); } catch { /* layout can wait */ }
+      this.syncSlots(p);
+    }
+
+
+
     return this.panes.length > 0;
   }
 
@@ -512,10 +795,12 @@ export class MgPanel3d {
     return sig;
   }
 
-  private buildPane(spec: { dock: Dock, nodes: UiNode[], key: string }): Pane {
+  private buildPane(spec: PanelSpec & { key: string, ownerSeatId?: string, interactive?: boolean }): Pane {
     const paneGroup = new THREE.Group();
-    paneGroup.name = 'PANEL3D:' + spec.dock;
-    this.group.add(paneGroup);
+    paneGroup.name = 'PANEL3D:' + spec.anchor + ':' + spec.dock;
+    // THE anchor difference, in one line: a screen panel hangs off the camera, a world panel off
+    // the scene. Everything below is identical for both.
+    (spec.anchor === 'world' ? this.worldGroup : this.group).add(paneGroup);
 
     const wPx = widthFor(spec.dock);
     // No height: yoga derives it from the content, up to the maxHeight place() sets.
@@ -570,6 +855,13 @@ export class MgPanel3d {
 
     const pane: Pane = {
       dock: spec.dock, key: spec.key, clickables: [],
+      anchor: spec.anchor,
+      ownerSeatId: spec.ownerSeatId ?? this.seatId,
+      // Only your own panel is clickable. A public panel belonging to somebody else is scenery:
+      // it shows you their hand backs, it does not let you play their cards.
+      interactive: spec.interactive !== false,
+      at: spec.at, rot: spec.rot, worldWidth: spec.worldWidth,
+      slots: [],
       group: paneGroup, root, wPx, px: 0, maxHPx: 0,
     };
 
@@ -588,15 +880,54 @@ export class MgPanel3d {
     return pane;
   }
 
-  /** uikit computes layout and flushes transforms once per frame; mg.three drives this. */
+  /**
+   * uikit computes layout and flushes transforms once per frame; mg.three drives this through its
+   * frame-hook list.
+   *
+   * KNOWN ISSUE (2026-08-27): this is NOT actually running. game-play registers
+   * `panel3d.frameHook` with `mgThree.addFrameHook`, and mg.three's animationLoop iterates
+   * `frameHooks` unconditionally, yet a probe at the top of this method never fired on a fresh
+   * load. The panel still looks right because buildPane lays out once and update() calls
+   * safePlace() at the end, so every SERVER update re-lays-out the panel — which is most of them.
+   * What is lost is anything that needs a real per-frame pass: scrolling a long panel, and
+   * reflowing on a window resize before the next server update.
+   * (Related, and separate: disposePanel3d never calls mgThree.removeFrameHook, so the hook leaks
+   * when leaving a game.)
+   */
   tick(deltaMs: number) {
-    if (!this.panes.length) return;
+    if (!this.panes.length && !this.detached.length) return;
     // place() FIRST: it sets each panel's pixelSize, and root.update() below is what consumes it.
     // Laying out first and correcting after costs one visibly wrong frame — which is exactly the
     // flash this used to produce on every click, because a fresh root starts at uikit's default
     // pixelSize of 0.01 (a 520px panel = 5.2 world units, two units from the eye: enormous).
     this.safePlace();
     for (const p of this.panes) p.root.update(deltaMs);
+    // Geometry LAST: it is seated from uikit's own layout, so it has to read a fresh one.
+    for (const p of this.panes) if (p.slots.length) this.syncSlots(p);
+    // Item-carried panels are laid out too, but never PLACED — their item owns their transform.
+    for (const p of this.detached) p.root.update(deltaMs);
+  }
+
+  /**
+   * Move each 'item3d' group onto the uikit box that reserves its space.
+   *
+   * `globalMatrix` is in WORLD UNITS in the pane root's local space and already includes the
+   * scroll offset, so its translation is exactly where the slot's centre currently is. Only the
+   * position is taken from it: the group is a child of the pane, so it already inherits the
+   * panel's own orientation, and the item's own rotation was applied when it was built.
+   */
+  private syncSlots(p: Pane) {
+    for (const s of p.slots) {
+      const m: THREE.Matrix4 | undefined = s.box?.globalMatrix?.value;
+      // Clipped means scrolled out of the viewport. uikit clips its own meshes in the shader, but
+      // plain geometry is not clipped by anything — without this a card scrolled out of the panel
+      // would go on floating in mid-air.
+      if (!m || s.box?.isClipped?.value) { s.group.visible = false; continue; }
+      s.group.visible = true;
+      s.group.position.setFromMatrixPosition(m);
+      // The item is normalised to ~1 unit, so scaling by the slot's physical height fits it.
+      s.group.scale.setScalar(s.slotPx * p.px * ITEM_FILL);
+    }
   }
 
   private safePlace() {
@@ -632,7 +963,13 @@ export class MgPanel3d {
    * the shader, so neither that signal nor a Box3 can measure a panel. Both were dead ends.)
    */
   private place() {
-    if (this.attachedTo) { this.placeOnHand(); return; }
+    // World panels are placed by their own transform and are unaffected by the view or by VR.
+    this.placeWorld();
+
+    const screenPanes = this.panes.filter(p => p.anchor === 'screen');
+    if (!screenPanes.length) return;
+
+    if (this.attachedTo) { this.placeOnHand(screenPanes); return; }
     this.group.position.set(0, 0, 0);
     this.group.rotation.set(0, 0, 0);
     this.group.scale.setScalar(1);
@@ -654,7 +991,7 @@ export class MgPanel3d {
     const hudPx = (viewW * 0.30) / PANEL_PX_SIDE;
 
     for (const dock of DOCKS) {
-      const group = this.panes.filter(p => p.dock === dock);
+      const group = screenPanes.filter(p => p.dock === dock);
       if (!group.length) continue;
       const n = group.length;
       const vertical = dock === 'right' || dock === 'left';
@@ -707,14 +1044,14 @@ export class MgPanel3d {
    * headset has no screen edges. They simply stack one under another, in list order, tilted up
    * like a handful of cards.
    */
-  private placeOnHand() {
+  private placeOnHand(screenPanes: Pane[]) {
     this.group.position.set(0.12, 0.04, -0.22);
     this.group.rotation.set(-Math.PI / 5, -0.35, 0);
     this.group.scale.setScalar(1);
 
     const gap = 0.02;
     let cursor = 0;
-    for (const p of this.panes) {
+    for (const p of screenPanes) {
       setPixelSize(p, HAND_WIDTH / p.wPx);
       setMaxHeightPx(p, HAND_MAX_HEIGHT / p.px);
       const h = Math.min((measuredHeightPx(p) ?? p.maxHPx) * p.px, HAND_MAX_HEIGHT);
@@ -724,8 +1061,45 @@ export class MgPanel3d {
     }
   }
 
+  /**
+   * Stand the world-anchored panels in the scene.
+   *
+   * Unlike a screen panel there is no view to derive a size from — a world panel has a PHYSICAL
+   * size next to the board, and only the game knows what that should be — so pixelSize comes from
+   * WorldWidth instead of from the frustum. Position and rotation are simply applied; the camera
+   * is not consulted at all, which is the entire point of this anchor.
+   */
+  private placeWorld() {
+    const worldPanes = this.panes.filter(p => p.anchor === 'world');
+    if (!worldPanes.length) return;
+
+    // Parent to the SCENE (lazily — the scene may not exist when the panel is constructed).
+    const scene = this.mgThree?.scene;
+    if (scene && this.worldGroup.parent !== scene) scene.add(this.worldGroup);
+    this.worldGroup.position.set(0, 0, 0);
+    this.worldGroup.rotation.set(0, 0, 0);
+    this.worldGroup.scale.setScalar(1);
+
+    const d2r = (d: number) => d * Math.PI / 180;
+    for (const p of worldPanes) {
+      const w = p.worldWidth ?? WORLD_WIDTH_DEFAULT;
+      setPixelSize(p, w / p.wPx);
+      // Physical width implies a physical height budget: without one a long log turns the panel
+      // into a tower beside the board instead of scrolling.
+      setMaxHeightPx(p, (w * 1.6) / p.px);
+
+      const at = p.at ?? { x: 0, y: 1.5, z: 0 };
+      const rot = p.rot ?? { x: 0, y: 0, z: 0 };
+      p.group.position.set(at.x, at.y, at.z);
+      p.group.rotation.set(d2r(rot.x), d2r(rot.y), d2r(rot.z));
+    }
+  }
+
   dispose() {
     this.clear();
+    for (const p of this.detached) this.clearPane(p);
+    this.detached = [];
+    this.worldGroup.removeFromParent();
     // clear() releases the hover set pane by pane, but say it once more outright: leaving the view
     // with the cursor on a panel must not leave the camera controls switched off.
     this.mgThree?.setUiHover?.(false);
@@ -752,6 +1126,18 @@ export class MgPanel3d {
       } catch { /* already gone */ }
     }
     p.clickables = [];
+    // Release the real-geometry slots with the pane, or a rebuild strands their meshes in the scene.
+    for (const s of p.slots) {
+      s.group.removeFromParent();
+      s.group.traverse((o: any) => {
+        if (o.isMesh) {
+          o.geometry?.dispose?.();
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const mm of mats) mm?.dispose?.();
+        }
+      });
+    }
+    p.slots = [];
     try { (p.root as any).dispose?.(); } catch { /* nothing to release */ }
     p.group.removeFromParent();
   }
@@ -870,6 +1256,45 @@ export class MgPanel3d {
           }
         }
         return;
+      }
+
+      case 'item3d': {
+        // A slot in the flexbox, and geometry parked on top of it. The Container is what yoga sees;
+        // the geometry is plain three.js and is re-seated onto the Container every frame.
+        // A SQUARE slot. Width matters as much as height: with a height only, `alignSelf:
+        // 'stretch'` stretches the CROSS axis, so inside a row every slot got ~zero width and the
+        // items stacked on top of each other (measured 0.034 apart at 0.327 wide). A square slot
+        // reserves real space, leaves a little air around a portrait card, and is predictable.
+        const slotPx = nd.size ?? 96;
+        const box = new Container({ width: slotPx, height: slotPx, flexShrink: 0 });
+        parent.add(box);
+
+        const pane = this.building;
+        if (pane) {
+          const group = new THREE.Group();
+          group.name = 'PANEL3D:ITEM';
+          group.visible = false;                 // until the first sync gives it a real transform
+          pane.group.add(group);
+          const built = nd.item && this.makeItem ? this.makeItem(nd.item) : null;
+          if (built) {
+            // The item's own rotation is honoured, so a game can lie a card flat or stand it up.
+            const r = nd.item?.rotation;
+            if (r) group.rotation.set(
+              (r.x || 0) * Math.PI / 180, (r.y || 0) * Math.PI / 180, (r.z || 0) * Math.PI / 180);
+            group.add(built);
+          }
+          pane.slots.push({ box, group, slotPx });
+
+          // Interaction goes through the uikit SLOT, not the geometry: the panel already owns a
+          // working click path (@pmndrs/pointer-events on desktop, the userData shape on the VR
+          // ray), and putting the board's InteractionManager on a panel object is precisely the
+          // both-systems-fire-once trap the notes at the top of this file warn about.
+          if (nd.action) {
+            const action = nd.action, args = nd.args || {};
+            this.makeInteractive(box, () => this.dispatch(action, args));
+          }
+        }
+        break;
       }
 
       case 'model': {
@@ -1267,6 +1692,9 @@ export class MgPanel3d {
    *   is inside the panel subtree, so the pointer system finds it and its own handler runs.
    */
   private makeInteractive(obj: any, activate?: () => void, selfHandled = false) {
+    // Another seat's published panel is scenery. Registering nothing is what enforces that — it
+    // keeps the widget out of both input paths (the desktop listener and the VR ray's userData).
+    if (this.building && !this.building.interactive) return;
     // VR: mg.three's controller raycast walks up parents looking for exactly this userData shape
     // (ItemData.clickActions with at least one key). `uiArgs` marks it as a UI activation rather
     // than a clicked board item.

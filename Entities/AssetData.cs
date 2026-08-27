@@ -12,6 +12,8 @@ namespace MG.Server.Entities
     [JsonDerivedType(typeof(CylinderAssetData), typeDiscriminator: AssetTypeEnum.CYLINDER)]
     [JsonDerivedType(typeof(ArrowAssetData), typeDiscriminator: AssetTypeEnum.ARROW)]
     [JsonDerivedType(typeof(DieAssetData), typeDiscriminator: AssetTypeEnum.DIE)]
+    [JsonDerivedType(typeof(ButtonAssetData), typeDiscriminator: AssetTypeEnum.BUTTON)]
+    [JsonDerivedType(typeof(PanelAssetData), typeDiscriminator: AssetTypeEnum.PANEL)]
     public class AssetData : BaseData<AssetData>
     {
         public string? FrontURL { get; set; }
@@ -114,6 +116,42 @@ namespace MG.Server.Entities
         }
     }
 
+    /// <summary>
+    /// A real 3D BUTTON: a solid plate with its label printed on the front face. Built procedurally
+    /// in the client, so no art file is needed.
+    ///
+    /// Unlike the uikit panel — which is also 3D geometry, but arranges and sizes ITSELF — a button
+    /// is an ordinary item: the SERVER gives it a position, a rotation and a scale, and it goes
+    /// exactly there. That is what lets a holder full of buttons hang off the camera, a player's
+    /// figure, the world or a VR hand without anything reflowing.
+    ///
+    /// Per item: Text = the label, "bg" / "fg" attributes = plate and ink colours (CSS colours,
+    /// e.g. "#22C55E"). One asset serves every button, because everything that differs lives on
+    /// the item.
+    /// </summary>
+    public class ButtonAssetData : AssetData
+    {
+        public ButtonAssetData() { }
+        public ButtonAssetData(string key = "button") : base(AssetTypeEnum.BUTTON)
+        {
+            Name = "button:" + key;
+        }
+    }
+
+    /// <summary>
+    /// A uikit UI panel rendered as a scene object, so it can live inside a holder. The item's
+    /// <see cref="ItemData.Ui"/> is its content and <see cref="ItemData.UiWidth"/> its physical
+    /// width; one asset serves every panel.
+    /// </summary>
+    public class PanelAssetData : AssetData
+    {
+        public PanelAssetData() { }
+        public PanelAssetData(string key = "panel") : base(AssetTypeEnum.PANEL)
+        {
+            Name = "panel:" + key;
+        }
+    }
+
     public class AssetTypeEnum
     {
         public const string TOKEN = "TOKEN"; // some "box" with very small height and 2 sides - front and back
@@ -124,6 +162,8 @@ namespace MG.Server.Entities
         public const string CYLINDER = "CYLINDER"; // procedural round disc (radius/height), tinted per-item
         public const string ARROW = "ARROW";       // procedural flat "last move" arrow (shaft + head)
         public const string DIE = "DIE";           // procedural 3D die cube showing the rolled number
+        public const string BUTTON = "BUTTON";     // procedural 3D button plate; item.Text = the label
+        public const string PANEL  = "PANEL";      // a uikit UI panel as a scene object; item.Ui = contents
 
     }
 

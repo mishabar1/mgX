@@ -129,6 +129,19 @@ namespace MG.Server.Entities
         public const string SMALL_WORLD = "SMALL_WORLD";
     }
 
+    /// <summary>Where a holder attaches — see <see cref="ItemData.Anchor"/>.</summary>
+    public class ItemAnchorEnum
+    {
+        /// <summary>Under its parent item / the table. The default, and what every board item is.</summary>
+        public const string WORLD = "world";
+        /// <summary>On the owner's seated figure. Visible to the whole table.</summary>
+        public const string AVATAR = "avatar";
+        /// <summary>On the owner's camera — a HUD. Rendered for the owner alone.</summary>
+        public const string CAMERA = "camera";
+        /// <summary>On the owner's VR controller; outside VR this behaves as CAMERA.</summary>
+        public const string HAND = "hand";
+    }
+
     public class GameStatusEnum
     {
         public const string CREATED = "CREATED";

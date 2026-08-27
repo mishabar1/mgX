@@ -7,7 +7,14 @@
     <p-button (onClick)="logout()" label="Sign out" icon="pi pi-sign-out" severity="secondary"></p-button>
   </div>
 
-  <div class="mg-section">Your games</div>
+  <div class="mg-section" style="display:flex;align-items:center;gap:12px;">
+    <span>Your games</span>
+    <span class="mg-spacer" style="flex:1"></span>
+    @if (games.length) {
+      <p-button (onClick)="deleteAll()" severity="danger" label="Delete all"
+                icon="pi pi-trash" [outlined]="true" size="small"></p-button>
+    }
+  </div>
 
   @for (game of games; track game) {
     <div class="mg-game-card" style="cursor:pointer;" (click)="openGame(game)" title="Open game">

@@ -88,6 +88,13 @@ namespace MG.Server.Controllers
             return Ok(await _gameBL.DeleteGame(data));
         }
 
+        [HttpPost("DeleteAllGames")]
+        public async Task<IActionResult> DeleteAllGames()
+        {
+            _logger.LogInformation("DeleteAllGames");
+            return Ok(await _gameBL.DeleteAllGames());
+        }
+
         [HttpPost("UndoGame")]
         public async Task<IActionResult> UndoGame(StartGameData data)
         {

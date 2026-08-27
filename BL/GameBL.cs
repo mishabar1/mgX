@@ -119,6 +119,37 @@ namespace MG.Server.BL
             return new { x = "TODO !!! StartGame" };
         }
 
+        /// <summary>
+        /// Housekeeping: wipe every game on the server.
+        ///
+        /// Deliberately does NOT run each game's EndGameFlow — that exists to finish a game
+        /// gracefully (winners, result text, a broadcast); these are being thrown away. Stopping the
+        /// AI timers IS essential, or a deleted game's agents keep ticking against state nobody owns.
+        /// One Save() at the end rather than one per game, since Save() serializes the whole store.
+        /// </summary>
+        internal async Task<object> DeleteAllGames()
+        {
+            // Snapshot first — the loop mutates the collection this list came from.
+            var doomed = _dataRepository.Games.ToList();
+
+            foreach (var game in doomed)
+            {
+                foreach (var p in game.Players) p.AIAgent?.Stop();
+                _dataRepository.Games.Remove(game);
+            }
+
+            await _dataRepository.Save();
+
+            // Tell everyone AFTER the store is consistent, so a client that reacts by refetching
+            // cannot read a half-emptied list. Anyone sitting in one of these games gets kicked
+            // back to the list by their GameDeleted handler.
+            foreach (var game in doomed)
+                await DataRepository.Singleton.HubGameDeleted(game.Id, save: false);
+
+            _logger.LogInformation("DeleteAllGames removed {Count} game(s)", doomed.Count);
+            return new { deleted = doomed.Count };
+        }
+
         internal async Task<object> DeleteGame(StartGameData data)
         {
             // find game in db

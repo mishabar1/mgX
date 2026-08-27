@@ -59,6 +59,20 @@ function clickables(game, seatId) {
 }
 
 const roleKeys  = g => Object.keys(g?.attributes || {}).filter(k => k.startsWith('role:'));
+const handKeys  = g => Object.keys(g?.attributes || {}).filter(k => k.startsWith('hand:'));
+
+// Walk a seat's panel tree and collect every 'item3d'.
+function panelItems(seat) {
+  const out = [];
+  const w = n => { if (!n) return; if ((n.type || '') === 'item3d') out.push(n); (n.children || []).forEach(w); };
+  (seat?.screen || []).forEach(w);
+  return out;
+}
+// Panels a seat published to the whole table.
+function publicPanels(seat) {
+  return (seat?.screen || []).filter(n => (n.type || '') === 'panel'
+    && (n.anchor || '') === 'world' && (n.visibility || '') === 'public');
+}
 const cardKeys  = g => Object.keys(g?.attributes || {}).filter(k => k.startsWith('card:'));
 const origKeys  = g => Object.keys(g?.attributes || {}).filter(k => k.startsWith('orig:') || k.startsWith('cur:'));
 const seatsWithScreen = g => (g?.players || []).filter(p => p.screen && p.screen.length).map(p => p.id);
@@ -191,6 +205,186 @@ async function main() {
   const wAnon = (await api(`/api/Game/GetGameByID?GameId=${gW.id}`)).json;
   ok('ONW cards are absent on the REST path too', origKeys(wAnon).length === 0, `card keys: ${JSON.stringify(origKeys(wAnon))}`);
 
+  // ------------------------------------------------------- holders (ItemData.Anchor)
+  section('holders: the Demo tray, and retargeting it at runtime');
+  const gD = (await api('/api/Game/CreateGame', 'POST', { userId: alice.user.id, gameType: 'DEMO' }, alice.token)).json;
+  await A.c.invoke('WatchGame', gD.id);
+  clear(A);
+  const seatD = await seatAndStart(gD.id, alice, 1);
+  await sleep(700);
+
+  const holdersOf = g => { const out = []; (function w(it) { if (!it) return; if (it.anchor) out.push(it); (it.items || []).forEach(w); })(g.table); return out; };
+  const readDemo = async () => (await api(`/api/Game/GetGameByID?GameId=${gD.id}`, 'GET', null, alice.token)).json;
+
+  let demo = await readDemo();
+  let hs = holdersOf(demo);
+  const mineHolders = hs.filter(h => h.owner === seatD.seatId);
+
+  ok('the Demo builds holders', hs.length > 0, `holders: ${hs.length}`);
+  ok('every holder names an owner', hs.every(h => !!h.owner));
+  ok('this seat gets a camera holder and an avatar holder',
+     mineHolders.some(h => h.anchor === 'camera') && mineHolders.some(h => h.anchor === 'avatar'),
+     JSON.stringify(mineHolders.map(h => h.anchor)));
+
+  const tray = mineHolders.find(h => h.anchor === 'camera');
+  const kids = tray?.items || [];
+  ok('the tray holds items positioned BY THE SERVER',
+     kids.length > 0 && kids.every(k => k.position && typeof k.position.x === 'number'),
+     `children: ${kids.length}`);
+  ok('the tray carries controls for every anchor type', ['world','avatar','camera','hand']
+       .every(a => kids.some(k => k.attributes?.setAnchor === a)),
+     JSON.stringify(kids.map(k => k.attributes?.setAnchor).filter(Boolean)));
+  ok('the tray carries a control for each side of the view', ['left','right','top','bottom','center']
+       .every(v => kids.some(k => k.attributes?.setSide === v)));
+  ok('the tray carries four move controls plus a reset', ['left','right','up','down','reset']
+       .every(v => kids.some(k => k.attributes?.setMove === v)));
+  // Each control is now its OWN uikit panel holding one button, so the action and its value live
+  // in the UiNode tree, not in the item's clickActions.
+  const ctrlPanels = kids.filter(k => k.attributes?.setAnchor || k.attributes?.setSide || k.attributes?.setMove);
+  const btnOf = k => (k.ui || [])[0];
+  ok('every control is a one-button uikit panel',
+     ctrlPanels.length > 0 && ctrlPanels.every(k => btnOf(k)?.type === 'button' && !!btnOf(k)?.action),
+     `controls: ${ctrlPanels.length}, types: ${JSON.stringify([...new Set(ctrlPanels.map(k => btnOf(k)?.type))])}`);
+  ok('every control carries its value in the button args, not on the item',
+     ctrlPanels.every(k => {
+       const key = k.attributes?.setAnchor !== undefined ? 'setAnchor'
+                 : k.attributes?.setSide !== undefined ? 'setSide' : 'setMove';
+       return btnOf(k)?.args?.[key] === k.attributes[key];
+     }),
+     'a panel activation carries args and no clicked item, so the value must be in args');
+
+  // --- the retarget actually works, through the same action path as any board click ---
+  // Activate a control exactly as the client does for a panel button: no itemId, action + args.
+  const clickTray = async (attr, value) => {
+    const g = await readDemo();
+    const t = holdersOf(g).find(h => h.owner === seatD.seatId && (h.items || []).some(k => k.attributes?.[attr] === value));
+    const panel = (t?.items || []).find(k => k.attributes?.[attr] === value);
+    const btn = (panel?.ui || [])[0];
+    if (!btn?.action) return null;
+    await A.c.invoke('ExecuteAction', {
+      gameId: gD.id, playerId: seatD.seatId, itemId: '',
+      actionId: btn.action, args: btn.args, dragTargetItemId: null, point: null,
+    });
+    await sleep(700);
+    return readDemo();
+  };
+
+  demo = await clickTray('setAnchor', 'avatar');
+  ok('clicking the AVATAR control moves the tray onto the figure',
+     !!demo && holdersOf(demo).filter(h => h.owner === seatD.seatId && h.anchor === 'avatar').length === 2,
+     JSON.stringify(holdersOf(demo || {}).filter(h => h.owner === seatD.seatId).map(h => h.anchor)));
+
+  demo = await clickTray('setAnchor', 'world');
+  ok('clicking the WORLD control parks it in the scene',
+     !!demo && holdersOf(demo).some(h => h.owner === seatD.seatId && h.anchor === 'world'));
+
+  demo = await clickTray('setAnchor', 'camera');
+  const trayNow = holdersOf(demo).find(h => h.owner === seatD.seatId && h.anchor === 'camera');
+  ok('and back to CAMERA', !!trayNow);
+  const xBefore = trayNow?.position?.x ?? 0;
+
+  demo = await clickTray('setSide', 'right');
+  const rightTray = holdersOf(demo).find(h => h.owner === seatD.seatId && h.anchor === 'camera');
+  ok('choosing a SIDE moves the tray there', (rightTray?.position?.x ?? 0) > xBefore,
+     `x ${xBefore} -> ${rightTray?.position?.x}`);
+
+  const xRight = rightTray?.position?.x ?? 0;
+  demo = await clickTray('setMove', 'left');
+  const movedTray = holdersOf(demo).find(h => h.owner === seatD.seatId && h.anchor === 'camera');
+  ok('a MOVE control nudges it', (movedTray?.position?.x ?? 0) < xRight,
+     `x ${xRight} -> ${movedTray?.position?.x}`);
+
+  demo = await clickTray('setMove', 'reset');
+  const resetTray = holdersOf(demo).find(h => h.owner === seatD.seatId && h.anchor === 'camera');
+  ok('RESET clears the nudge', Math.abs((resetTray?.position?.x ?? 0) - xRight) < 1e-9,
+     `x back to ${resetTray?.position?.x} (side offset ${xRight} kept)`);
+
+  ok('the tray survives every retarget with its controls intact',
+     (resetTray?.items || []).some(k => k.attributes?.setAnchor === 'camera'));
+
+  // ---------------------------------------------- Durak: hand as a panel
+  section('Durak: the hand is a HOLDER on the camera / VR hand, and it is secret');
+  const gK = (await api('/api/Game/CreateGame', 'POST', { userId: alice.user.id, gameType: 'DURAK' }, alice.token)).json;
+  await A.c.invoke('WatchGame', gK.id);
+  clear(A);
+  const seatK = await seatAndStart(gK.id, alice, 1);
+  await sleep(900);
+
+  const holders = g => { const out = []; (function w(it) { if (!it) return; if (it.anchor) out.push(it); (it.items || []).forEach(w); })(g.table); return out; };
+  const cardsIn = h => (h.items || []).filter(i => i.attributes?.card === '1' || i.attributes?.cardback === '1');
+
+  const asMeK = (await api(`/api/Game/GetGameByID?GameId=${gK.id}`, 'GET', null, alice.token)).json;
+  const hK = holders(asMeK);
+  const myHand = hK.find(h => h.owner === seatK.seatId && h.anchor === 'hand');
+  // The public backs row is WORLD-anchored (placed from the seat's ring position), not avatar-
+  // anchored — the avatar group is not turned to face the table.
+  const myShown = hK.find(h => h.owner === seatK.seatId && h.anchor === 'world');
+  const theirHand = hK.find(h => h.owner && h.owner !== seatK.seatId && h.anchor === 'hand');
+  const theirShown = hK.find(h => h.owner && h.owner !== seatK.seatId && h.anchor === 'world');
+
+  ok('my hand is a HAND-anchored holder (left controller in VR, camera outside)', !!myHand,
+     `anchors seen: ${JSON.stringify(hK.map(h => h.anchor))}`);
+  ok('the hand holds card items, positioned by the server',
+     cardsIn(myHand || {}).length > 0 && cardsIn(myHand || {}).every(c => typeof c.position?.x === 'number'),
+     `cards: ${cardsIn(myHand || {}).length}`);
+  // The fan is a spin in the card's own plane, so it is on Y (applied before the X stand-up under
+  // three's XYZ euler order) — not Z, which would lift an edge out of the plane instead.
+  ok('the cards are fanned by the SERVER, not arranged by the client',
+     new Set(cardsIn(myHand || {}).map(c => c.position.x)).size === cardsIn(myHand || {}).length &&
+     new Set(cardsIn(myHand || {}).map(c => c.rotation.y)).size > 1,
+     `x: ${JSON.stringify(cardsIn(myHand || {}).map(c => +c.position.x.toFixed(2)))} `
+     + `fanY: ${JSON.stringify(cardsIn(myHand || {}).map(c => +c.rotation.y.toFixed(1)))}`);
+
+  // The face must point AT the viewer. A TOKEN's face is its +Y side, so the card is stood up about
+  // X; a negative tilt turns it away and shows the back.
+  ok('the cards are stood up to FACE the viewer, not lying flat',
+     cardsIn(myHand || {}).every(c => c.rotation.x > 45),
+     `tilt: ${JSON.stringify([...new Set(cardsIn(myHand || {}).map(c => c.rotation.x))])} (must be positive, near 90)`);
+  ok('I can see my own card codes', cardsIn(myHand || {}).every(c => !!c.attributes?.code));
+  ok('at least one of my cards is playable and clickable',
+     cardsIn(myHand || {}).some(c => Object.keys(c.clickActions || {}).length > 0));
+  ok('the table can still see HOW MANY cards I hold', !!myShown && cardsIn(myShown).length === cardsIn(myHand || {}).length,
+     `hand ${cardsIn(myHand || {}).length} vs public backs ${cardsIn(myShown || {}).length}`);
+  ok('those public ones are backs with no identity', !!myShown && cardsIn(myShown).every(c => !c.attributes?.code));
+
+  ok('I see only MY hand attribute', handKeys(asMeK).length === 1, JSON.stringify(handKeys(asMeK)));
+  ok('the deck order is hidden from everyone', asMeK.attributes?.deck === undefined);
+
+  ok("an opponent's hand holder is in the tree", !!theirHand);
+  if (theirHand) {
+    const theirs = cardsIn(theirHand);
+    ok("I cannot see WHICH cards an opponent holds", theirs.every(c => !c.attributes?.code),
+       JSON.stringify(theirs.map(c => c.attributes?.code)));
+    ok("their cards are not clickable by me", theirs.every(c => !Object.keys(c.clickActions || {}).length));
+    const distinct = [...new Set(theirs.map(c => c.asset))];
+    ok("their cards all use ONE back asset, not distinct faces", distinct.length === 1, JSON.stringify(distinct));
+    const back = asMeK.assets?.[distinct[0]];
+    ok("that asset's front IS the back image (server-side swap)",
+       !!back && back.frontURL === back.backURL, `front=${back?.frontURL}`);
+  }
+  ok("and their public backs row is there too", !!theirShown);
+
+  section('Durak: a card can actually be played from the holder');
+  const playable = cardsIn(myHand || {}).find(c => Object.keys(c.clickActions || {}).length > 0);
+  if (playable) {
+    const before = (asMeK.attributes?.['hand:' + seatK.seatId] || '').split(',').filter(Boolean).length;
+    clear(A);
+    // A board-item click: the holder's cards are ordinary items, so the code comes off d.Item.
+    await A.c.invoke('ExecuteAction', {
+      gameId: gK.id, playerId: seatK.seatId, itemId: playable.id,
+      actionId: Object.values(playable.clickActions)[0], dragTargetItemId: null, point: null,
+    });
+    await sleep(1200);
+    const after = (await api(`/api/Game/GetGameByID?GameId=${gK.id}`, 'GET', null, alice.token)).json;
+    const now = (after.attributes?.['hand:' + seatK.seatId] || '').split(',').filter(Boolean).length;
+    ok('playing a card from the holder changes the game state',
+       now !== before || (after.attributes?.field || '') !== (asMeK.attributes?.field || ''),
+       `hand ${before} -> ${now}, field "${asMeK.attributes?.field}" -> "${after.attributes?.field}"`);
+    ok('the play was broadcast to the watching client', A.inbox.gameUpdated.some(g => g.id === gK.id));
+  } else {
+    ok('playing a card from the holder changes the game state', false, 'no playable card was offered');
+  }
+
   // ------------------------------------------------------------- reconnect
   section('reconnect: a fresh connection must re-watch and resync');
   await A.c.stop();
@@ -258,7 +452,7 @@ async function main() {
   }
 
   // cleanup
-  for (const id of [gA.id, gR.id, gW.id, gB.id]) await api('/api/Game/DeleteGame', 'POST', { gameId: id }, alice.token).catch(() => {});
+  for (const id of [gA.id, gR.id, gW.id, gB.id, gD.id, gK.id]) await api('/api/Game/DeleteGame', 'POST', { gameId: id }, alice.token).catch(() => {});
   for (const x of [A2, B, C]) await x.c.stop().catch(() => {});
 }
 

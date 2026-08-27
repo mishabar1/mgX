@@ -53,6 +53,11 @@ export class DALService{
   deleteGame(gameId:string): Observable<GameData> {
     return this.http.post<GameData>(this.baseGameUrl + `/DeleteGame`, {gameId});
   }
+  // Wipe every game on the server. One request, not one per game — the server removes them all,
+  // saves once, then broadcasts a GameDeleted for each so open views bounce back to the list.
+  deleteAllGames(): Observable<{deleted: number}> {
+    return this.http.post<{deleted: number}>(this.baseGameUrl + `/DeleteAllGames`, {});
+  }
   undoGame(gameId:string): Observable<any> {
     return this.http.post<any>(this.baseGameUrl + `/UndoGame`, {gameId});
   }
